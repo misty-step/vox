@@ -85,7 +85,7 @@ final class HUDView: NSView {
             let bar = CALayer()
             bar.backgroundColor = Style.accentColor.cgColor
             bar.cornerRadius = Style.barCornerRadius
-            bar.anchorPoint = CGPoint(x: 0.5, y: 0)
+            bar.anchorPoint = CGPoint(x: 0.5, y: 0.5)
             barsLayer.addSublayer(bar)
             return bar
         }
@@ -179,13 +179,12 @@ final class HUDView: NSView {
         barsLayer.frame = bounds
         let totalWidth = CGFloat(Style.barCount) * Style.barWidth + CGFloat(Style.barCount - 1) * Style.barGap
         let startX = bounds.midX - totalWidth / 2
-        let maxHeight = min(bounds.width, bounds.height) * 0.32
-        let baseline = bounds.midY - maxHeight / 2
+        let maxHeight = min(bounds.width, bounds.height) * 0.36
 
         for (index, bar) in barLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.barWidth + Style.barGap)
             bar.bounds = CGRect(x: 0, y: 0, width: Style.barWidth, height: maxHeight)
-            bar.position = CGPoint(x: x + Style.barWidth / 2, y: baseline)
+            bar.position = CGPoint(x: x + Style.barWidth / 2, y: bounds.midY)
             bar.cornerRadius = Style.barCornerRadius
         }
         updateBars(animated: false)
@@ -280,8 +279,8 @@ final class HUDView: NSView {
         guard !barLayers.isEmpty else { return }
         let attack: CGFloat = inputLevel > smoothedLevel ? 0.6 : 0.2
         smoothedLevel += (inputLevel - smoothedLevel) * attack
-        let maxHeight = min(bounds.width, bounds.height) * 0.32
-        let minHeight = max(2, maxHeight * 0.18)
+        let maxHeight = min(bounds.width, bounds.height) * 0.36
+        let minHeight = max(2, maxHeight * 0.12)
         let level = smoothedLevel
 
         CATransaction.begin()
@@ -294,8 +293,8 @@ final class HUDView: NSView {
 
         for (index, bar) in barLayers.enumerated() {
             let profile = barProfile[index % barProfile.count]
-            let wobble = sin(barPhase + CGFloat(index) * 1.4) * 0.15
-            let energy = max(0.05, min(1, level * profile + wobble * level))
+            let wave = 0.5 + 0.5 * sin(barPhase + CGFloat(index) * 0.9)
+            let energy = max(0.05, min(1, level * profile * (0.4 + 0.6 * wave)))
             let target = minHeight + (maxHeight - minHeight) * energy
             bar.bounds.size.height = target
         }
