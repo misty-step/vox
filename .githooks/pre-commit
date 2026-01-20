@@ -1,5 +1,16 @@
 #!/bin/sh
 set -e
 
+if command -v rg >/dev/null 2>&1; then
+  has_swift_changes=$(git diff --cached --name-only | rg -q '\.swift$|Package\.swift' && echo "yes" || echo "no")
+else
+  has_swift_changes=$(git diff --cached --name-only | grep -Eq '\.swift$|Package\.swift' && echo "yes" || echo "no")
+fi
+
+if [ "$has_swift_changes" = "no" ]; then
+  echo "[pre-commit] no Swift changes; skip build"
+  exit 0
+fi
+
 echo "[pre-commit] swift build"
 swift build

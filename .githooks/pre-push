@@ -1,5 +1,22 @@
 #!/bin/sh
 set -e
 
+if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+  range="@{u}...HEAD"
+else
+  range="HEAD"
+fi
+
+if command -v rg >/dev/null 2>&1; then
+  has_swift_changes=$(git diff --name-only "$range" | rg -q '\.swift$|Package\.swift' && echo "yes" || echo "no")
+else
+  has_swift_changes=$(git diff --name-only "$range" | grep -Eq '\.swift$|Package\.swift' && echo "yes" || echo "no")
+fi
+
+if [ "$has_swift_changes" = "no" ]; then
+  echo "[pre-push] no Swift changes; skip tests"
+  exit 0
+fi
+
 echo "[pre-push] swift test"
 swift test
