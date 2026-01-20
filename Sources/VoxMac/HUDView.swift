@@ -24,10 +24,10 @@ final class HUDView: NSView {
         static let checkLineWidth: CGFloat = 2
         static let dotSize: CGFloat = 6
         static let dotGap: CGFloat = 6
-        static let captionInset: CGFloat = 10
+        static let captionInset: CGFloat = 8
         static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         static let captionColor = NSColor.hex(0x202B36, alpha: 0.72)
-        static let contentYOffset: CGFloat = 6
+        static let contentYOffset: CGFloat = 0
     }
 
     private let backgroundLayer = CAGradientLayer()
@@ -171,7 +171,7 @@ final class HUDView: NSView {
         barsLayer.frame = bounds
         let totalWidth = CGFloat(Style.barCount) * Style.barWidth + CGFloat(Style.barCount - 1) * Style.barGap
         let startX = bounds.midX - totalWidth / 2
-        let maxHeight = min(bounds.width, bounds.height) * 0.32
+        let maxHeight = min(bounds.width, bounds.height) * 0.5
 
         let centerY = bounds.midY + Style.contentYOffset
         for (index, bar) in barLayers.enumerated() {
@@ -276,7 +276,7 @@ final class HUDView: NSView {
         let peakAttack: CGFloat = peakLevel > smoothedPeak ? 0.7 : 0.3
         smoothedAverage += (averageLevel - smoothedAverage) * averageAttack
         smoothedPeak += (peakLevel - smoothedPeak) * peakAttack
-        let maxHeight = min(bounds.width, bounds.height) * 0.36
+        let maxHeight = min(bounds.width, bounds.height) * 0.5
         let minHeight = max(2, maxHeight * 0.08)
         let envelope = smoothedAverage
         let spike = smoothedPeak
