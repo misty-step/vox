@@ -132,7 +132,7 @@ final class SessionController {
     private func startLevelMetering() {
         stopLevelMetering()
         let timer = DispatchSource.makeTimerSource(queue: levelQueue)
-        timer.schedule(deadline: .now(), repeating: 0.05)
+        timer.schedule(deadline: .now(), repeating: 0.02)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let level = self.audioRecorder.currentLevel()

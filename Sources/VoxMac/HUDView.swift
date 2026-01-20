@@ -22,6 +22,8 @@ final class HUDView: NSView {
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
+        static let dotSize: CGFloat = 6
+        static let dotGap: CGFloat = 6
         static let captionInset: CGFloat = 10
         static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         static let captionColor = NSColor.hex(0x202B36, alpha: 0.8)
@@ -30,12 +32,16 @@ final class HUDView: NSView {
     private let backgroundLayer = CAGradientLayer()
     private let barsLayer = CALayer()
     private var barLayers: [CALayer] = []
-    private let spinnerLayer = CAShapeLayer()
+    private let dotsLayer = CALayer()
+    private var dotLayers: [CALayer] = []
     private let checkLayer = CAShapeLayer()
     private let captionField = NSTextField(labelWithString: "")
     private var inputLevel: CGFloat = 0
     private var smoothedLevel: CGFloat = 0
     private let barProfile: [CGFloat] = [0.6, 0.9, 1.0, 0.8, 0.5]
+    private var barTimer: Timer?
+    private var lastBarTick: CFTimeInterval = 0
+    private var barPhase: CGFloat = 0
 
     var state: State = .hidden {
         didSet { applyState() }
@@ -46,7 +52,7 @@ final class HUDView: NSView {
         wantsLayer = true
         setupBackground()
         setupBars()
-        setupSpinner()
+        setupDots()
         setupCheckmark()
         setupCaption()
         applyState()
@@ -85,15 +91,16 @@ final class HUDView: NSView {
         }
     }
 
-    private func setupSpinner() {
-        spinnerLayer.strokeColor = Style.accentColor.cgColor
-        spinnerLayer.fillColor = NSColor.clear.cgColor
-        spinnerLayer.lineWidth = Style.spinnerLineWidth
-        spinnerLayer.lineCap = .round
-        spinnerLayer.strokeStart = 0
-        spinnerLayer.strokeEnd = 0.75
-        spinnerLayer.isHidden = true
-        layer?.addSublayer(spinnerLayer)
+    private func setupDots() {
+        dotsLayer.isHidden = true
+        layer?.addSublayer(dotsLayer)
+        dotLayers = (0..<3).map { _ in
+            let dot = CALayer()
+            dot.backgroundColor = Style.accentColor.cgColor
+            dot.opacity = 0.7
+            dotsLayer.addSublayer(dot)
+            return dot
+        }
     }
 
     private func setupCheckmark() {
@@ -126,17 +133,17 @@ final class HUDView: NSView {
         switch state {
         case .hidden:
             stopBarsAnimation()
-            stopSpinnerAnimation()
+            stopDotsAnimation()
             stopCheckmarkAnimation()
             barsLayer.isHidden = true
-            spinnerLayer.isHidden = true
+            dotsLayer.isHidden = true
             checkLayer.isHidden = true
             captionField.isHidden = true
         case .recording:
-            stopSpinnerAnimation()
+            stopDotsAnimation()
             stopCheckmarkAnimation()
             barsLayer.isHidden = false
-            spinnerLayer.isHidden = true
+            dotsLayer.isHidden = true
             checkLayer.isHidden = true
             captionField.isHidden = true
             startBarsAnimation()
@@ -144,15 +151,15 @@ final class HUDView: NSView {
             stopBarsAnimation()
             stopCheckmarkAnimation()
             barsLayer.isHidden = true
-            spinnerLayer.isHidden = false
+            dotsLayer.isHidden = false
             checkLayer.isHidden = true
             captionField.isHidden = true
-            startSpinnerAnimation()
+            startDotsAnimation()
         case .message:
             stopBarsAnimation()
-            stopSpinnerAnimation()
+            stopDotsAnimation()
             barsLayer.isHidden = true
-            spinnerLayer.isHidden = true
+            dotsLayer.isHidden = true
             checkLayer.isHidden = false
             captionField.isHidden = false
             startCheckmarkAnimation()
@@ -164,7 +171,7 @@ final class HUDView: NSView {
         backgroundLayer.frame = bounds
         backgroundLayer.cornerRadius = Style.cornerRadius
         layoutBars()
-        layoutSpinner()
+        layoutDots()
         layoutCheckmark()
     }
 
@@ -184,11 +191,15 @@ final class HUDView: NSView {
         updateBars(animated: false)
     }
 
-    private func layoutSpinner() {
-        spinnerLayer.frame = bounds
-        let size = min(bounds.width, bounds.height) * 0.32
-        let rect = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
-        spinnerLayer.path = CGPath(ellipseIn: rect, transform: nil)
+    private func layoutDots() {
+        dotsLayer.frame = bounds
+        let totalWidth = Style.dotSize * 3 + Style.dotGap * 2
+        let startX = bounds.midX - totalWidth / 2
+        for (index, dot) in dotLayers.enumerated() {
+            let x = startX + CGFloat(index) * (Style.dotSize + Style.dotGap)
+            dot.frame = CGRect(x: x, y: bounds.midY - Style.dotSize / 2, width: Style.dotSize, height: Style.dotSize)
+            dot.cornerRadius = Style.dotSize / 2
+        }
     }
 
     private func layoutCheckmark() {
@@ -206,31 +217,47 @@ final class HUDView: NSView {
     func updateInputLevel(_ level: Float) {
         guard case .recording = state else { return }
         inputLevel = max(0, min(1, CGFloat(level)))
-        updateBars(animated: true)
     }
 
     private func startBarsAnimation() {
+        if barTimer != nil {
+            return
+        }
+        lastBarTick = CACurrentMediaTime()
+        let timer = Timer(timeInterval: 1 / 30, repeats: true) { [weak self] _ in
+            self?.tickBars()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        barTimer = timer
         updateBars(animated: false)
     }
 
     private func stopBarsAnimation() {
-        barLayers.forEach { $0.removeAnimation(forKey: "wave") }
+        barTimer?.invalidate()
+        barTimer = nil
+        barLayers.forEach { $0.removeAllAnimations() }
     }
 
-    private func startSpinnerAnimation() {
-        if spinnerLayer.animation(forKey: "spin") != nil {
-            return
+    private func startDotsAnimation() {
+        let now = CACurrentMediaTime()
+        for (index, dot) in dotLayers.enumerated() {
+            if dot.animation(forKey: "bounce") != nil {
+                continue
+            }
+            let animation = CABasicAnimation(keyPath: "transform.translation.y")
+            animation.fromValue = 0
+            animation.toValue = -4
+            animation.autoreverses = true
+            animation.duration = 0.6
+            animation.repeatCount = .infinity
+            animation.beginTime = now + CFTimeInterval(index) * 0.15
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dot.add(animation, forKey: "bounce")
         }
-        let animation = CABasicAnimation(keyPath: "transform.rotation")
-        animation.fromValue = 0
-        animation.toValue = Double.pi * 2
-        animation.duration = 1
-        animation.repeatCount = .infinity
-        spinnerLayer.add(animation, forKey: "spin")
     }
 
-    private func stopSpinnerAnimation() {
-        spinnerLayer.removeAnimation(forKey: "spin")
+    private func stopDotsAnimation() {
+        dotLayers.forEach { $0.removeAnimation(forKey: "bounce") }
     }
 
     private func startCheckmarkAnimation() {
@@ -251,7 +278,8 @@ final class HUDView: NSView {
 
     private func updateBars(animated: Bool) {
         guard !barLayers.isEmpty else { return }
-        smoothedLevel = smoothedLevel * 0.7 + inputLevel * 0.3
+        let attack: CGFloat = inputLevel > smoothedLevel ? 0.6 : 0.2
+        smoothedLevel += (inputLevel - smoothedLevel) * attack
         let maxHeight = min(bounds.width, bounds.height) * 0.32
         let minHeight = max(2, maxHeight * 0.18)
         let level = smoothedLevel
@@ -266,11 +294,21 @@ final class HUDView: NSView {
 
         for (index, bar) in barLayers.enumerated() {
             let profile = barProfile[index % barProfile.count]
-            let target = minHeight + (maxHeight - minHeight) * level * profile
+            let wobble = sin(barPhase + CGFloat(index) * 1.4) * 0.15
+            let energy = max(0.05, min(1, level * profile + wobble * level))
+            let target = minHeight + (maxHeight - minHeight) * energy
             bar.bounds.size.height = target
         }
 
         CATransaction.commit()
+    }
+
+    private func tickBars() {
+        let now = CACurrentMediaTime()
+        let delta = now - lastBarTick
+        lastBarTick = now
+        barPhase += CGFloat(delta) * 6
+        updateBars(animated: true)
     }
 
     private func captionText(for text: String) -> String {
