@@ -10,10 +10,10 @@
     />
     <style>
       :root {
-        --page-bg: radial-gradient(circle at top, #f6f2eb 0%, #f1f1ef 45%, #ececf1 100%);
+        --page-bg: radial-gradient(circle at top, #f4f0e9 0%, #efeff2 55%, #e7edf2 100%);
         --ink: #121417;
         --muted: rgba(18, 20, 23, 0.6);
-        --card: rgba(255, 255, 255, 0.7);
+        --card: rgba(255, 255, 255, 0.72);
         --card-border: rgba(18, 20, 23, 0.08);
         --card-shadow: 0 16px 40px rgba(18, 20, 23, 0.1);
       }
@@ -45,20 +45,20 @@
       header p {
         margin: 0;
         color: var(--muted);
-        max-width: 720px;
+        max-width: 760px;
       }
 
       .catalog {
         padding: 24px 6vw 64px;
         display: grid;
         gap: 24px;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       }
 
       .variant {
         background: var(--card);
         border: 1px solid var(--card-border);
-        border-radius: 20px;
+        border-radius: 22px;
         padding: 20px;
         box-shadow: var(--card-shadow);
         display: grid;
@@ -92,11 +92,52 @@
       }
 
       .menubar-icon {
-        width: 10px;
-        height: 10px;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
         background: var(--menubar-accent);
         box-shadow: 0 0 10px var(--menubar-glow);
+        display: inline-grid;
+        place-items: center;
+        position: relative;
+      }
+
+      .menubar-icon.square {
+        border-radius: 3px;
+      }
+
+      .menubar-icon.ring {
+        border: 2px solid var(--menubar-accent);
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .menubar-icon.bars {
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .menubar-icon.bars span {
+        position: absolute;
+        bottom: 1px;
+        width: 3px;
+        background: var(--menubar-accent);
+        border-radius: 2px;
+      }
+
+      .menubar-icon.bars span:nth-child(1) {
+        left: 0;
+        height: 5px;
+      }
+
+      .menubar-icon.bars span:nth-child(2) {
+        left: 4px;
+        height: 9px;
+      }
+
+      .menubar-icon.bars span:nth-child(3) {
+        left: 8px;
+        height: 6px;
       }
 
       .hud-row {
@@ -106,7 +147,7 @@
       }
 
       .hud {
-        height: 84px;
+        height: 88px;
         border-radius: var(--panel-radius);
         background: linear-gradient(180deg, var(--panel-bg1), var(--panel-bg2));
         border: 1px solid var(--panel-border);
@@ -118,40 +159,25 @@
         font-family: var(--panel-font);
         letter-spacing: var(--panel-letter);
         font-size: 12px;
+        text-align: center;
+        padding: 8px;
+      }
+
+      .hud.vertical .hud-inner {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .hud.tight {
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        font-size: 11px;
       }
 
       .hud-inner {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-      }
-
-      .dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: var(--panel-accent);
-        box-shadow: 0 0 8px var(--panel-glow);
-      }
-
-      .spinner {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.25);
-        border-top-color: var(--panel-accent);
-        animation: spin 1s linear infinite;
-      }
-
-      .check {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: var(--panel-accent);
-        color: #0a0a0a;
-        font-size: 10px;
-        display: grid;
-        place-items: center;
+        gap: 8px;
       }
 
       .label {
@@ -173,9 +199,209 @@
         color: var(--muted);
       }
 
+      .pulse-dot,
+      .static-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--panel-accent);
+        box-shadow: 0 0 8px var(--panel-glow);
+      }
+
+      .pulse-dot {
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      .waveform,
+      .bars,
+      .dots {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 3px;
+      }
+
+      .waveform span,
+      .bars span,
+      .dots span {
+        display: block;
+        width: 3px;
+        border-radius: 3px;
+        background: var(--panel-accent);
+      }
+
+      .waveform span {
+        height: 14px;
+        animation: wave 1.2s ease-in-out infinite;
+      }
+
+      .waveform span:nth-child(2) {
+        height: 8px;
+        animation-delay: 0.1s;
+      }
+
+      .waveform span:nth-child(3) {
+        height: 16px;
+        animation-delay: 0.2s;
+      }
+
+      .waveform span:nth-child(4) {
+        height: 10px;
+        animation-delay: 0.3s;
+      }
+
+      .waveform span:nth-child(5) {
+        height: 14px;
+        animation-delay: 0.4s;
+      }
+
+      .bars span:nth-child(1) {
+        height: 6px;
+      }
+
+      .bars span:nth-child(2) {
+        height: 14px;
+      }
+
+      .bars span:nth-child(3) {
+        height: 10px;
+      }
+
+      .bars span:nth-child(4) {
+        height: 16px;
+      }
+
+      .bars span:nth-child(5) {
+        height: 8px;
+      }
+
+      .dots span {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        opacity: 0.7;
+      }
+
+      .dial,
+      .ring {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        position: relative;
+      }
+
+      .ring {
+        border: 2px solid var(--panel-accent);
+        box-shadow: 0 0 8px var(--panel-glow);
+      }
+
+      .dial {
+        border: 2px solid rgba(255, 255, 255, 0.25);
+      }
+
+      .dial::after {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border-radius: 50%;
+        border: 2px solid var(--panel-accent);
+        border-left-color: transparent;
+        border-bottom-color: transparent;
+      }
+
+      .radar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.25);
+        position: relative;
+      }
+
+      .radar::after {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border-radius: 50%;
+        border: 2px solid var(--panel-accent);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+
+      .cursor {
+        width: 3px;
+        height: 18px;
+        border-radius: 2px;
+        background: var(--panel-accent);
+        box-shadow: 0 0 8px var(--panel-glow);
+      }
+
+      .spark {
+        width: 12px;
+        height: 12px;
+        background: var(--panel-accent);
+        transform: rotate(45deg);
+        box-shadow: 0 0 8px var(--panel-glow);
+      }
+
+      .leaf {
+        width: 14px;
+        height: 10px;
+        background: var(--panel-accent);
+        border-radius: 100% 0 100% 0;
+        transform: rotate(-45deg);
+        box-shadow: 0 0 8px var(--panel-glow);
+      }
+
+      .capsule {
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--panel-border);
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .ok-badge {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--panel-accent);
+        color: #0a0a0a;
+        font-size: 9px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+
       @keyframes spin {
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(0.8);
+          box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.1);
+        }
+        70% {
+          transform: scale(1.2);
+          box-shadow: 0 0 0 8px rgba(0, 0, 0, 0);
+        }
+        100% {
+          transform: scale(0.8);
+          box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+        }
+      }
+
+      @keyframes wave {
+        0% {
+          transform: scaleY(0.6);
+        }
+        50% {
+          transform: scaleY(1.3);
+        }
+        100% {
+          transform: scaleY(0.6);
         }
       }
 
@@ -204,10 +430,10 @@
         --panel-text: rgba(255, 255, 255, 0.86);
         --panel-accent: #f0b86e;
         --panel-glow: rgba(240, 184, 110, 0.35);
-        --panel-radius: 20px;
+        --panel-radius: 22px;
         --panel-shadow: 0 18px 30px rgba(0, 0, 0, 0.55);
         --panel-font: "DM Sans", system-ui, sans-serif;
-        --panel-letter: 0.4px;
+        --panel-letter: 0.6px;
         --panel-weight: 600;
         --menubar-bg: #111115;
         --menubar-text: #f1e4d2;
@@ -261,7 +487,7 @@
         --panel-radius: 14px;
         --panel-shadow: 0 10px 24px rgba(17, 8, 8, 0.5);
         --panel-font: "DM Sans", system-ui, sans-serif;
-        --panel-letter: 0.4px;
+        --panel-letter: 0.5px;
         --panel-weight: 700;
         --menubar-bg: #1a0e0e;
         --menubar-text: #ffeaea;
@@ -315,7 +541,7 @@
         --panel-radius: 12px;
         --panel-shadow: 0 10px 16px rgba(18, 18, 18, 0.15);
         --panel-font: "Space Grotesk", system-ui, sans-serif;
-        --panel-letter: 0.6px;
+        --panel-letter: 1px;
         --panel-weight: 600;
         --menubar-bg: #e2e2e2;
         --menubar-text: #1c1c1c;
@@ -394,15 +620,14 @@
         --menubar-accent: #2f6db6;
         --menubar-glow: rgba(47, 109, 182, 0.35);
       }
-
     </style>
   </head>
   <body>
     <header>
       <h1>Vox HUD Design Catalog</h1>
       <p>
-        12 variants showing menu bar, listening, processing, and copied states.
-        Pick favorites, note what you like, then we evolve.
+        12 high-variance variants: different shapes, layouts, metaphors, and copy. Pick what to keep,
+        what to mutate, and what to discard.
       </p>
     </header>
 
@@ -410,7 +635,7 @@
       <article class="variant theme-aurora">
         <div>
           <h2>Aurora Glass</h2>
-          <p>Cool glass, soft gradient, gentle glow.</p>
+          <p>Soft pulse dot, classic spinner, calm confirm.</p>
         </div>
         <div class="menubar">
           <span class="menubar-icon"></span>
@@ -424,33 +649,33 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
+              <span class="pulse-dot"></span>
               <span class="label">Listening</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
+              <span class="ring" style="animation: spin 1s linear infinite"></span>
               <span class="label">Processing</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
+              <span class="ok-badge">OK</span>
               <span class="label">Copied</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: calm, airy, premium.</div>
+        <div class="note">Tone: airy, minimal, premium.</div>
       </article>
 
       <article class="variant theme-obsidian">
         <div>
-          <h2>Obsidian Pulse</h2>
-          <p>Dense black, warm accent, minimal noise.</p>
+          <h2>Obsidian Meter</h2>
+          <p>Dial listening, dots for processing, quiet send.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon ring"></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -461,33 +686,35 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="dial"></span>
+              <span class="label">Leveling</span>
             </div>
           </div>
-          <div class="hud">
+          <div class="hud vertical">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <div class="dots">
+                <span></span><span></span><span></span>
+              </div>
+              <span class="label">Routing</span>
             </div>
           </div>
-          <div class="hud">
+          <div class="hud vertical">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="ring"></span>
+              <span class="label">Sent</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: crisp, cinematic, restrained.</div>
+        <div class="note">Tone: cinematic, steady, instrument-like.</div>
       </article>
 
       <article class="variant theme-paper">
         <div>
           <h2>Paper Studio</h2>
-          <p>Warm paper stock, editorial type, soft edge.</p>
+          <p>Cursor metaphor, editorial verbs, stamp-like confirm.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon square"></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -498,33 +725,31 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="cursor"></span>
+              <span class="label">Dictating</span>
+            </div>
+          </div>
+          <div class="hud tight">
+            <div class="hud-inner">
+              <span class="label">Rewriting</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
-            </div>
-          </div>
-          <div class="hud">
-            <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Stamped</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: tactile, crafted, human.</div>
+        <div class="note">Tone: tactile, editorial, refined.</div>
       </article>
 
       <article class="variant theme-mint">
         <div>
           <h2>Mint Mist</h2>
-          <p>Minty daylight, optimistic, fresh contrast.</p>
+          <p>Waveform listening, bars for rewrite, soft confirm.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon bars"><span></span><span></span><span></span></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -535,30 +760,34 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
+              <div class="waveform">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
               <span class="label">Listening</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <div class="bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <span class="label">Polishing</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="ok-badge">OK</span>
+              <span class="label">Placed</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: clear, bright, confident.</div>
+        <div class="note">Tone: optimistic, clean, fresh.</div>
       </article>
 
       <article class="variant theme-signal">
         <div>
           <h2>Signal Red</h2>
-          <p>Urgent accent, high clarity, techy punch.</p>
+          <p>Radar sweep, alert processing, locked confirm.</p>
         </div>
         <div class="menubar">
           <span class="menubar-icon"></span>
@@ -572,33 +801,32 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="radar"></span>
+              <span class="label">Scanning</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <span class="ring" style="animation: spin 1s linear infinite"></span>
+              <span class="label">Analyzing</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Locked</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: alert, sharp, confident.</div>
+        <div class="note">Tone: urgent, confident, technical.</div>
       </article>
 
       <article class="variant theme-cobalt">
         <div>
           <h2>Cobalt Night</h2>
-          <p>Clean tech navy with electric contrast.</p>
+          <p>Bar meter listening, orbiting process, injected copy.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon bars"><span></span><span></span><span></span></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -609,30 +837,32 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <div class="bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <span class="label">Metering</span>
+            </div>
+          </div>
+          <div class="hud vertical">
+            <div class="hud-inner">
+              <span class="ring" style="animation: spin 1s linear infinite"></span>
+              <span class="label">Orbit</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
-            </div>
-          </div>
-          <div class="hud">
-            <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="ok-badge">OK</span>
+              <span class="label">Injected</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: clean, modern, precise.</div>
+        <div class="note">Tone: precise, fast, engineered.</div>
       </article>
 
       <article class="variant theme-ember">
         <div>
           <h2>Sunset Ember</h2>
-          <p>Warm ember glow, cinematic, slightly vintage.</p>
+          <p>Glowing orb, spark processing, ready state.</p>
         </div>
         <div class="menubar">
           <span class="menubar-icon"></span>
@@ -644,35 +874,34 @@
           <span>Copied</span>
         </div>
         <div class="hud-row">
-          <div class="hud">
+          <div class="hud vertical">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="pulse-dot"></span>
+              <span class="label">Warming</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <span class="spark"></span>
+              <span class="label">Blending</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Ready</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: warm, rich, tactile.</div>
+        <div class="note">Tone: warm, expressive, cinematic.</div>
       </article>
 
       <article class="variant theme-ink">
         <div>
           <h2>Mono Ink</h2>
-          <p>High-contrast, ink-on-paper, crisp UI.</p>
+          <p>Text-first, monospace cadence, minimal glyphs.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon square"></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -681,32 +910,29 @@
           <span>Copied</span>
         </div>
         <div class="hud-row">
-          <div class="hud">
+          <div class="hud tight">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="label">LISTENING</span>
             </div>
           </div>
-          <div class="hud">
+          <div class="hud tight">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <span class="label">WORKING</span>
             </div>
           </div>
-          <div class="hud">
+          <div class="hud tight">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="label">OK</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: editorial, strict, clear.</div>
+        <div class="note">Tone: strict, fast, no ornament.</div>
       </article>
 
       <article class="variant theme-sandstone">
         <div>
           <h2>Sandstone</h2>
-          <p>Natural, muted, cozy, low glare.</p>
+          <p>Static dot, gentle ellipses, delivered confirm.</p>
         </div>
         <div class="menubar">
           <span class="menubar-icon"></span>
@@ -720,33 +946,34 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
+              <span class="static-dot"></span>
               <span class="label">Listening</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <div class="dots">
+                <span></span><span></span><span></span>
+              </div>
+              <span class="label">Thinking</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Delivered</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: grounded, human, soft.</div>
+        <div class="note">Tone: grounded, patient, warm.</div>
       </article>
 
       <article class="variant theme-vapor">
         <div>
           <h2>Vapor Orbit</h2>
-          <p>Saturated glow, retro-future, bold.</p>
+          <p>Neon waveform, dial processing, capsule confirm.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon ring"></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -757,33 +984,34 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <div class="waveform">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <span class="label">Signal</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <span class="dial"></span>
+              <span class="label">Synth</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Copied</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: expressive, playful, vivid.</div>
+        <div class="note">Tone: bold, playful, neon.</div>
       </article>
 
       <article class="variant theme-verdant">
         <div>
           <h2>Verdant Focus</h2>
-          <p>Botanical green, quiet confidence.</p>
+          <p>Leaf cue, steady bars, saved confirm.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon bars"><span></span><span></span><span></span></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -794,33 +1022,35 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
-              <span class="label">Listening</span>
+              <span class="leaf"></span>
+              <span class="label">Focus</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="spinner"></span>
-              <span class="label">Processing</span>
+              <div class="bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+              <span class="label">Refine</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="ok-badge">OK</span>
+              <span class="label">Saved</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: natural, steady, calm.</div>
+        <div class="note">Tone: natural, focused, calm.</div>
       </article>
 
       <article class="variant theme-slate">
         <div>
           <h2>Slate Studio</h2>
-          <p>Soft slate, precise, professional.</p>
+          <p>Bars listening, ring processing, captured copy.</p>
         </div>
         <div class="menubar">
-          <span class="menubar-icon"></span>
+          <span class="menubar-icon square"></span>
           <span>Vox</span>
         </div>
         <div class="state-labels">
@@ -831,26 +1061,26 @@
         <div class="hud-row">
           <div class="hud">
             <div class="hud-inner">
-              <span class="dot"></span>
+              <div class="bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
               <span class="label">Listening</span>
             </div>
           </div>
-          <div class="hud">
+          <div class="hud vertical">
             <div class="hud-inner">
-              <span class="spinner"></span>
+              <span class="ring" style="animation: spin 1s linear infinite"></span>
               <span class="label">Processing</span>
             </div>
           </div>
           <div class="hud">
             <div class="hud-inner">
-              <span class="check">✓</span>
-              <span class="label">Copied</span>
+              <span class="capsule">Captured</span>
             </div>
           </div>
         </div>
-        <div class="note">Tone: clean, safe, minimal.</div>
+        <div class="note">Tone: professional, restrained, clear.</div>
       </article>
-
     </section>
   </body>
 </html>

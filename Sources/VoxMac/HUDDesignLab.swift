@@ -21,7 +21,7 @@ private final class HUDDesignLabWindowController: NSWindowController {
     init() {
         let viewController = HUDDesignLabViewController()
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 840, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: 540),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -110,11 +110,11 @@ private final class HUDDesignLabViewController: NSViewController {
     }
 
     private func applyVariant(_ variant: HUDDesignVariant) {
-        let style = variant.style
-        menuBarPreview.style = style
-        listeningPreview.style = style
-        processingPreview.style = style
-        copiedPreview.style = style
+        let configuration = variant.configuration
+        menuBarPreview.apply(style: configuration.style, icon: configuration.menuBarIcon)
+        listeningPreview.apply(configuration: configuration, state: .listening)
+        processingPreview.apply(configuration: configuration, state: .processing)
+        copiedPreview.apply(configuration: configuration, state: .copied)
     }
 
     private func label(text: String) -> NSTextField {
@@ -129,20 +129,26 @@ private final class HUDDesignLabViewController: NSViewController {
     }
 }
 
-private final class MenuBarPreviewView: NSView {
-    var style: HUDDesignStyle = HUDDesignVariant.aurora.style {
-        didSet { applyStyle() }
-    }
+private enum HUDMenuBarIcon {
+    case dot
+    case ring
+    case square
+    case bars
+}
 
+private final class MenuBarPreviewView: NSView {
     private let backgroundLayer = CALayer()
-    private let dotLayer = CALayer()
+    private let iconLayer = CALayer()
     private let titleField = NSTextField(labelWithString: "Vox")
+    private var iconBars: [CALayer] = []
+    private var icon: HUDMenuBarIcon = .dot
+    private var style = HUDDesignVariant.aurora.configuration.style
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
-        layer?.addSublayer(dotLayer)
+        layer?.addSublayer(iconLayer)
 
         titleField.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         titleField.translatesAutoresizingMaskIntoConstraints = false
@@ -150,10 +156,10 @@ private final class MenuBarPreviewView: NSView {
 
         NSLayoutConstraint.activate([
             titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 28)
+            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30)
         ])
 
-        applyStyle()
+        apply(style: style, icon: icon)
     }
 
     required init?(coder: NSCoder) {
@@ -164,19 +170,115 @@ private final class MenuBarPreviewView: NSView {
         NSSize(width: 240, height: 28)
     }
 
+    func apply(style: HUDDesignStyle, icon: HUDMenuBarIcon) {
+        self.style = style
+        self.icon = icon
+        backgroundLayer.backgroundColor = style.menubarBackground.cgColor
+        titleField.textColor = style.menubarText
+        updateIconLayers()
+        needsLayout = true
+    }
+
     override func layout() {
         super.layout()
         backgroundLayer.frame = bounds
         backgroundLayer.cornerRadius = 8
-        dotLayer.frame = CGRect(x: 12, y: bounds.midY - 5, width: 10, height: 10)
-        dotLayer.cornerRadius = 5
+
+        switch icon {
+        case .dot, .ring, .square:
+            iconLayer.frame = CGRect(x: 12, y: bounds.midY - 5, width: 10, height: 10)
+        case .bars:
+            iconLayer.frame = .zero
+            let startX: CGFloat = 12
+            let barWidths: CGFloat = 2.5
+            let gap: CGFloat = 2.5
+            let heights: [CGFloat] = [5, 9, 6]
+            for (index, bar) in iconBars.enumerated() {
+                let x = startX + CGFloat(index) * (barWidths + gap)
+                let y = bounds.midY - heights[index] / 2
+                bar.frame = CGRect(x: x, y: y, width: barWidths, height: heights[index])
+                bar.cornerRadius = 1
+            }
+        }
     }
 
-    private func applyStyle() {
-        backgroundLayer.backgroundColor = style.menubarBackground.cgColor
-        dotLayer.backgroundColor = style.accentColor.cgColor
-        titleField.textColor = style.menubarText
+    private func updateIconLayers() {
+        iconBars.forEach { $0.removeFromSuperlayer() }
+        iconBars.removeAll()
+        iconLayer.isHidden = false
+
+        switch icon {
+        case .dot:
+            iconLayer.backgroundColor = style.accentColor.cgColor
+            iconLayer.borderWidth = 0
+            iconLayer.cornerRadius = 5
+        case .square:
+            iconLayer.backgroundColor = style.accentColor.cgColor
+            iconLayer.borderWidth = 0
+            iconLayer.cornerRadius = 2
+        case .ring:
+            iconLayer.backgroundColor = NSColor.clear.cgColor
+            iconLayer.borderColor = style.accentColor.cgColor
+            iconLayer.borderWidth = 2
+            iconLayer.cornerRadius = 5
+        case .bars:
+            iconLayer.isHidden = true
+            let heights: [CGFloat] = [5, 9, 6]
+            for _ in heights {
+                let bar = CALayer()
+                bar.backgroundColor = style.accentColor.cgColor
+                layer?.addSublayer(bar)
+                iconBars.append(bar)
+            }
+        }
     }
+}
+
+private enum HUDDesignLayout {
+    case inline
+    case stacked
+    case textOnly
+}
+
+private struct HUDDesignStateSpec {
+    let text: String
+    let glyph: HUDDesignGlyph
+    let layout: HUDDesignLayout
+}
+
+private struct HUDDesignConfiguration {
+    let style: HUDDesignStyle
+    let menuBarIcon: HUDMenuBarIcon
+    let listening: HUDDesignStateSpec
+    let processing: HUDDesignStateSpec
+    let copied: HUDDesignStateSpec
+
+    func spec(for state: HUDDesignPreview.State) -> HUDDesignStateSpec {
+        switch state {
+        case .listening:
+            return listening
+        case .processing:
+            return processing
+        case .copied:
+            return copied
+        }
+    }
+}
+
+private enum HUDDesignGlyph {
+    case none
+    case dot
+    case pulseDot
+    case bars
+    case waveform
+    case ring
+    case dial
+    case cursor
+    case dots
+    case spark
+    case leaf
+    case badge
+    case spinner
 }
 
 private final class HUDDesignPreview: NSView {
@@ -188,41 +290,21 @@ private final class HUDDesignPreview: NSView {
 
     static let defaultSize = NSSize(width: 170, height: 96)
 
-    var style: HUDDesignStyle = HUDDesignVariant.aurora.style {
-        didSet { applyStyle() }
-    }
-
-    var state: State {
-        didSet { applyState() }
-    }
+    private var style = HUDDesignVariant.aurora.configuration.style
+    private var spec = HUDDesignVariant.aurora.configuration.listening
 
     private let backgroundLayer = CAGradientLayer()
-    private let dotView = NSView()
-    private let spinner = NSProgressIndicator()
-    private let checkLabel = NSTextField(labelWithString: "✓")
+    private let glyphView = HUDDesignGlyphView()
     private let messageField = NSTextField(labelWithString: "")
     private let contentStack = NSStackView()
+
+    let state: State
 
     init(state: State) {
         self.state = state
         super.init(frame: .zero)
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
-
-        dotView.wantsLayer = true
-        dotView.translatesAutoresizingMaskIntoConstraints = false
-        dotView.widthAnchor.constraint(equalToConstant: 10).isActive = true
-        dotView.heightAnchor.constraint(equalToConstant: 10).isActive = true
-
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.isDisplayedWhenStopped = false
-
-        checkLabel.font = NSFont.systemFont(ofSize: 12, weight: .bold)
-        checkLabel.textColor = .black
-        checkLabel.alignment = .center
-        checkLabel.translatesAutoresizingMaskIntoConstraints = false
-        checkLabel.widthAnchor.constraint(equalToConstant: 14).isActive = true
 
         messageField.lineBreakMode = .byTruncatingTail
         messageField.maximumNumberOfLines = 1
@@ -233,9 +315,7 @@ private final class HUDDesignPreview: NSView {
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(contentStack)
 
-        contentStack.addArrangedSubview(dotView)
-        contentStack.addArrangedSubview(spinner)
-        contentStack.addArrangedSubview(checkLabel)
+        contentStack.addArrangedSubview(glyphView)
         contentStack.addArrangedSubview(messageField)
 
         NSLayoutConstraint.activate([
@@ -245,8 +325,7 @@ private final class HUDDesignPreview: NSView {
             contentStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12)
         ])
 
-        applyStyle()
-        applyState()
+        apply(configuration: HUDDesignVariant.aurora.configuration, state: state)
     }
 
     required init?(coder: NSCoder) {
@@ -263,7 +342,13 @@ private final class HUDDesignPreview: NSView {
         backgroundLayer.cornerRadius = style.cornerRadius
     }
 
-    private func applyStyle() {
+    func apply(configuration: HUDDesignConfiguration, state: State) {
+        style = configuration.style
+        spec = configuration.spec(for: state)
+        updateView()
+    }
+
+    private func updateView() {
         backgroundLayer.colors = [style.backgroundTop.cgColor, style.backgroundBottom.cgColor]
         backgroundLayer.startPoint = CGPoint(x: 0.5, y: 1)
         backgroundLayer.endPoint = CGPoint(x: 0.5, y: 0)
@@ -274,10 +359,6 @@ private final class HUDDesignPreview: NSView {
         layer?.shadowRadius = style.shadowRadius
         layer?.shadowOffset = CGSize(width: 0, height: -2)
 
-        dotView.layer?.backgroundColor = style.accentColor.cgColor
-        dotView.layer?.cornerRadius = 5
-        checkLabel.textColor = style.accentColor
-
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         let attributes: [NSAttributedString.Key: Any] = [
@@ -286,28 +367,245 @@ private final class HUDDesignPreview: NSView {
             .kern: style.letterSpacing,
             .paragraphStyle: paragraph
         ]
-        messageField.attributedStringValue = NSAttributedString(string: messageField.stringValue, attributes: attributes)
+        messageField.attributedStringValue = NSAttributedString(string: spec.text, attributes: attributes)
+
+        switch spec.layout {
+        case .inline:
+            contentStack.orientation = .horizontal
+            contentStack.spacing = 8
+        case .stacked:
+            contentStack.orientation = .vertical
+            contentStack.spacing = 6
+        case .textOnly:
+            contentStack.orientation = .vertical
+            contentStack.spacing = 0
+        }
+
+        glyphView.isHidden = spec.glyph == .none || spec.layout == .textOnly
+        glyphView.configure(kind: spec.glyph, style: style)
+        needsLayout = true
+    }
+}
+
+private final class HUDDesignGlyphView: NSView {
+    private let spinner = NSProgressIndicator()
+    private let textLayer = CATextLayer()
+    private var shapeLayers: [CALayer] = []
+    private var kind: HUDDesignGlyph = .none
+    private var style = HUDDesignVariant.aurora.configuration.style
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        spinner.translatesAutoresizingMaskIntoConstraints = false
     }
 
-    private func applyState() {
-        switch state {
-        case .listening:
-            messageField.stringValue = "Listening"
-            dotView.isHidden = false
-            spinner.isHidden = true
-            checkLabel.isHidden = true
-        case .processing:
-            messageField.stringValue = "Processing"
-            dotView.isHidden = true
-            spinner.isHidden = false
-            checkLabel.isHidden = true
-        case .copied:
-            messageField.stringValue = "Copied"
-            dotView.isHidden = true
-            spinner.isHidden = true
-            checkLabel.isHidden = false
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 24, height: 24)
+    }
+
+    func configure(kind: HUDDesignGlyph, style: HUDDesignStyle) {
+        self.kind = kind
+        self.style = style
+        rebuildLayers()
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        guard layer != nil else { return }
+
+        switch kind {
+        case .none, .spinner:
+            break
+        case .dot, .pulseDot:
+            if let dot = shapeLayers.first {
+                let size: CGFloat = 10
+                dot.frame = CGRect(
+                    x: bounds.midX - size / 2,
+                    y: bounds.midY - size / 2,
+                    width: size,
+                    height: size
+                )
+                dot.cornerRadius = size / 2
+            }
+        case .bars, .waveform:
+            let heights: [CGFloat] = kind == .bars ? [6, 12, 8, 14, 10] : [10, 6, 14, 8, 12]
+            let width: CGFloat = 3
+            let gap: CGFloat = 2
+            let totalWidth = CGFloat(heights.count) * width + CGFloat(heights.count - 1) * gap
+            let startX = bounds.midX - totalWidth / 2
+            for (index, bar) in shapeLayers.enumerated() {
+                let height = heights[index]
+                let x = startX + CGFloat(index) * (width + gap)
+                let y = bounds.midY - height / 2
+                bar.frame = CGRect(x: x, y: y, width: width, height: height)
+                bar.cornerRadius = 1.5
+            }
+        case .ring, .dial:
+            let size: CGFloat = 18
+            let rect = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+            if let ring = shapeLayers.first as? CAShapeLayer {
+                ring.path = CGPath(ellipseIn: rect, transform: nil)
+            }
+            if kind == .dial, shapeLayers.count > 1, let arc = shapeLayers[1] as? CAShapeLayer {
+                let center = CGPoint(x: rect.midX, y: rect.midY)
+                let path = CGMutablePath()
+                let startAngle = CGFloat(-0.8 * Double.pi)
+                let endAngle = CGFloat(0.2 * Double.pi)
+                path.addArc(center: center, radius: size / 2, startAngle: startAngle, endAngle: endAngle, clockwise: false)
+                arc.path = path
+            }
+        case .cursor:
+            if let cursor = shapeLayers.first {
+                let size = CGSize(width: 3, height: 18)
+                cursor.frame = CGRect(
+                    x: bounds.midX - size.width / 2,
+                    y: bounds.midY - size.height / 2,
+                    width: size.width,
+                    height: size.height
+                )
+                cursor.cornerRadius = 1.5
+            }
+        case .dots:
+            let size: CGFloat = 5
+            let gap: CGFloat = 3
+            let totalWidth = CGFloat(shapeLayers.count) * size + CGFloat(shapeLayers.count - 1) * gap
+            let startX = bounds.midX - totalWidth / 2
+            for (index, dot) in shapeLayers.enumerated() {
+                let x = startX + CGFloat(index) * (size + gap)
+                dot.frame = CGRect(x: x, y: bounds.midY - size / 2, width: size, height: size)
+                dot.cornerRadius = size / 2
+            }
+        case .spark:
+            if let spark = shapeLayers.first {
+                let size: CGFloat = 12
+                spark.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+                spark.cornerRadius = 2
+                spark.setAffineTransform(CGAffineTransform(rotationAngle: .pi / 4))
+            }
+        case .leaf:
+            if let leaf = shapeLayers.first {
+                let size = CGSize(width: 14, height: 10)
+                leaf.frame = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
+                leaf.cornerRadius = size.height / 2
+                leaf.setAffineTransform(CGAffineTransform(rotationAngle: -.pi / 4))
+            }
+        case .badge:
+            let size: CGFloat = 22
+            if let badge = shapeLayers.first {
+                badge.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+                badge.cornerRadius = size / 2
+            }
+            textLayer.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - 6, width: size, height: 12)
         }
-        applyStyle()
+
+    }
+
+    private func rebuildLayers() {
+        shapeLayers.forEach { $0.removeAllAnimations() }
+        shapeLayers.forEach { $0.removeFromSuperlayer() }
+        shapeLayers.removeAll()
+        textLayer.removeFromSuperlayer()
+        spinner.removeFromSuperview()
+        spinner.stopAnimation(nil)
+
+        guard let rootLayer = layer else { return }
+
+        switch kind {
+        case .none:
+            return
+        case .spinner:
+            addSubview(spinner)
+            NSLayoutConstraint.activate([
+                spinner.centerXAnchor.constraint(equalTo: centerXAnchor),
+                spinner.centerYAnchor.constraint(equalTo: centerYAnchor)
+            ])
+            spinner.startAnimation(nil)
+        case .dot, .pulseDot:
+            let dot = CALayer()
+            dot.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(dot)
+            shapeLayers = [dot]
+            if kind == .pulseDot {
+                let animation = CABasicAnimation(keyPath: "transform.scale")
+                animation.fromValue = 0.8
+                animation.toValue = 1.2
+                animation.autoreverses = true
+                animation.duration = 0.9
+                animation.repeatCount = .infinity
+                dot.add(animation, forKey: "pulse")
+            }
+        case .bars, .waveform:
+            let count = 5
+            for _ in 0..<count {
+                let bar = CALayer()
+                bar.backgroundColor = style.accentColor.cgColor
+                rootLayer.addSublayer(bar)
+                shapeLayers.append(bar)
+            }
+        case .ring:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            rootLayer.addSublayer(ring)
+            shapeLayers = [ring]
+        case .dial:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.textColor.withAlphaComponent(0.25).cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            let arc = CAShapeLayer()
+            arc.strokeColor = style.accentColor.cgColor
+            arc.fillColor = NSColor.clear.cgColor
+            arc.lineWidth = 2
+            rootLayer.addSublayer(ring)
+            rootLayer.addSublayer(arc)
+            shapeLayers = [ring, arc]
+        case .cursor:
+            let cursor = CALayer()
+            cursor.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(cursor)
+            shapeLayers = [cursor]
+        case .dots:
+            for _ in 0..<3 {
+                let dot = CALayer()
+                dot.backgroundColor = style.accentColor.cgColor
+                dot.opacity = 0.7
+                rootLayer.addSublayer(dot)
+                shapeLayers.append(dot)
+            }
+        case .spark:
+            let spark = CALayer()
+            spark.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(spark)
+            shapeLayers = [spark]
+        case .leaf:
+            let leaf = CALayer()
+            leaf.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(leaf)
+            shapeLayers = [leaf]
+        case .badge:
+            let badge = CALayer()
+            badge.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(badge)
+            shapeLayers = [badge]
+            textLayer.string = "OK"
+            textLayer.font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            textLayer.foregroundColor = NSColor.black.withAlphaComponent(0.8).cgColor
+            textLayer.alignmentMode = .center
+            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            rootLayer.addSublayer(textLayer)
+        }
     }
 }
 
@@ -346,7 +644,7 @@ private enum HUDDesignVariant: CaseIterable {
     var name: String {
         switch self {
         case .aurora: return "Aurora Glass"
-        case .obsidian: return "Obsidian Pulse"
+        case .obsidian: return "Obsidian Meter"
         case .paper: return "Paper Studio"
         case .mint: return "Mint Mist"
         case .signal: return "Signal Red"
@@ -357,6 +655,108 @@ private enum HUDDesignVariant: CaseIterable {
         case .vapor: return "Vapor Orbit"
         case .verdant: return "Verdant Focus"
         case .slate: return "Slate Studio"
+        }
+    }
+
+    var configuration: HUDDesignConfiguration {
+        let style = self.style
+        switch self {
+        case .aurora:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .dot,
+                listening: HUDDesignStateSpec(text: "Listening", glyph: .pulseDot, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Processing", glyph: .spinner, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Copied", glyph: .badge, layout: .inline)
+            )
+        case .obsidian:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .ring,
+                listening: HUDDesignStateSpec(text: "Leveling", glyph: .dial, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Routing", glyph: .dots, layout: .stacked),
+                copied: HUDDesignStateSpec(text: "Sent", glyph: .ring, layout: .stacked)
+            )
+        case .paper:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .square,
+                listening: HUDDesignStateSpec(text: "Dictating", glyph: .cursor, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Rewriting", glyph: .none, layout: .textOnly),
+                copied: HUDDesignStateSpec(text: "Stamped", glyph: .none, layout: .textOnly)
+            )
+        case .mint:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .bars,
+                listening: HUDDesignStateSpec(text: "Listening", glyph: .waveform, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Polishing", glyph: .bars, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Placed", glyph: .badge, layout: .inline)
+            )
+        case .signal:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .dot,
+                listening: HUDDesignStateSpec(text: "Scanning", glyph: .ring, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Analyzing", glyph: .spinner, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Locked", glyph: .badge, layout: .textOnly)
+            )
+        case .cobalt:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .bars,
+                listening: HUDDesignStateSpec(text: "Metering", glyph: .bars, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Orbit", glyph: .spinner, layout: .stacked),
+                copied: HUDDesignStateSpec(text: "Injected", glyph: .badge, layout: .inline)
+            )
+        case .ember:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .dot,
+                listening: HUDDesignStateSpec(text: "Warming", glyph: .pulseDot, layout: .stacked),
+                processing: HUDDesignStateSpec(text: "Blending", glyph: .spark, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Ready", glyph: .none, layout: .textOnly)
+            )
+        case .ink:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .square,
+                listening: HUDDesignStateSpec(text: "LISTENING", glyph: .none, layout: .textOnly),
+                processing: HUDDesignStateSpec(text: "WORKING", glyph: .none, layout: .textOnly),
+                copied: HUDDesignStateSpec(text: "OK", glyph: .none, layout: .textOnly)
+            )
+        case .sandstone:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .dot,
+                listening: HUDDesignStateSpec(text: "Listening", glyph: .dot, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Thinking", glyph: .dots, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Delivered", glyph: .none, layout: .textOnly)
+            )
+        case .vapor:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .ring,
+                listening: HUDDesignStateSpec(text: "Signal", glyph: .waveform, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Synth", glyph: .dial, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Copied", glyph: .none, layout: .textOnly)
+            )
+        case .verdant:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .bars,
+                listening: HUDDesignStateSpec(text: "Focus", glyph: .leaf, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Refine", glyph: .bars, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Saved", glyph: .badge, layout: .inline)
+            )
+        case .slate:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .square,
+                listening: HUDDesignStateSpec(text: "Listening", glyph: .bars, layout: .inline),
+                processing: HUDDesignStateSpec(text: "Processing", glyph: .spinner, layout: .stacked),
+                copied: HUDDesignStateSpec(text: "Captured", glyph: .none, layout: .textOnly)
+            )
         }
     }
 
@@ -388,13 +788,13 @@ private enum HUDDesignVariant: CaseIterable {
                 borderColor: .white.withAlphaComponent(0.08),
                 textColor: .white.withAlphaComponent(0.86),
                 accentColor: .hex(0xF0B86E),
-                cornerRadius: 20,
+                cornerRadius: 22,
                 borderWidth: 1,
                 shadowColor: .black,
                 shadowOpacity: 0.55,
                 shadowRadius: 18,
                 font: .systemFont(ofSize: 12, weight: .semibold),
-                letterSpacing: 0.4,
+                letterSpacing: 0.6,
                 menubarBackground: .hex(0x111115),
                 menubarText: .hex(0xF1E4D2)
             )
@@ -448,7 +848,7 @@ private enum HUDDesignVariant: CaseIterable {
                 shadowOpacity: 0.5,
                 shadowRadius: 14,
                 font: .systemFont(ofSize: 12, weight: .bold),
-                letterSpacing: 0.4,
+                letterSpacing: 0.5,
                 menubarBackground: .hex(0x1A0E0E),
                 menubarText: .hex(0xFFEAEB)
             )
@@ -502,7 +902,7 @@ private enum HUDDesignVariant: CaseIterable {
                 shadowOpacity: 0.15,
                 shadowRadius: 10,
                 font: .systemFont(ofSize: 12, weight: .semibold),
-                letterSpacing: 0.6,
+                letterSpacing: 1,
                 menubarBackground: .hex(0xE2E2E2),
                 menubarText: .hex(0x1C1C1C)
             )
