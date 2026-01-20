@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+echo "[pre-commit] swift build"
+swift build
