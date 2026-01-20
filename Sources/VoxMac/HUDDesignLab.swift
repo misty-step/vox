@@ -88,17 +88,31 @@ private final class HUDDesignLabViewController: NSViewController {
         previewsRow.addArrangedSubview(copiedPreview)
 
         let slateStyle = HUDDesignVariant.slate.style
+        let listeningCatalog = makeCatalogSection(
+            title: "Listening Variations",
+            items: HUDListeningVariant.allCases.map {
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .listening, size: $0.size, style: $0.style)
+            },
+            style: slateStyle
+        )
         let processingCatalog = makeCatalogSection(
             title: "Processing Variations",
             items: HUDProcessingVariant.allCases.map {
-                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .processing)
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .processing, size: $0.size, style: $0.style)
             },
             style: slateStyle
         )
         let copiedCatalog = makeCatalogSection(
             title: "Copied Variations",
             items: HUDCopiedVariant.allCases.map {
-                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .copied)
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .copied, size: $0.size, style: $0.style)
+            },
+            style: slateStyle
+        )
+        let containerCatalog = makeCatalogSection(
+            title: "Container Variations",
+            items: HUDContainerVariant.allCases.map {
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .listening, size: $0.size, style: $0.style)
             },
             style: slateStyle
         )
@@ -107,15 +121,29 @@ private final class HUDDesignLabViewController: NSViewController {
         root.addArrangedSubview(menuBarPreview)
         root.addArrangedSubview(stateLabels)
         root.addArrangedSubview(previewsRow)
+        root.addArrangedSubview(listeningCatalog)
         root.addArrangedSubview(processingCatalog)
         root.addArrangedSubview(copiedCatalog)
+        root.addArrangedSubview(containerCatalog)
 
-        view.addSubview(root)
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.documentView = root
+
+        view.addSubview(scrollView)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            root.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
-            root.topAnchor.constraint(equalTo: view.topAnchor, constant: 24),
-            root.bottomAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor, constant: -24)
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            root.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor, constant: 24),
+            root.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor, constant: -24),
+            root.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor, constant: 24),
+            root.bottomAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.bottomAnchor, constant: -24),
+            root.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor, constant: -48)
         ])
 
         applyVariant(HUDDesignVariant.allCases.first ?? .aurora)
@@ -316,6 +344,7 @@ private enum HUDDesignGlyph {
     case pulseDot
     case bars
     case waveform
+    case barsDense
     case ring
     case dial
     case cursor
@@ -352,7 +381,7 @@ private final class HUDDesignPreview: NSView {
         case copied
     }
 
-    static let defaultSize = NSSize(width: 170, height: 96)
+    static let defaultSize = NSSize(width: 220, height: 84)
 
     private var style = HUDDesignVariant.aurora.configuration.style
     private var spec = HUDDesignVariant.aurora.configuration.listening
@@ -404,6 +433,7 @@ private final class HUDDesignPreview: NSView {
         super.layout()
         backgroundLayer.frame = bounds
         backgroundLayer.cornerRadius = style.cornerRadius
+        updateGlyphSizing()
     }
 
     func apply(configuration: HUDDesignConfiguration, state: State) {
@@ -448,10 +478,43 @@ private final class HUDDesignPreview: NSView {
             contentStack.spacing = 0
         }
 
-        messageField.isHidden = true
+        let hasText = !spec.text.isEmpty && spec.layout != .iconOnly
+        messageField.isHidden = !hasText
         glyphView.isHidden = spec.glyph == .none || spec.layout == .textOnly
         glyphView.configure(kind: spec.glyph, style: style)
+        updateGlyphSizing()
         needsLayout = true
+    }
+
+    private func updateGlyphSizing() {
+        guard bounds.width > 1, bounds.height > 1 else {
+            glyphView.preferredSize = nil
+            return
+        }
+        guard spec.layout == .iconOnly else {
+            glyphView.preferredSize = nil
+            return
+        }
+
+        let size: NSSize?
+        switch spec.glyph {
+        case .bars, .waveform, .barsDense:
+            size = NSSize(width: bounds.width * 0.9, height: bounds.height * 0.6)
+        case .dots, .dotsPulse, .dotsFade, .barsMini:
+            size = NSSize(width: bounds.width * 0.5, height: bounds.height * 0.22)
+        case .scanLine:
+            size = NSSize(width: bounds.width * 0.6, height: bounds.height * 0.12)
+        case .ring, .ringDash, .spinnerRing, .arcSweep, .pulseHalo, .orbitDot, .dial:
+            let dim = min(bounds.width, bounds.height) * 0.55
+            size = NSSize(width: dim, height: dim)
+        case .checkmark, .checkCircle, .checkRing, .checkBadge, .clipboardCheck,
+             .checkUnderline, .checkTile, .checkSpark, .checkPulse, .checkStamp:
+            let dim = min(bounds.width, bounds.height) * 0.5
+            size = NSSize(width: dim, height: dim)
+        default:
+            size = nil
+        }
+        glyphView.preferredSize = size
     }
 }
 
@@ -459,6 +522,8 @@ private struct HUDCatalogItem {
     let title: String
     let spec: HUDDesignStateSpec
     let state: HUDDesignPreview.State
+    let size: NSSize
+    let style: HUDDesignStyle
 }
 
 private final class HUDCatalogItemView: NSStackView {
@@ -471,12 +536,12 @@ private final class HUDCatalogItemView: NSStackView {
 
         let preview = HUDDesignPreview(state: item.state)
         preview.translatesAutoresizingMaskIntoConstraints = false
-        preview.widthAnchor.constraint(equalToConstant: 160).isActive = true
-        preview.heightAnchor.constraint(equalToConstant: 86).isActive = true
+        preview.widthAnchor.constraint(equalToConstant: item.size.width).isActive = true
+        preview.heightAnchor.constraint(equalToConstant: item.size.height).isActive = true
 
         let empty = HUDDesignStateSpec(text: "", glyph: .none, layout: .iconOnly)
         let configuration = HUDDesignConfiguration(
-            style: style,
+            style: item.style,
             menuBarIcon: .square,
             listening: item.state == .listening ? item.spec : empty,
             processing: item.state == .processing ? item.spec : empty,
@@ -503,6 +568,9 @@ private final class HUDDesignGlyphView: NSView {
     private var shapeLayers: [CALayer] = []
     private var kind: HUDDesignGlyph = .none
     private var style = HUDDesignVariant.aurora.configuration.style
+    var preferredSize: NSSize? {
+        didSet { invalidateIntrinsicContentSize() }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -519,7 +587,7 @@ private final class HUDDesignGlyphView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 24, height: 24)
+        preferredSize ?? NSSize(width: 24, height: 24)
     }
 
     func configure(kind: HUDDesignGlyph, style: HUDDesignStyle) {
@@ -547,26 +615,43 @@ private final class HUDDesignGlyphView: NSView {
                 )
                 dot.cornerRadius = size / 2
             }
-        case .bars, .waveform, .barsMini:
-            let heights: [CGFloat]
+        case .bars, .waveform, .barsMini, .barsDense:
+            let baseHeights: [CGFloat]
+            let gapRatio: CGFloat
             switch kind {
             case .bars:
-                heights = [6, 12, 8, 14, 10]
+                baseHeights = [0.45, 0.9, 0.6, 1.0, 0.75]
+                gapRatio = 0.6
             case .waveform:
-                heights = [10, 6, 14, 8, 12]
+                baseHeights = [0.8, 0.5, 1.0, 0.6, 0.85]
+                gapRatio = 0.6
+            case .barsMini:
+                baseHeights = [0.4, 0.7, 1.0, 0.7, 0.4]
+                gapRatio = 0.7
             default:
-                heights = [4, 7, 10, 7, 4]
+                let count = 31
+                let center = CGFloat(count - 1) / 2
+                baseHeights = (0..<count).map { index in
+                    let distance = abs(CGFloat(index) - center) / center
+                    let base = pow(1 - min(distance, 1), 1.2)
+                    return 0.35 + base * 0.65
+                }
+                gapRatio = 0.8
             }
-            let width: CGFloat = 3
-            let gap: CGFloat = 2
-            let totalWidth = CGFloat(heights.count) * width + CGFloat(heights.count - 1) * gap
+            let count = baseHeights.count
+            let maxHeight = bounds.height * 0.75
+            let heights = baseHeights.map { $0 * maxHeight }
+            let fillWidth = bounds.width * 0.92
+            let width = fillWidth / (CGFloat(count) + CGFloat(max(0, count - 1)) * gapRatio)
+            let gap = width * gapRatio
+            let totalWidth = CGFloat(count) * width + CGFloat(max(0, count - 1)) * gap
             let startX = bounds.midX - totalWidth / 2
             for (index, bar) in shapeLayers.enumerated() {
                 let height = heights[index]
                 let x = startX + CGFloat(index) * (width + gap)
                 let y = bounds.midY - height / 2
                 bar.frame = CGRect(x: x, y: y, width: width, height: height)
-                bar.cornerRadius = 1.5
+                bar.cornerRadius = min(2, width)
             }
         case .ring, .dial, .spinnerRing, .ringDash, .arcSweep, .pulseHalo:
             let size = min(bounds.width, bounds.height) - 6
@@ -600,9 +685,12 @@ private final class HUDDesignGlyphView: NSView {
                 cursor.cornerRadius = 1.5
             }
         case .dots, .dotsPulse, .dotsFade:
-            let size: CGFloat = 5
-            let gap: CGFloat = 3
-            let totalWidth = CGFloat(shapeLayers.count) * size + CGFloat(shapeLayers.count - 1) * gap
+            let count = shapeLayers.count
+            let fillWidth = bounds.width * 0.7
+            let gapRatio: CGFloat = 0.7
+            let size = min(bounds.height * 0.3, fillWidth / (CGFloat(count) + CGFloat(max(0, count - 1)) * gapRatio))
+            let gap = size * gapRatio
+            let totalWidth = CGFloat(count) * size + CGFloat(max(0, count - 1)) * gap
             let startX = bounds.midX - totalWidth / 2
             for (index, dot) in shapeLayers.enumerated() {
                 let x = startX + CGFloat(index) * (size + gap)
@@ -632,8 +720,8 @@ private final class HUDDesignGlyphView: NSView {
             textLayer.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - 6, width: size, height: 12)
         case .checkmark:
             if let check = shapeLayers.first as? CAShapeLayer {
-                let width: CGFloat = 16
-                let height: CGFloat = 12
+                let width = min(bounds.width, bounds.height) * 0.6
+                let height = width * 0.7
                 let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
                 let path = CGMutablePath()
                 path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
@@ -657,8 +745,9 @@ private final class HUDDesignGlyphView: NSView {
             }
         case .scanLine:
             if let line = shapeLayers.first {
-                let height: CGFloat = 2
-                line.frame = CGRect(x: bounds.minX, y: bounds.midY - height / 2, width: 16, height: height)
+                let height = max(2, bounds.height * 0.12)
+                let width = max(20, bounds.width * 0.55)
+                line.frame = CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2, width: width, height: height)
                 line.cornerRadius = height / 2
                 addScanIfNeeded(line)
             }
@@ -713,8 +802,8 @@ private final class HUDDesignGlyphView: NSView {
             }
         case .checkUnderline:
             if let check = shapeLayers.first as? CAShapeLayer {
-                let width: CGFloat = 16
-                let height: CGFloat = 12
+                let width = min(bounds.width, bounds.height) * 0.6
+                let height = width * 0.7
                 let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
                 let path = CGMutablePath()
                 path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
@@ -723,8 +812,8 @@ private final class HUDDesignGlyphView: NSView {
                 check.path = path
             }
             if shapeLayers.count > 1, let underline = shapeLayers[1] as? CAShapeLayer {
-                let width: CGFloat = 18
-                let y = bounds.midY - 10
+                let width = min(bounds.width, bounds.height) * 0.7
+                let y = bounds.midY - min(bounds.height * 0.35, 12)
                 let path = CGMutablePath()
                 path.move(to: CGPoint(x: bounds.midX - width / 2, y: y))
                 path.addLine(to: CGPoint(x: bounds.midX + width / 2, y: y))
@@ -732,8 +821,8 @@ private final class HUDDesignGlyphView: NSView {
             }
         case .checkSpark:
             if let check = shapeLayers.first as? CAShapeLayer {
-                let width: CGFloat = 16
-                let height: CGFloat = 12
+                let width = min(bounds.width, bounds.height) * 0.6
+                let height = width * 0.7
                 let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
                 let path = CGMutablePath()
                 path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
@@ -803,6 +892,15 @@ private final class HUDDesignGlyphView: NSView {
                 shapeLayers.append(bar)
             }
             addStaggeredWave(to: shapeLayers, baseDelay: 0.1)
+        case .barsDense:
+            let count = 31
+            for _ in 0..<count {
+                let bar = CALayer()
+                bar.backgroundColor = style.accentColor.cgColor
+                rootLayer.addSublayer(bar)
+                shapeLayers.append(bar)
+            }
+            addStaggeredWave(to: shapeLayers, baseDelay: 0.05)
         case .ring:
             let ring = CAShapeLayer()
             ring.strokeColor = style.accentColor.cgColor
@@ -1278,6 +1376,227 @@ private struct HUDDesignStyle {
     let menubarText: NSColor
 }
 
+private func makeSlateStyle(
+    name: String,
+    backgroundTop: NSColor? = nil,
+    backgroundBottom: NSColor? = nil,
+    borderColor: NSColor? = nil,
+    textColor: NSColor? = nil,
+    accentColor: NSColor? = nil,
+    cornerRadius: CGFloat? = nil,
+    borderWidth: CGFloat? = nil,
+    shadowOpacity: Float? = nil,
+    shadowRadius: CGFloat? = nil
+) -> HUDDesignStyle {
+    let base = HUDDesignVariant.slate.style
+    return HUDDesignStyle(
+        name: name,
+        backgroundTop: backgroundTop ?? base.backgroundTop,
+        backgroundBottom: backgroundBottom ?? base.backgroundBottom,
+        borderColor: borderColor ?? base.borderColor,
+        textColor: textColor ?? base.textColor,
+        accentColor: accentColor ?? base.accentColor,
+        cornerRadius: cornerRadius ?? base.cornerRadius,
+        borderWidth: borderWidth ?? base.borderWidth,
+        shadowColor: base.shadowColor,
+        shadowOpacity: shadowOpacity ?? base.shadowOpacity,
+        shadowRadius: shadowRadius ?? base.shadowRadius,
+        font: base.font,
+        letterSpacing: base.letterSpacing,
+        menubarBackground: base.menubarBackground,
+        menubarText: base.menubarText
+    )
+}
+
+private enum HUDListeningVariant: CaseIterable {
+    case slateCurrent
+    case waveformWide
+    case barsCompact
+    case barsInline
+    case tightInline
+    case waveformInline
+    case pulseInline
+    case cursorInline
+    case dialInline
+    case stackedSignal
+
+    var name: String {
+        switch self {
+        case .slateCurrent: return "Slate Current"
+        case .waveformWide: return "Waveform Wide"
+        case .barsCompact: return "Bars Compact"
+        case .barsInline: return "Bars Inline"
+        case .tightInline: return "Tight Inline"
+        case .waveformInline: return "Wave Inline"
+        case .pulseInline: return "Pulse Inline"
+        case .cursorInline: return "Cursor Inline"
+        case .dialInline: return "Dial Inline"
+        case .stackedSignal: return "Stacked Signal"
+        }
+    }
+
+    var spec: HUDDesignStateSpec {
+        switch self {
+        case .slateCurrent:
+            return HUDDesignStateSpec(text: "", glyph: .barsDense, layout: .iconOnly)
+        case .waveformWide:
+            return HUDDesignStateSpec(text: "", glyph: .waveform, layout: .iconOnly)
+        case .barsCompact:
+            return HUDDesignStateSpec(text: "", glyph: .barsMini, layout: .iconOnly)
+        case .barsInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .bars, layout: .inline)
+        case .tightInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .barsMini, layout: .inline)
+        case .waveformInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .waveform, layout: .inline)
+        case .pulseInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .pulseDot, layout: .inline)
+        case .cursorInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .cursor, layout: .inline)
+        case .dialInline:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .dial, layout: .inline)
+        case .stackedSignal:
+            return HUDDesignStateSpec(text: "Listening...", glyph: .bars, layout: .stacked)
+        }
+    }
+
+    var size: NSSize { HUDDesignPreview.defaultSize }
+    var style: HUDDesignStyle { HUDDesignVariant.slate.style }
+}
+
+private enum HUDContainerVariant: CaseIterable {
+    case compact
+    case wide
+    case tall
+    case pill
+    case soft
+    case crisp
+    case glass
+    case outline
+    case minimal
+    case deep
+
+    var name: String {
+        switch self {
+        case .compact: return "Slate Compact"
+        case .wide: return "Slate Wide"
+        case .tall: return "Slate Tall"
+        case .pill: return "Slate Pill"
+        case .soft: return "Slate Soft"
+        case .crisp: return "Slate Crisp"
+        case .glass: return "Slate Glass"
+        case .outline: return "Slate Outline"
+        case .minimal: return "Slate Minimal"
+        case .deep: return "Slate Deep"
+        }
+    }
+
+    var spec: HUDDesignStateSpec {
+        HUDDesignStateSpec(text: "", glyph: .barsDense, layout: .iconOnly)
+    }
+
+    var size: NSSize {
+        switch self {
+        case .compact: return NSSize(width: 200, height: 72)
+        case .wide: return NSSize(width: 260, height: 84)
+        case .tall: return NSSize(width: 220, height: 98)
+        case .pill: return NSSize(width: 260, height: 78)
+        case .soft: return NSSize(width: 220, height: 84)
+        case .crisp: return NSSize(width: 220, height: 84)
+        case .glass: return NSSize(width: 240, height: 88)
+        case .outline: return NSSize(width: 220, height: 84)
+        case .minimal: return NSSize(width: 220, height: 84)
+        case .deep: return NSSize(width: 220, height: 84)
+        }
+    }
+
+    var style: HUDDesignStyle {
+        switch self {
+        case .compact:
+            return makeSlateStyle(
+                name: name,
+                cornerRadius: 16,
+                shadowOpacity: 0.16,
+                shadowRadius: 10
+            )
+        case .wide:
+            return makeSlateStyle(
+                name: name,
+                cornerRadius: 20
+            )
+        case .tall:
+            return makeSlateStyle(
+                name: name,
+                cornerRadius: 20
+            )
+        case .pill:
+            return makeSlateStyle(
+                name: name,
+                cornerRadius: 28,
+                shadowOpacity: 0.18,
+                shadowRadius: 12
+            )
+        case .soft:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xF6F8FB),
+                backgroundBottom: .hex(0xE9EFF5),
+                borderColor: .hex(0x202B36, alpha: 0.12),
+                shadowOpacity: 0.14,
+                shadowRadius: 10
+            )
+        case .crisp:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xEEF3F8),
+                backgroundBottom: .hex(0xD7E1EC),
+                borderColor: .hex(0x202B36, alpha: 0.28),
+                borderWidth: 1.2,
+                shadowOpacity: 0.22,
+                shadowRadius: 12
+            )
+        case .glass:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xF0F5FA),
+                backgroundBottom: .hex(0xDCE6F2),
+                borderColor: .hex(0x2F6DB6, alpha: 0.16),
+                shadowOpacity: 0.18,
+                shadowRadius: 12
+            )
+        case .outline:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xF3F6FA),
+                backgroundBottom: .hex(0xE1E8F0),
+                borderColor: .hex(0x2F6DB6, alpha: 0.3),
+                borderWidth: 1.6,
+                shadowOpacity: 0.16,
+                shadowRadius: 10
+            )
+        case .minimal:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xF2F5F8),
+                backgroundBottom: .hex(0xE6ECF2),
+                borderColor: .hex(0x202B36, alpha: 0),
+                borderWidth: 0,
+                shadowOpacity: 0.1,
+                shadowRadius: 8
+            )
+        case .deep:
+            return makeSlateStyle(
+                name: name,
+                backgroundTop: .hex(0xE1E8F0),
+                backgroundBottom: .hex(0xC9D6E4),
+                borderColor: .hex(0x202B36, alpha: 0.24),
+                shadowOpacity: 0.24,
+                shadowRadius: 14
+            )
+        }
+    }
+}
+
 private enum HUDProcessingVariant: CaseIterable {
     case dotsBounce
     case dotsPulse
@@ -1307,18 +1626,21 @@ private enum HUDProcessingVariant: CaseIterable {
 
     var spec: HUDDesignStateSpec {
         switch self {
-        case .dotsBounce: return HUDDesignStateSpec(text: "", glyph: .dots, layout: .iconOnly)
+        case .dotsBounce: return HUDDesignStateSpec(text: "Processing...", glyph: .dots, layout: .inline)
         case .dotsPulse: return HUDDesignStateSpec(text: "", glyph: .dotsPulse, layout: .iconOnly)
-        case .dotsFade: return HUDDesignStateSpec(text: "", glyph: .dotsFade, layout: .iconOnly)
+        case .dotsFade: return HUDDesignStateSpec(text: "Processing...", glyph: .dotsFade, layout: .inline)
         case .ringDash: return HUDDesignStateSpec(text: "", glyph: .ringDash, layout: .iconOnly)
         case .arcSweep: return HUDDesignStateSpec(text: "", glyph: .arcSweep, layout: .iconOnly)
-        case .orbitDot: return HUDDesignStateSpec(text: "", glyph: .orbitDot, layout: .iconOnly)
+        case .orbitDot: return HUDDesignStateSpec(text: "Processing...", glyph: .orbitDot, layout: .inline)
         case .scanLine: return HUDDesignStateSpec(text: "", glyph: .scanLine, layout: .iconOnly)
         case .pulseHalo: return HUDDesignStateSpec(text: "", glyph: .pulseHalo, layout: .iconOnly)
-        case .barsMini: return HUDDesignStateSpec(text: "", glyph: .barsMini, layout: .iconOnly)
+        case .barsMini: return HUDDesignStateSpec(text: "Processing...", glyph: .barsMini, layout: .inline)
         case .spinnerRing: return HUDDesignStateSpec(text: "", glyph: .spinnerRing, layout: .iconOnly)
         }
     }
+
+    var size: NSSize { HUDDesignPreview.defaultSize }
+    var style: HUDDesignStyle { HUDDesignVariant.slate.style }
 }
 
 private enum HUDCopiedVariant: CaseIterable {
@@ -1350,18 +1672,21 @@ private enum HUDCopiedVariant: CaseIterable {
 
     var spec: HUDDesignStateSpec {
         switch self {
-        case .checkmark: return HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
+        case .checkmark: return HUDDesignStateSpec(text: "Copied", glyph: .checkmark, layout: .inline)
         case .checkCircle: return HUDDesignStateSpec(text: "", glyph: .checkCircle, layout: .iconOnly)
-        case .checkRing: return HUDDesignStateSpec(text: "", glyph: .checkRing, layout: .iconOnly)
+        case .checkRing: return HUDDesignStateSpec(text: "Copied", glyph: .checkRing, layout: .inline)
         case .checkBadge: return HUDDesignStateSpec(text: "", glyph: .checkBadge, layout: .iconOnly)
-        case .clipboardCheck: return HUDDesignStateSpec(text: "", glyph: .clipboardCheck, layout: .iconOnly)
-        case .checkUnderline: return HUDDesignStateSpec(text: "", glyph: .checkUnderline, layout: .iconOnly)
+        case .clipboardCheck: return HUDDesignStateSpec(text: "Copied to clipboard", glyph: .clipboardCheck, layout: .inline)
+        case .checkUnderline: return HUDDesignStateSpec(text: "Copied", glyph: .checkUnderline, layout: .inline)
         case .checkTile: return HUDDesignStateSpec(text: "", glyph: .checkTile, layout: .iconOnly)
         case .checkSpark: return HUDDesignStateSpec(text: "", glyph: .checkSpark, layout: .iconOnly)
         case .checkPulse: return HUDDesignStateSpec(text: "", glyph: .checkPulse, layout: .iconOnly)
         case .checkStamp: return HUDDesignStateSpec(text: "", glyph: .checkStamp, layout: .iconOnly)
         }
     }
+
+    var size: NSSize { HUDDesignPreview.defaultSize }
+    var style: HUDDesignStyle { HUDDesignVariant.slate.style }
 }
 
 private enum HUDDesignVariant: CaseIterable {
@@ -1492,17 +1817,17 @@ private enum HUDDesignVariant: CaseIterable {
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .square,
-                listening: HUDDesignStateSpec(text: "", glyph: .bars, layout: .iconOnly),
-                processing: HUDDesignStateSpec(text: "", glyph: .spinnerRing, layout: .iconOnly),
-                copied: HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
+                listening: HUDDesignStateSpec(text: "", glyph: .barsDense, layout: .iconOnly),
+                processing: HUDDesignStateSpec(text: "", glyph: .dots, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "Copied to clipboard", glyph: .clipboardCheck, layout: .stacked)
             )
         case .slateDots:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .square,
-                listening: HUDDesignStateSpec(text: "", glyph: .bars, layout: .iconOnly),
-                processing: HUDDesignStateSpec(text: "", glyph: .dots, layout: .iconOnly),
-                copied: HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
+                listening: HUDDesignStateSpec(text: "", glyph: .barsDense, layout: .iconOnly),
+                processing: HUDDesignStateSpec(text: "", glyph: .dotsPulse, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "Copied to clipboard", glyph: .clipboardCheck, layout: .stacked)
             )
         }
     }

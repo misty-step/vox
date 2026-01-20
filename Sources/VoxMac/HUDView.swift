@@ -23,12 +23,13 @@ final class HUDView: NSView {
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
-        static let dotSize: CGFloat = 5
-        static let dotGap: CGFloat = 5
-        static let clipboardLineWidth: CGFloat = 1.5
-        static let captionInset: CGFloat = 8
-        static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        static let captionColor = NSColor.hex(0x202B36, alpha: 0.72)
+        static let dotSize: CGFloat = 6
+        static let dotGap: CGFloat = 6
+        static let ringLineWidth: CGFloat = 1.8
+        static let inlineGap: CGFloat = 10
+        static let contentInsetX: CGFloat = 16
+        static let stateFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        static let stateColor = NSColor.hex(0x202B36, alpha: 0.78)
         static let contentYOffset: CGFloat = 0
     }
 
@@ -37,9 +38,9 @@ final class HUDView: NSView {
     private var barLayers: [CALayer] = []
     private let dotsLayer = CALayer()
     private var dotLayers: [CALayer] = []
-    private let clipboardLayer = CAShapeLayer()
+    private let ringLayer = CAShapeLayer()
     private let checkLayer = CAShapeLayer()
-    private let captionField = NSTextField(labelWithString: "")
+    private let stateField = NSTextField(labelWithString: "")
     private var averageLevel: CGFloat = 0
     private var peakLevel: CGFloat = 0
     private var smoothedAverage: CGFloat = 0
@@ -47,6 +48,8 @@ final class HUDView: NSView {
     private var barTimer: Timer?
     private var lastBarTick: CFTimeInterval = 0
     private var barPhase: CGFloat = 0
+    private var barMaxHeight: CGFloat = 0
+    private var messageText = ""
 
     var state: State = .hidden {
         didSet { applyState() }
@@ -58,9 +61,9 @@ final class HUDView: NSView {
         setupBackground()
         setupBars()
         setupDots()
-        setupClipboard()
+        setupRing()
         setupCheckmark()
-        setupCaption()
+        setupStateLabel()
         applyState()
     }
 
@@ -69,7 +72,7 @@ final class HUDView: NSView {
     }
 
     func showMessage(_ text: String, duration: TimeInterval) {
-        captionField.stringValue = captionText(for: text)
+        messageText = messageLabel(for: text)
         state = .message(text)
     }
 
@@ -109,14 +112,13 @@ final class HUDView: NSView {
         }
     }
 
-    private func setupClipboard() {
-        clipboardLayer.strokeColor = Style.accentColor.withAlphaComponent(0.35).cgColor
-        clipboardLayer.fillColor = NSColor.clear.cgColor
-        clipboardLayer.lineWidth = Style.clipboardLineWidth
-        clipboardLayer.lineJoin = .round
-        clipboardLayer.lineCap = .round
-        clipboardLayer.isHidden = true
-        layer?.addSublayer(clipboardLayer)
+    private func setupRing() {
+        ringLayer.strokeColor = Style.accentColor.cgColor
+        ringLayer.fillColor = NSColor.clear.cgColor
+        ringLayer.lineWidth = Style.ringLineWidth
+        ringLayer.lineCap = .round
+        ringLayer.isHidden = true
+        layer?.addSublayer(ringLayer)
     }
 
     private func setupCheckmark() {
@@ -130,19 +132,13 @@ final class HUDView: NSView {
         layer?.addSublayer(checkLayer)
     }
 
-    private func setupCaption() {
-        captionField.font = Style.captionFont
-        captionField.textColor = Style.captionColor
-        captionField.alignment = .center
-        captionField.isHidden = true
-        captionField.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(captionField)
-
-        NSLayoutConstraint.activate([
-            captionField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Style.captionInset),
-            captionField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Style.captionInset),
-            captionField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Style.captionInset)
-        ])
+    private func setupStateLabel() {
+        stateField.font = Style.stateFont
+        stateField.textColor = Style.stateColor
+        stateField.alignment = .left
+        stateField.isHidden = true
+        stateField.alphaValue = 0
+        addSubview(stateField)
     }
 
     private func applyState() {
@@ -152,48 +148,91 @@ final class HUDView: NSView {
             stopBarsAnimation()
             stopDotsAnimation()
             stopCheckmarkAnimation()
-            captionField.isHidden = true
+            stateField.isHidden = true
         case .recording:
             stopDotsAnimation()
             stopCheckmarkAnimation()
-            captionField.isHidden = true
+            stateField.stringValue = "Listening..."
             startBarsAnimation()
         case .processing:
             stopBarsAnimation()
             stopCheckmarkAnimation()
-            captionField.isHidden = true
+            stateField.stringValue = "Processing..."
             startDotsAnimation()
         case .message:
             stopBarsAnimation()
             stopDotsAnimation()
-            captionField.isHidden = false
+            stateField.stringValue = messageText
             startCheckmarkAnimation()
         }
+        needsLayout = true
     }
 
     override func layout() {
         super.layout()
         backgroundLayer.frame = bounds
         backgroundLayer.cornerRadius = Style.cornerRadius
+        layoutInlineContent()
         layoutBars()
         layoutDots()
-        layoutClipboard()
         layoutCheckmark()
     }
 
+    private func layoutInlineContent() {
+        let labelSize = stateField.intrinsicContentSize
+        let availableWidth = bounds.width - Style.contentInsetX * 2
+        let glyphSize = glyphSizeForState()
+        let gap = stateField.isHidden ? 0 : Style.inlineGap
+        let totalWidth = min(availableWidth, glyphSize.width + gap + labelSize.width)
+        let startX = bounds.midX - totalWidth / 2
+        let centerY = bounds.midY + Style.contentYOffset
+
+        let glyphWidth = min(glyphSize.width, availableWidth - labelSize.width - gap)
+        let glyphHeight = glyphSize.height
+        let glyphX = startX
+        let glyphY = centerY - glyphHeight / 2
+        let resolvedGlyphWidth = max(0, glyphWidth)
+        let resolvedGlyphFrame = CGRect(x: glyphX, y: glyphY, width: resolvedGlyphWidth, height: glyphHeight)
+
+        let labelX = glyphX + resolvedGlyphWidth + gap
+        let labelY = centerY - labelSize.height / 2
+        stateField.frame = CGRect(x: labelX, y: labelY, width: labelSize.width, height: labelSize.height)
+
+        barsLayer.frame = resolvedGlyphFrame
+        dotsLayer.frame = resolvedGlyphFrame
+        ringLayer.frame = resolvedGlyphFrame
+        checkLayer.frame = resolvedGlyphFrame
+        stateField.textColor = Style.stateColor
+    }
+
+    private func glyphSizeForState() -> CGSize {
+        switch state {
+        case .recording:
+            return CGSize(width: bounds.width * 0.46, height: bounds.height * 0.48)
+        case .processing:
+            let width = Style.dotSize * 3 + Style.dotGap * 2
+            return CGSize(width: max(width, bounds.width * 0.14), height: max(Style.dotSize, bounds.height * 0.2))
+        case .message:
+            let size = min(bounds.height * 0.44, 28)
+            return CGSize(width: size, height: size)
+        case .hidden:
+            return CGSize(width: bounds.width * 0.4, height: bounds.height * 0.4)
+        }
+    }
+
     private func layoutBars() {
-        barsLayer.frame = bounds
+        guard !barsLayer.frame.isEmpty else { return }
         let count = Style.barCount
-        let availableWidth = bounds.width * Style.barFillRatio
+        let availableWidth = barsLayer.bounds.width * Style.barFillRatio
         let gap = max(Style.minBarGap, (availableWidth - CGFloat(count) * Style.barWidth) / CGFloat(max(1, count - 1)))
         let totalWidth = CGFloat(count) * Style.barWidth + CGFloat(count - 1) * gap
-        let startX = bounds.midX - totalWidth / 2
-        let maxHeight = min(bounds.width, bounds.height) * 0.5
+        let startX = barsLayer.bounds.midX - totalWidth / 2
+        barMaxHeight = barsLayer.bounds.height
 
-        let centerY = bounds.midY + Style.contentYOffset
+        let centerY = barsLayer.bounds.midY
         for (index, bar) in barLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.barWidth + gap)
-            bar.bounds = CGRect(x: 0, y: 0, width: Style.barWidth, height: maxHeight)
+            bar.bounds = CGRect(x: 0, y: 0, width: Style.barWidth, height: barMaxHeight)
             bar.position = CGPoint(x: x + Style.barWidth / 2, y: centerY)
             bar.cornerRadius = Style.barCornerRadius
         }
@@ -201,10 +240,10 @@ final class HUDView: NSView {
     }
 
     private func layoutDots() {
-        dotsLayer.frame = bounds
+        guard !dotsLayer.frame.isEmpty else { return }
         let totalWidth = Style.dotSize * 3 + Style.dotGap * 2
-        let startX = bounds.midX - totalWidth / 2
-        let centerY = bounds.midY + Style.contentYOffset
+        let startX = dotsLayer.bounds.midX - totalWidth / 2
+        let centerY = dotsLayer.bounds.midY
         for (index, dot) in dotLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.dotSize + Style.dotGap)
             dot.frame = CGRect(x: x, y: centerY - Style.dotSize / 2, width: Style.dotSize, height: Style.dotSize)
@@ -212,29 +251,14 @@ final class HUDView: NSView {
         }
     }
 
-    private func layoutClipboard() {
-        clipboardLayer.frame = bounds
-        let rect = clipboardRect()
-        let corner = rect.width * 0.12
-        let path = CGMutablePath()
-        path.addRoundedRect(in: rect, cornerWidth: corner, cornerHeight: corner)
-
-        let tabWidth = rect.width * 0.42
-        let tabHeight = rect.height * 0.2
-        let tabRect = CGRect(
-            x: rect.midX - tabWidth / 2,
-            y: rect.maxY - tabHeight * 0.6,
-            width: tabWidth,
-            height: tabHeight
-        )
-        path.addRoundedRect(in: tabRect, cornerWidth: tabHeight / 2, cornerHeight: tabHeight / 2)
-        clipboardLayer.path = path
-    }
-
     private func layoutCheckmark() {
-        checkLayer.frame = bounds
-        let rect = clipboardRect()
-        let width = rect.width * 0.5
+        guard !ringLayer.frame.isEmpty else { return }
+        let rect = ringLayer.bounds.insetBy(dx: 2, dy: 2)
+        let ringPath = CGPath(ellipseIn: rect, transform: nil)
+        ringLayer.path = ringPath
+
+        checkLayer.frame = ringLayer.frame
+        let width = rect.width * 0.55
         let height = width * 0.7
         let origin = CGPoint(x: rect.midX - width / 2, y: rect.midY - height / 2)
         let path = CGMutablePath()
@@ -275,13 +299,6 @@ final class HUDView: NSView {
             if dot.animation(forKey: "bounce") != nil {
                 continue
             }
-            let bounce = CABasicAnimation(keyPath: "transform.translation.y")
-            bounce.fromValue = 0
-            bounce.toValue = -3
-            bounce.autoreverses = true
-            bounce.duration = 0.6
-            bounce.repeatCount = .infinity
-
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 0.4
             fade.toValue = 1
@@ -297,7 +314,7 @@ final class HUDView: NSView {
             scale.repeatCount = .infinity
 
             let group = CAAnimationGroup()
-            group.animations = [bounce, fade, scale]
+            group.animations = [fade, scale]
             group.duration = 0.6
             group.autoreverses = true
             group.repeatCount = .infinity
@@ -312,13 +329,21 @@ final class HUDView: NSView {
     }
 
     private func startCheckmarkAnimation() {
-        clipboardLayer.removeAnimation(forKey: "fade")
-        clipboardLayer.opacity = 1
+        ringLayer.removeAnimation(forKey: "spin")
+        ringLayer.removeAnimation(forKey: "fade")
+        ringLayer.opacity = 1
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
         fade.toValue = 1
         fade.duration = 0.2
-        clipboardLayer.add(fade, forKey: "fade")
+        ringLayer.add(fade, forKey: "fade")
+
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = Double.pi * 2
+        spin.duration = 2.4
+        spin.repeatCount = .infinity
+        ringLayer.add(spin, forKey: "spin")
 
         checkLayer.removeAnimation(forKey: "check")
         checkLayer.strokeEnd = 1
@@ -331,7 +356,8 @@ final class HUDView: NSView {
     }
 
     private func stopCheckmarkAnimation() {
-        clipboardLayer.removeAnimation(forKey: "fade")
+        ringLayer.removeAnimation(forKey: "fade")
+        ringLayer.removeAnimation(forKey: "spin")
         checkLayer.removeAnimation(forKey: "check")
         checkLayer.strokeEnd = 0
     }
@@ -342,7 +368,7 @@ final class HUDView: NSView {
         let peakAttack: CGFloat = peakLevel > smoothedPeak ? 0.7 : 0.3
         smoothedAverage += (averageLevel - smoothedAverage) * averageAttack
         smoothedPeak += (peakLevel - smoothedPeak) * peakAttack
-        let maxHeight = min(bounds.width, bounds.height) * 0.5
+        let maxHeight = max(4, barMaxHeight)
         let minHeight = max(2, maxHeight * 0.08)
         let envelope = smoothedAverage
         let spike = smoothedPeak
@@ -390,9 +416,9 @@ final class HUDView: NSView {
 
         setLayer(barsLayer, visible: showBars)
         setLayer(dotsLayer, visible: showDots)
-        setLayer(clipboardLayer, visible: showCheck)
+        setLayer(ringLayer, visible: showCheck)
         setLayer(checkLayer, visible: showCheck)
-        setView(captionField, visible: showCheck)
+        setView(stateField, visible: state != .hidden)
     }
 
     private func setLayer(_ layer: CALayer, visible: Bool) {
@@ -426,25 +452,12 @@ final class HUDView: NSView {
         }
     }
 
-    private func captionText(for text: String) -> String {
-        if text.lowercased().contains("clipboard") {
-            return text
-        }
-        if text.lowercased() == "copied" {
-            return "Copied to clipboard"
+    private func messageLabel(for text: String) -> String {
+        let lowercased = text.lowercased()
+        if lowercased.contains("clipboard") || lowercased == "copied" {
+            return "Copied"
         }
         return text
-    }
-
-    private func clipboardRect() -> CGRect {
-        let width = min(bounds.width, bounds.height) * 0.42
-        let height = width * 0.75
-        return CGRect(
-            x: bounds.midX - width / 2,
-            y: bounds.midY + Style.contentYOffset - height / 2,
-            width: width,
-            height: height
-        )
     }
 }
 
