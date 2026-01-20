@@ -36,13 +36,17 @@ public final class AudioRecorder {
         self.currentURL = url
     }
 
-    public func currentLevel() -> Float {
-        guard let recorder else { return 0 }
+    public func currentLevel() -> (average: Float, peak: Float) {
+        guard let recorder else { return (average: 0, peak: 0) }
         recorder.updateMeters()
-        let power = recorder.peakPower(forChannel: 0)
+        let averagePower = recorder.averagePower(forChannel: 0)
+        let peakPower = recorder.peakPower(forChannel: 0)
         let minDb: Float = -50
-        let clamped = max(min(power, 0), minDb)
-        return (clamped - minDb) / (0 - minDb)
+        let averageClamped = max(min(averagePower, 0), minDb)
+        let peakClamped = max(min(peakPower, 0), minDb)
+        let averageLevel = (averageClamped - minDb) / (0 - minDb)
+        let peakLevel = (peakClamped - minDb) / (0 - minDb)
+        return (average: averageLevel, peak: peakLevel)
     }
 
     public func stop() throws -> URL {

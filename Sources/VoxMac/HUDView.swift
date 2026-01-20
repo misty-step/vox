@@ -16,9 +16,9 @@ final class HUDView: NSView {
         static let accentColor = NSColor.hex(0x2F6DB6)
         static let cornerRadius: CGFloat = 18
         static let borderWidth: CGFloat = 1
-        static let barCount = 5
-        static let barWidth: CGFloat = 4
-        static let barGap: CGFloat = 4
+        static let barCount = 9
+        static let barWidth: CGFloat = 3
+        static let barGap: CGFloat = 2
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
@@ -36,9 +36,11 @@ final class HUDView: NSView {
     private var dotLayers: [CALayer] = []
     private let checkLayer = CAShapeLayer()
     private let captionField = NSTextField(labelWithString: "")
-    private var inputLevel: CGFloat = 0
-    private var smoothedLevel: CGFloat = 0
-    private let barProfile: [CGFloat] = [0.6, 0.9, 1.0, 0.8, 0.5]
+    private var averageLevel: CGFloat = 0
+    private var peakLevel: CGFloat = 0
+    private var smoothedAverage: CGFloat = 0
+    private var smoothedPeak: CGFloat = 0
+    private let barProfile: [CGFloat] = [0.5, 0.75, 0.95, 1.0, 0.9, 0.7, 0.55, 0.4, 0.3]
     private var barTimer: Timer?
     private var lastBarTick: CFTimeInterval = 0
     private var barPhase: CGFloat = 0
@@ -130,37 +132,26 @@ final class HUDView: NSView {
     }
 
     private func applyState() {
+        animateVisibility()
         switch state {
         case .hidden:
             stopBarsAnimation()
             stopDotsAnimation()
             stopCheckmarkAnimation()
-            barsLayer.isHidden = true
-            dotsLayer.isHidden = true
-            checkLayer.isHidden = true
             captionField.isHidden = true
         case .recording:
             stopDotsAnimation()
             stopCheckmarkAnimation()
-            barsLayer.isHidden = false
-            dotsLayer.isHidden = true
-            checkLayer.isHidden = true
             captionField.isHidden = true
             startBarsAnimation()
         case .processing:
             stopBarsAnimation()
             stopCheckmarkAnimation()
-            barsLayer.isHidden = true
-            dotsLayer.isHidden = false
-            checkLayer.isHidden = true
             captionField.isHidden = true
             startDotsAnimation()
         case .message:
             stopBarsAnimation()
             stopDotsAnimation()
-            barsLayer.isHidden = true
-            dotsLayer.isHidden = true
-            checkLayer.isHidden = false
             captionField.isHidden = false
             startCheckmarkAnimation()
         }
@@ -179,7 +170,7 @@ final class HUDView: NSView {
         barsLayer.frame = bounds
         let totalWidth = CGFloat(Style.barCount) * Style.barWidth + CGFloat(Style.barCount - 1) * Style.barGap
         let startX = bounds.midX - totalWidth / 2
-        let maxHeight = min(bounds.width, bounds.height) * 0.36
+        let maxHeight = min(bounds.width, bounds.height) * 0.32
 
         for (index, bar) in barLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.barWidth + Style.barGap)
@@ -213,9 +204,10 @@ final class HUDView: NSView {
         checkLayer.path = path
     }
 
-    func updateInputLevel(_ level: Float) {
+    func updateInputLevels(average: Float, peak: Float) {
         guard case .recording = state else { return }
-        inputLevel = max(0, min(1, CGFloat(level)))
+        averageLevel = max(0, min(1, CGFloat(average)))
+        peakLevel = max(0, min(1, CGFloat(peak)))
     }
 
     private func startBarsAnimation() {
@@ -277,11 +269,14 @@ final class HUDView: NSView {
 
     private func updateBars(animated: Bool) {
         guard !barLayers.isEmpty else { return }
-        let attack: CGFloat = inputLevel > smoothedLevel ? 0.6 : 0.2
-        smoothedLevel += (inputLevel - smoothedLevel) * attack
+        let averageAttack: CGFloat = averageLevel > smoothedAverage ? 0.5 : 0.18
+        let peakAttack: CGFloat = peakLevel > smoothedPeak ? 0.7 : 0.3
+        smoothedAverage += (averageLevel - smoothedAverage) * averageAttack
+        smoothedPeak += (peakLevel - smoothedPeak) * peakAttack
         let maxHeight = min(bounds.width, bounds.height) * 0.36
-        let minHeight = max(2, maxHeight * 0.12)
-        let level = smoothedLevel
+        let minHeight = max(2, maxHeight * 0.08)
+        let envelope = smoothedAverage
+        let spike = smoothedPeak
 
         CATransaction.begin()
         if animated {
@@ -294,7 +289,9 @@ final class HUDView: NSView {
         for (index, bar) in barLayers.enumerated() {
             let profile = barProfile[index % barProfile.count]
             let wave = 0.5 + 0.5 * sin(barPhase + CGFloat(index) * 0.9)
-            let energy = max(0.05, min(1, level * profile * (0.4 + 0.6 * wave)))
+            let base = envelope * profile * (0.45 + 0.55 * wave)
+            let transient = spike * (0.15 + 0.15 * sin(barPhase * 1.2 + CGFloat(index) * 1.7))
+            let energy = max(0.02, min(1, base + transient))
             let target = minHeight + (maxHeight - minHeight) * energy
             bar.bounds.size.height = target
         }
@@ -306,8 +303,55 @@ final class HUDView: NSView {
         let now = CACurrentMediaTime()
         let delta = now - lastBarTick
         lastBarTick = now
-        barPhase += CGFloat(delta) * 6
+        barPhase += CGFloat(delta) * 8
         updateBars(animated: true)
+    }
+
+    private func animateVisibility() {
+        let showBars = state == .recording
+        let showDots = state == .processing
+        let showCheck: Bool
+        if case .message = state {
+            showCheck = true
+        } else {
+            showCheck = false
+        }
+
+        setLayer(barsLayer, visible: showBars)
+        setLayer(dotsLayer, visible: showDots)
+        setLayer(checkLayer, visible: showCheck)
+        setView(captionField, visible: showCheck)
+    }
+
+    private func setLayer(_ layer: CALayer, visible: Bool) {
+        if visible {
+            layer.isHidden = false
+        }
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        animation.toValue = visible ? 1 : 0
+        animation.duration = 0.18
+        layer.opacity = visible ? 1 : 0
+        layer.add(animation, forKey: "fade")
+        if !visible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak layer] in
+                layer?.isHidden = true
+            }
+        }
+    }
+
+    private func setView(_ view: NSView, visible: Bool) {
+        if visible {
+            view.isHidden = false
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            view.animator().alphaValue = visible ? 1 : 0
+        } completionHandler: {
+            if !visible {
+                view.isHidden = true
+            }
+        }
     }
 
     private func captionText(for text: String) -> String {

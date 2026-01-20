@@ -25,7 +25,7 @@ final class SessionController {
 
     var stateDidChange: ((State) -> Void)?
     var statusDidChange: ((String) -> Void)?
-    var inputLevelDidChange: ((Float) -> Void)?
+    var inputLevelDidChange: ((Float, Float) -> Void)?
 
     init(
         pipeline: DictationPipeline
@@ -135,9 +135,9 @@ final class SessionController {
         timer.schedule(deadline: .now(), repeating: 0.02)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            let level = self.audioRecorder.currentLevel()
+            let levels = self.audioRecorder.currentLevel()
             DispatchQueue.main.async { [weak self] in
-                self?.inputLevelDidChange?(level)
+                self?.inputLevelDidChange?(levels.average, levels.peak)
             }
         }
         levelTimer = timer
@@ -148,7 +148,7 @@ final class SessionController {
         levelTimer?.cancel()
         levelTimer = nil
         DispatchQueue.main.async { [weak self] in
-            self?.inputLevelDidChange?(0)
+            self?.inputLevelDidChange?(0, 0)
         }
     }
 

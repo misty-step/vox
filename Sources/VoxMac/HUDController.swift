@@ -75,9 +75,9 @@ public final class HUDController {
         }
     }
 
-    public func updateInputLevel(_ level: Float) {
+    public func updateInputLevels(average: Float, peak: Float) {
         DispatchQueue.main.async { [weak self] in
-            self?.view.updateInputLevel(level)
+            self?.view.updateInputLevels(average: average, peak: peak)
         }
     }
 
