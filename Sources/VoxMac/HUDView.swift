@@ -16,15 +16,16 @@ final class HUDView: NSView {
         static let accentColor = NSColor.hex(0x2F6DB6)
         static let cornerRadius: CGFloat = 20
         static let borderWidth: CGFloat = 1
-        static let barCount = 21
-        static let barWidth: CGFloat = 3
+        static let barCount = 27
+        static let barWidth: CGFloat = 2
         static let minBarGap: CGFloat = 1
-        static let barFillRatio: CGFloat = 0.86
+        static let barFillRatio: CGFloat = 0.9
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
-        static let dotSize: CGFloat = 6
-        static let dotGap: CGFloat = 6
+        static let dotSize: CGFloat = 5
+        static let dotGap: CGFloat = 5
+        static let clipboardLineWidth: CGFloat = 1.5
         static let captionInset: CGFloat = 8
         static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         static let captionColor = NSColor.hex(0x202B36, alpha: 0.72)
@@ -36,6 +37,7 @@ final class HUDView: NSView {
     private var barLayers: [CALayer] = []
     private let dotsLayer = CALayer()
     private var dotLayers: [CALayer] = []
+    private let clipboardLayer = CAShapeLayer()
     private let checkLayer = CAShapeLayer()
     private let captionField = NSTextField(labelWithString: "")
     private var averageLevel: CGFloat = 0
@@ -56,6 +58,7 @@ final class HUDView: NSView {
         setupBackground()
         setupBars()
         setupDots()
+        setupClipboard()
         setupCheckmark()
         setupCaption()
         applyState()
@@ -104,6 +107,16 @@ final class HUDView: NSView {
             dotsLayer.addSublayer(dot)
             return dot
         }
+    }
+
+    private func setupClipboard() {
+        clipboardLayer.strokeColor = Style.accentColor.withAlphaComponent(0.35).cgColor
+        clipboardLayer.fillColor = NSColor.clear.cgColor
+        clipboardLayer.lineWidth = Style.clipboardLineWidth
+        clipboardLayer.lineJoin = .round
+        clipboardLayer.lineCap = .round
+        clipboardLayer.isHidden = true
+        layer?.addSublayer(clipboardLayer)
     }
 
     private func setupCheckmark() {
@@ -164,6 +177,7 @@ final class HUDView: NSView {
         backgroundLayer.cornerRadius = Style.cornerRadius
         layoutBars()
         layoutDots()
+        layoutClipboard()
         layoutCheckmark()
     }
 
@@ -198,11 +212,31 @@ final class HUDView: NSView {
         }
     }
 
+    private func layoutClipboard() {
+        clipboardLayer.frame = bounds
+        let rect = clipboardRect()
+        let corner = rect.width * 0.12
+        let path = CGMutablePath()
+        path.addRoundedRect(in: rect, cornerWidth: corner, cornerHeight: corner)
+
+        let tabWidth = rect.width * 0.42
+        let tabHeight = rect.height * 0.2
+        let tabRect = CGRect(
+            x: rect.midX - tabWidth / 2,
+            y: rect.maxY - tabHeight * 0.6,
+            width: tabWidth,
+            height: tabHeight
+        )
+        path.addRoundedRect(in: tabRect, cornerWidth: tabHeight / 2, cornerHeight: tabHeight / 2)
+        clipboardLayer.path = path
+    }
+
     private func layoutCheckmark() {
         checkLayer.frame = bounds
-        let width = min(bounds.width, bounds.height) * 0.3
+        let rect = clipboardRect()
+        let width = rect.width * 0.5
         let height = width * 0.7
-        let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY + Style.contentYOffset - height / 2)
+        let origin = CGPoint(x: rect.midX - width / 2, y: rect.midY - height / 2)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
         path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
@@ -241,15 +275,35 @@ final class HUDView: NSView {
             if dot.animation(forKey: "bounce") != nil {
                 continue
             }
-            let animation = CABasicAnimation(keyPath: "transform.translation.y")
-            animation.fromValue = 0
-            animation.toValue = -4
-            animation.autoreverses = true
-            animation.duration = 0.6
-            animation.repeatCount = .infinity
-            animation.beginTime = now + CFTimeInterval(index) * 0.15
-            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            dot.add(animation, forKey: "bounce")
+            let bounce = CABasicAnimation(keyPath: "transform.translation.y")
+            bounce.fromValue = 0
+            bounce.toValue = -3
+            bounce.autoreverses = true
+            bounce.duration = 0.6
+            bounce.repeatCount = .infinity
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.4
+            fade.toValue = 1
+            fade.autoreverses = true
+            fade.duration = 0.6
+            fade.repeatCount = .infinity
+
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 0.9
+            scale.toValue = 1.1
+            scale.autoreverses = true
+            scale.duration = 0.6
+            scale.repeatCount = .infinity
+
+            let group = CAAnimationGroup()
+            group.animations = [bounce, fade, scale]
+            group.duration = 0.6
+            group.autoreverses = true
+            group.repeatCount = .infinity
+            group.beginTime = now + CFTimeInterval(index) * 0.15
+            group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dot.add(group, forKey: "bounce")
         }
     }
 
@@ -258,6 +312,14 @@ final class HUDView: NSView {
     }
 
     private func startCheckmarkAnimation() {
+        clipboardLayer.removeAnimation(forKey: "fade")
+        clipboardLayer.opacity = 1
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = 0.2
+        clipboardLayer.add(fade, forKey: "fade")
+
         checkLayer.removeAnimation(forKey: "check")
         checkLayer.strokeEnd = 1
         let animation = CABasicAnimation(keyPath: "strokeEnd")
@@ -269,6 +331,7 @@ final class HUDView: NSView {
     }
 
     private func stopCheckmarkAnimation() {
+        clipboardLayer.removeAnimation(forKey: "fade")
         checkLayer.removeAnimation(forKey: "check")
         checkLayer.strokeEnd = 0
     }
@@ -327,6 +390,7 @@ final class HUDView: NSView {
 
         setLayer(barsLayer, visible: showBars)
         setLayer(dotsLayer, visible: showDots)
+        setLayer(clipboardLayer, visible: showCheck)
         setLayer(checkLayer, visible: showCheck)
         setView(captionField, visible: showCheck)
     }
@@ -370,6 +434,17 @@ final class HUDView: NSView {
             return "Copied to clipboard"
         }
         return text
+    }
+
+    private func clipboardRect() -> CGRect {
+        let width = min(bounds.width, bounds.height) * 0.42
+        let height = width * 0.75
+        return CGRect(
+            x: bounds.midX - width / 2,
+            y: bounds.midY + Style.contentYOffset - height / 2,
+            width: width,
+            height: height
+        )
     }
 }
 
