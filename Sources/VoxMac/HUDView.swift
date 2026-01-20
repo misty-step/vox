@@ -10,11 +10,11 @@ final class HUDView: NSView {
     }
 
     private enum Style {
-        static let backgroundTop = NSColor.hex(0xF1F4F7)
-        static let backgroundBottom = NSColor.hex(0xDDE3EA)
-        static let borderColor = NSColor.hex(0x202B36, alpha: 0.18)
+        static let backgroundTop = NSColor.hex(0xF7F9FB)
+        static let backgroundBottom = NSColor.hex(0xEAF0F6)
+        static let borderColor = NSColor.hex(0x1F2A37, alpha: 0.14)
         static let accentColor = NSColor.hex(0x2F6DB6)
-        static let cornerRadius: CGFloat = 18
+        static let cornerRadius: CGFloat = 20
         static let borderWidth: CGFloat = 1
         static let barCount = 9
         static let barWidth: CGFloat = 3
@@ -26,7 +26,8 @@ final class HUDView: NSView {
         static let dotGap: CGFloat = 6
         static let captionInset: CGFloat = 10
         static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        static let captionColor = NSColor.hex(0x202B36, alpha: 0.8)
+        static let captionColor = NSColor.hex(0x202B36, alpha: 0.72)
+        static let contentYOffset: CGFloat = 6
     }
 
     private let backgroundLayer = CAGradientLayer()
@@ -172,10 +173,11 @@ final class HUDView: NSView {
         let startX = bounds.midX - totalWidth / 2
         let maxHeight = min(bounds.width, bounds.height) * 0.32
 
+        let centerY = bounds.midY + Style.contentYOffset
         for (index, bar) in barLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.barWidth + Style.barGap)
             bar.bounds = CGRect(x: 0, y: 0, width: Style.barWidth, height: maxHeight)
-            bar.position = CGPoint(x: x + Style.barWidth / 2, y: bounds.midY)
+            bar.position = CGPoint(x: x + Style.barWidth / 2, y: centerY)
             bar.cornerRadius = Style.barCornerRadius
         }
         updateBars(animated: false)
@@ -185,9 +187,10 @@ final class HUDView: NSView {
         dotsLayer.frame = bounds
         let totalWidth = Style.dotSize * 3 + Style.dotGap * 2
         let startX = bounds.midX - totalWidth / 2
+        let centerY = bounds.midY + Style.contentYOffset
         for (index, dot) in dotLayers.enumerated() {
             let x = startX + CGFloat(index) * (Style.dotSize + Style.dotGap)
-            dot.frame = CGRect(x: x, y: bounds.midY - Style.dotSize / 2, width: Style.dotSize, height: Style.dotSize)
+            dot.frame = CGRect(x: x, y: centerY - Style.dotSize / 2, width: Style.dotSize, height: Style.dotSize)
             dot.cornerRadius = Style.dotSize / 2
         }
     }
@@ -196,7 +199,7 @@ final class HUDView: NSView {
         checkLayer.frame = bounds
         let width = min(bounds.width, bounds.height) * 0.3
         let height = width * 0.7
-        let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
+        let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY + Style.contentYOffset - height / 2)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
         path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))

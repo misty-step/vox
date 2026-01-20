@@ -15,7 +15,7 @@ public final class HUDController {
     private var isShowingMessage = false
 
     public init() {
-        let size = NSSize(width: 160, height: 120)
+        let size = NSSize(width: 220, height: 96)
         view = HUDView(frame: NSRect(origin: .zero, size: size))
 
         panel = NSPanel(
@@ -101,7 +101,7 @@ public final class HUDController {
         guard let screen else { return }
         let frame = screen.visibleFrame
         let x = frame.midX - panel.frame.width / 2
-        let y = frame.midY - panel.frame.height / 2
+        let y = frame.minY + 24
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
