@@ -5,6 +5,26 @@ on:
   pull_request:
 
 jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: TruffleHog (PR)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: trufflesecurity/trufflehog@v3.92.5
+        with:
+          path: .
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+      - name: TruffleHog (push)
+        if: ${{ github.event_name == 'push' }}
+        uses: trufflesecurity/trufflehog@v3.92.5
+        with:
+          path: .
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
   build:
     runs-on: macos-latest
     steps:
@@ -21,20 +41,6 @@ jobs:
             ${{ runner.os }}-spm-
       - name: Swift version
         run: swift --version
-      - name: TruffleHog (PR)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: trufflesecurity/trufflehog@v3.92.5
-        with:
-          path: .
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-      - name: TruffleHog (push)
-        if: ${{ github.event_name == 'push' }}
-        uses: trufflesecurity/trufflehog@v3.92.5
-        with:
-          path: .
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
       - name: Build
         run: swift build
       - name: Test
