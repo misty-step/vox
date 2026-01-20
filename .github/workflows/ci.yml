@@ -23,14 +23,14 @@ jobs:
         run: swift --version
       - name: TruffleHog (PR)
         if: ${{ github.event_name == 'pull_request' }}
-        uses: trufflesecurity/trufflehog@v3
+        uses: trufflesecurity/trufflehog@v3.92.5
         with:
           path: .
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
       - name: TruffleHog (push)
         if: ${{ github.event_name == 'push' }}
-        uses: trufflesecurity/trufflehog@v3
+        uses: trufflesecurity/trufflehog@v3.92.5
         with:
           path: .
           base: ${{ github.event.before }}
