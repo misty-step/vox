@@ -16,9 +16,10 @@ final class HUDView: NSView {
         static let accentColor = NSColor.hex(0x2F6DB6)
         static let cornerRadius: CGFloat = 20
         static let borderWidth: CGFloat = 1
-        static let barCount = 9
+        static let barCount = 21
         static let barWidth: CGFloat = 3
-        static let barGap: CGFloat = 2
+        static let minBarGap: CGFloat = 1
+        static let barFillRatio: CGFloat = 0.86
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
@@ -41,7 +42,6 @@ final class HUDView: NSView {
     private var peakLevel: CGFloat = 0
     private var smoothedAverage: CGFloat = 0
     private var smoothedPeak: CGFloat = 0
-    private let barProfile: [CGFloat] = [0.5, 0.75, 0.95, 1.0, 0.9, 0.7, 0.55, 0.4, 0.3]
     private var barTimer: Timer?
     private var lastBarTick: CFTimeInterval = 0
     private var barPhase: CGFloat = 0
@@ -169,13 +169,16 @@ final class HUDView: NSView {
 
     private func layoutBars() {
         barsLayer.frame = bounds
-        let totalWidth = CGFloat(Style.barCount) * Style.barWidth + CGFloat(Style.barCount - 1) * Style.barGap
+        let count = Style.barCount
+        let availableWidth = bounds.width * Style.barFillRatio
+        let gap = max(Style.minBarGap, (availableWidth - CGFloat(count) * Style.barWidth) / CGFloat(max(1, count - 1)))
+        let totalWidth = CGFloat(count) * Style.barWidth + CGFloat(count - 1) * gap
         let startX = bounds.midX - totalWidth / 2
         let maxHeight = min(bounds.width, bounds.height) * 0.5
 
         let centerY = bounds.midY + Style.contentYOffset
         for (index, bar) in barLayers.enumerated() {
-            let x = startX + CGFloat(index) * (Style.barWidth + Style.barGap)
+            let x = startX + CGFloat(index) * (Style.barWidth + gap)
             bar.bounds = CGRect(x: 0, y: 0, width: Style.barWidth, height: maxHeight)
             bar.position = CGPoint(x: x + Style.barWidth / 2, y: centerY)
             bar.cornerRadius = Style.barCornerRadius
@@ -289,9 +292,11 @@ final class HUDView: NSView {
             CATransaction.setDisableActions(true)
         }
 
+        let mid = CGFloat(max(1, barLayers.count - 1)) / 2
         for (index, bar) in barLayers.enumerated() {
-            let profile = barProfile[index % barProfile.count]
-            let wave = 0.5 + 0.5 * sin(barPhase + CGFloat(index) * 0.9)
+            let distance = abs(CGFloat(index) - mid) / mid
+            let profile = pow(1 - min(distance, 1), 1.3)
+            let wave = 0.5 + 0.5 * sin(barPhase + CGFloat(index) * 0.75)
             let base = envelope * profile * (0.45 + 0.55 * wave)
             let transient = spike * (0.15 + 0.15 * sin(barPhase * 1.2 + CGFloat(index) * 1.7))
             let energy = max(0.02, min(1, base + transient))
