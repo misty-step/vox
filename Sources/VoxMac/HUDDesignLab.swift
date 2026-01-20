@@ -753,6 +753,7 @@ private enum HUDDesignVariant: CaseIterable {
     case vapor
     case verdant
     case slate
+    case slateDots
 
     var name: String {
         switch self {
@@ -768,6 +769,7 @@ private enum HUDDesignVariant: CaseIterable {
         case .vapor: return "Vapor Orbit"
         case .verdant: return "Verdant Focus"
         case .slate: return "Slate Studio"
+        case .slateDots: return "Slate Studio (Dots)"
         }
     }
 
@@ -868,6 +870,14 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .square,
                 listening: HUDDesignStateSpec(text: "", glyph: .bars, layout: .iconOnly),
                 processing: HUDDesignStateSpec(text: "", glyph: .spinnerRing, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
+            )
+        case .slateDots:
+            return HUDDesignConfiguration(
+                style: style,
+                menuBarIcon: .square,
+                listening: HUDDesignStateSpec(text: "", glyph: .bars, layout: .iconOnly),
+                processing: HUDDesignStateSpec(text: "", glyph: .dots, layout: .iconOnly),
                 copied: HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
             )
         }
@@ -1073,7 +1083,7 @@ private enum HUDDesignVariant: CaseIterable {
                 menubarBackground: .hex(0x0F1B10),
                 menubarText: .hex(0xDBF7E7)
             )
-        case .slate:
+        case .slate, .slateDots:
             return HUDDesignStyle(
                 name: name,
                 backgroundTop: .hex(0xF1F4F7),

@@ -22,6 +22,9 @@ final class HUDView: NSView {
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
+        static let captionInset: CGFloat = 10
+        static let captionFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        static let captionColor = NSColor.hex(0x202B36, alpha: 0.8)
     }
 
     private let backgroundLayer = CAGradientLayer()
@@ -29,6 +32,10 @@ final class HUDView: NSView {
     private var barLayers: [CALayer] = []
     private let spinnerLayer = CAShapeLayer()
     private let checkLayer = CAShapeLayer()
+    private let captionField = NSTextField(labelWithString: "")
+    private var inputLevel: CGFloat = 0
+    private var smoothedLevel: CGFloat = 0
+    private let barProfile: [CGFloat] = [0.6, 0.9, 1.0, 0.8, 0.5]
 
     var state: State = .hidden {
         didSet { applyState() }
@@ -41,6 +48,7 @@ final class HUDView: NSView {
         setupBars()
         setupSpinner()
         setupCheckmark()
+        setupCaption()
         applyState()
     }
 
@@ -49,6 +57,7 @@ final class HUDView: NSView {
     }
 
     func showMessage(_ text: String, duration: TimeInterval) {
+        captionField.stringValue = captionText(for: text)
         state = .message(text)
     }
 
@@ -98,6 +107,21 @@ final class HUDView: NSView {
         layer?.addSublayer(checkLayer)
     }
 
+    private func setupCaption() {
+        captionField.font = Style.captionFont
+        captionField.textColor = Style.captionColor
+        captionField.alignment = .center
+        captionField.isHidden = true
+        captionField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(captionField)
+
+        NSLayoutConstraint.activate([
+            captionField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Style.captionInset),
+            captionField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Style.captionInset),
+            captionField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Style.captionInset)
+        ])
+    }
+
     private func applyState() {
         switch state {
         case .hidden:
@@ -107,12 +131,14 @@ final class HUDView: NSView {
             barsLayer.isHidden = true
             spinnerLayer.isHidden = true
             checkLayer.isHidden = true
+            captionField.isHidden = true
         case .recording:
             stopSpinnerAnimation()
             stopCheckmarkAnimation()
             barsLayer.isHidden = false
             spinnerLayer.isHidden = true
             checkLayer.isHidden = true
+            captionField.isHidden = true
             startBarsAnimation()
         case .processing:
             stopBarsAnimation()
@@ -120,6 +146,7 @@ final class HUDView: NSView {
             barsLayer.isHidden = true
             spinnerLayer.isHidden = false
             checkLayer.isHidden = true
+            captionField.isHidden = true
             startSpinnerAnimation()
         case .message:
             stopBarsAnimation()
@@ -127,6 +154,7 @@ final class HUDView: NSView {
             barsLayer.isHidden = true
             spinnerLayer.isHidden = true
             checkLayer.isHidden = false
+            captionField.isHidden = false
             startCheckmarkAnimation()
         }
     }
@@ -144,7 +172,7 @@ final class HUDView: NSView {
         barsLayer.frame = bounds
         let totalWidth = CGFloat(Style.barCount) * Style.barWidth + CGFloat(Style.barCount - 1) * Style.barGap
         let startX = bounds.midX - totalWidth / 2
-        let maxHeight = min(bounds.width, bounds.height) * 0.28
+        let maxHeight = min(bounds.width, bounds.height) * 0.32
         let baseline = bounds.midY - maxHeight / 2
 
         for (index, bar) in barLayers.enumerated() {
@@ -153,18 +181,19 @@ final class HUDView: NSView {
             bar.position = CGPoint(x: x + Style.barWidth / 2, y: baseline)
             bar.cornerRadius = Style.barCornerRadius
         }
+        updateBars(animated: false)
     }
 
     private func layoutSpinner() {
         spinnerLayer.frame = bounds
-        let size = min(bounds.width, bounds.height) * 0.28
+        let size = min(bounds.width, bounds.height) * 0.32
         let rect = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
         spinnerLayer.path = CGPath(ellipseIn: rect, transform: nil)
     }
 
     private func layoutCheckmark() {
         checkLayer.frame = bounds
-        let width = min(bounds.width, bounds.height) * 0.24
+        let width = min(bounds.width, bounds.height) * 0.3
         let height = width * 0.7
         let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
         let path = CGMutablePath()
@@ -174,22 +203,14 @@ final class HUDView: NSView {
         checkLayer.path = path
     }
 
+    func updateInputLevel(_ level: Float) {
+        guard case .recording = state else { return }
+        inputLevel = max(0, min(1, CGFloat(level)))
+        updateBars(animated: true)
+    }
+
     private func startBarsAnimation() {
-        let now = CACurrentMediaTime()
-        for (index, bar) in barLayers.enumerated() {
-            if bar.animation(forKey: "wave") != nil {
-                continue
-            }
-            let animation = CABasicAnimation(keyPath: "transform.scale.y")
-            animation.fromValue = 0.5
-            animation.toValue = 1.25
-            animation.autoreverses = true
-            animation.duration = 0.8
-            animation.repeatCount = .infinity
-            animation.beginTime = now + CFTimeInterval(index) * 0.12
-            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            bar.add(animation, forKey: "wave")
-        }
+        updateBars(animated: false)
     }
 
     private func stopBarsAnimation() {
@@ -226,6 +247,40 @@ final class HUDView: NSView {
     private func stopCheckmarkAnimation() {
         checkLayer.removeAnimation(forKey: "check")
         checkLayer.strokeEnd = 0
+    }
+
+    private func updateBars(animated: Bool) {
+        guard !barLayers.isEmpty else { return }
+        smoothedLevel = smoothedLevel * 0.7 + inputLevel * 0.3
+        let maxHeight = min(bounds.width, bounds.height) * 0.32
+        let minHeight = max(2, maxHeight * 0.18)
+        let level = smoothedLevel
+
+        CATransaction.begin()
+        if animated {
+            CATransaction.setAnimationDuration(0.08)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
+        } else {
+            CATransaction.setDisableActions(true)
+        }
+
+        for (index, bar) in barLayers.enumerated() {
+            let profile = barProfile[index % barProfile.count]
+            let target = minHeight + (maxHeight - minHeight) * level * profile
+            bar.bounds.size.height = target
+        }
+
+        CATransaction.commit()
+    }
+
+    private func captionText(for text: String) -> String {
+        if text.lowercased().contains("clipboard") {
+            return text
+        }
+        if text.lowercased() == "copied" {
+            return "Copied to clipboard"
+        }
+        return text
     }
 }
 

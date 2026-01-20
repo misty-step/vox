@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 statusBar?.showMessage(message)
                 hud?.showMessage(message)
             }
+            session.inputLevelDidChange = { [weak hud] level in
+                hud?.updateInputLevel(level)
+            }
 
             let hotkey = config.hotkey ?? .default
             let modifiers = HotkeyParser.modifiers(from: hotkey.modifiers)

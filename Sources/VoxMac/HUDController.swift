@@ -75,6 +75,12 @@ public final class HUDController {
         }
     }
 
+    public func updateInputLevel(_ level: Float) {
+        DispatchQueue.main.async { [weak self] in
+            self?.view.updateInputLevel(level)
+        }
+    }
+
     private func showPanel() {
         positionPanel()
         panel.orderFrontRegardless()
