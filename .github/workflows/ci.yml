@@ -21,8 +21,14 @@ jobs:
             ${{ runner.os }}-spm-
       - name: Swift version
         run: swift --version
+      - name: Gitleaks (skipped)
+        if: ${{ secrets.GITLEAKS_LICENSE == '' }}
+        run: echo "GITLEAKS_LICENSE not set; skipping secrets scan."
       - name: Gitleaks
+        if: ${{ secrets.GITLEAKS_LICENSE != '' }}
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
       - name: Build
         run: swift build
       - name: Test
