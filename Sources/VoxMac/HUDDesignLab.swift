@@ -458,12 +458,14 @@ private final class HUDDesignGlyphView: NSView {
                 bar.cornerRadius = 1.5
             }
         case .ring, .dial, .spinnerRing:
-            let size: CGFloat = 18
-            let rect = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+            let size = min(bounds.width, bounds.height) - 6
+            let rect = CGRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
             if let ring = shapeLayers.first as? CAShapeLayer {
+                ring.frame = bounds
                 ring.path = CGPath(ellipseIn: rect, transform: nil)
             }
             if kind == .dial, shapeLayers.count > 1, let arc = shapeLayers[1] as? CAShapeLayer {
+                arc.frame = bounds
                 let center = CGPoint(x: rect.midX, y: rect.midY)
                 let path = CGMutablePath()
                 let startAngle = CGFloat(-0.8 * Double.pi)
@@ -560,25 +562,16 @@ private final class HUDDesignGlyphView: NSView {
             ring.lineCap = .round
             rootLayer.addSublayer(ring)
             shapeLayers = [ring]
-            let animation = CABasicAnimation(keyPath: "transform.rotation")
-            animation.fromValue = 0
-            animation.toValue = Double.pi * 2
-            animation.duration = 1
-            animation.repeatCount = .infinity
-            ring.add(animation, forKey: "spin")
+            addSpin(to: ring, duration: 1)
         case .dot, .pulseDot:
             let dot = CALayer()
             dot.backgroundColor = style.accentColor.cgColor
             rootLayer.addSublayer(dot)
             shapeLayers = [dot]
             if kind == .pulseDot {
-                let animation = CABasicAnimation(keyPath: "transform.scale")
-                animation.fromValue = 0.8
-                animation.toValue = 1.2
-                animation.autoreverses = true
-                animation.duration = 0.9
-                animation.repeatCount = .infinity
-                dot.add(animation, forKey: "pulse")
+                addPulse(to: dot, duration: 0.9, scale: 1.2)
+            } else {
+                addPulse(to: dot, duration: 1.4, scale: 1.1)
             }
         case .bars, .waveform:
             let count = 5
@@ -588,6 +581,7 @@ private final class HUDDesignGlyphView: NSView {
                 rootLayer.addSublayer(bar)
                 shapeLayers.append(bar)
             }
+            addStaggeredWave(to: shapeLayers, baseDelay: 0.1)
         case .ring:
             let ring = CAShapeLayer()
             ring.strokeColor = style.accentColor.cgColor
@@ -595,6 +589,7 @@ private final class HUDDesignGlyphView: NSView {
             ring.lineWidth = 2
             rootLayer.addSublayer(ring)
             shapeLayers = [ring]
+            addSpin(to: ring, duration: 2.4)
         case .dial:
             let ring = CAShapeLayer()
             ring.strokeColor = style.textColor.withAlphaComponent(0.25).cgColor
@@ -607,11 +602,13 @@ private final class HUDDesignGlyphView: NSView {
             rootLayer.addSublayer(ring)
             rootLayer.addSublayer(arc)
             shapeLayers = [ring, arc]
+            addSpin(to: arc, duration: 2.2)
         case .cursor:
             let cursor = CALayer()
             cursor.backgroundColor = style.accentColor.cgColor
             rootLayer.addSublayer(cursor)
             shapeLayers = [cursor]
+            addBlink(to: cursor, duration: 0.9)
         case .dots:
             for _ in 0..<3 {
                 let dot = CALayer()
@@ -620,16 +617,19 @@ private final class HUDDesignGlyphView: NSView {
                 rootLayer.addSublayer(dot)
                 shapeLayers.append(dot)
             }
+            addStaggeredBounce(to: shapeLayers, baseDelay: 0.15)
         case .spark:
             let spark = CALayer()
             spark.backgroundColor = style.accentColor.cgColor
             rootLayer.addSublayer(spark)
             shapeLayers = [spark]
+            addPulse(to: spark, duration: 1.1, scale: 1.2)
         case .leaf:
             let leaf = CALayer()
             leaf.backgroundColor = style.accentColor.cgColor
             rootLayer.addSublayer(leaf)
             shapeLayers = [leaf]
+            addPulse(to: leaf, duration: 1.4, scale: 1.15)
         case .badge:
             let badge = CALayer()
             badge.backgroundColor = style.accentColor.cgColor
@@ -641,6 +641,7 @@ private final class HUDDesignGlyphView: NSView {
             textLayer.alignmentMode = .center
             textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
             rootLayer.addSublayer(textLayer)
+            addPulse(to: badge, duration: 1.2, scale: 1.08)
         case .checkmark:
             let check = CAShapeLayer()
             check.strokeColor = style.accentColor.cgColor
@@ -657,6 +658,66 @@ private final class HUDDesignGlyphView: NSView {
             animation.duration = 0.55
             animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
             check.add(animation, forKey: "check")
+        }
+    }
+
+    private func addPulse(to layer: CALayer, duration: CFTimeInterval, scale: CGFloat) {
+        let animation = CABasicAnimation(keyPath: "transform.scale")
+        animation.fromValue = 1
+        animation.toValue = scale
+        animation.autoreverses = true
+        animation.duration = duration
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(animation, forKey: "pulse")
+    }
+
+    private func addBlink(to layer: CALayer, duration: CFTimeInterval) {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 1
+        animation.toValue = 0.2
+        animation.autoreverses = true
+        animation.duration = duration
+        animation.repeatCount = .infinity
+        layer.add(animation, forKey: "blink")
+    }
+
+    private func addSpin(to layer: CALayer, duration: CFTimeInterval) {
+        let animation = CABasicAnimation(keyPath: "transform.rotation")
+        animation.fromValue = 0
+        animation.toValue = Double.pi * 2
+        animation.duration = duration
+        animation.repeatCount = .infinity
+        layer.add(animation, forKey: "spin")
+    }
+
+    private func addStaggeredWave(to layers: [CALayer], baseDelay: CFTimeInterval) {
+        let now = CACurrentMediaTime()
+        for (index, layer) in layers.enumerated() {
+            let animation = CABasicAnimation(keyPath: "transform.scale.y")
+            animation.fromValue = 0.5
+            animation.toValue = 1.3
+            animation.autoreverses = true
+            animation.duration = 0.8
+            animation.repeatCount = .infinity
+            animation.beginTime = now + CFTimeInterval(index) * baseDelay
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(animation, forKey: "wave")
+        }
+    }
+
+    private func addStaggeredBounce(to layers: [CALayer], baseDelay: CFTimeInterval) {
+        let now = CACurrentMediaTime()
+        for (index, layer) in layers.enumerated() {
+            let animation = CABasicAnimation(keyPath: "transform.translation.y")
+            animation.fromValue = 0
+            animation.toValue = -4
+            animation.autoreverses = true
+            animation.duration = 0.6
+            animation.repeatCount = .infinity
+            animation.beginTime = now + CFTimeInterval(index) * baseDelay
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(animation, forKey: "bounce")
         }
     }
 }
