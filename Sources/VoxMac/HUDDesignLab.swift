@@ -21,7 +21,7 @@ private final class HUDDesignLabWindowController: NSWindowController {
     init() {
         let viewController = HUDDesignLabViewController()
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 860),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -87,10 +87,28 @@ private final class HUDDesignLabViewController: NSViewController {
         previewsRow.addArrangedSubview(processingPreview)
         previewsRow.addArrangedSubview(copiedPreview)
 
+        let slateStyle = HUDDesignVariant.slate.style
+        let processingCatalog = makeCatalogSection(
+            title: "Processing Variations",
+            items: HUDProcessingVariant.allCases.map {
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .processing)
+            },
+            style: slateStyle
+        )
+        let copiedCatalog = makeCatalogSection(
+            title: "Copied Variations",
+            items: HUDCopiedVariant.allCases.map {
+                HUDCatalogItem(title: $0.name, spec: $0.spec, state: .copied)
+            },
+            style: slateStyle
+        )
+
         root.addArrangedSubview(headerRow)
         root.addArrangedSubview(menuBarPreview)
         root.addArrangedSubview(stateLabels)
         root.addArrangedSubview(previewsRow)
+        root.addArrangedSubview(processingCatalog)
+        root.addArrangedSubview(copiedCatalog)
 
         view.addSubview(root)
         NSLayoutConstraint.activate([
@@ -126,6 +144,32 @@ private final class HUDDesignLabViewController: NSViewController {
         field.translatesAutoresizingMaskIntoConstraints = false
         field.widthAnchor.constraint(equalToConstant: HUDDesignPreview.defaultSize.width).isActive = true
         return field
+    }
+
+    private func makeCatalogSection(title: String, items: [HUDCatalogItem], style: HUDDesignStyle) -> NSStackView {
+        let section = NSStackView()
+        section.orientation = .vertical
+        section.spacing = 10
+        section.alignment = .leading
+
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleField.textColor = NSColor.secondaryLabelColor
+
+        section.addArrangedSubview(titleField)
+        let rows = items.chunked(into: 5)
+        rows.forEach { rowItems in
+            let row = NSStackView()
+            row.orientation = .horizontal
+            row.spacing = 12
+            row.alignment = .top
+            rowItems.forEach { item in
+                row.addArrangedSubview(HUDCatalogItemView(item: item, style: style))
+            }
+            section.addArrangedSubview(row)
+        }
+
+        return section
     }
 }
 
@@ -276,12 +320,29 @@ private enum HUDDesignGlyph {
     case dial
     case cursor
     case dots
+    case dotsPulse
+    case dotsFade
     case spark
     case leaf
     case badge
     case spinner
     case spinnerRing
     case checkmark
+    case ringDash
+    case arcSweep
+    case orbitDot
+    case scanLine
+    case pulseHalo
+    case barsMini
+    case checkCircle
+    case checkRing
+    case checkBadge
+    case clipboardCheck
+    case checkUnderline
+    case checkTile
+    case checkSpark
+    case checkPulse
+    case checkStamp
 }
 
 private final class HUDDesignPreview: NSView {
@@ -394,6 +455,48 @@ private final class HUDDesignPreview: NSView {
     }
 }
 
+private struct HUDCatalogItem {
+    let title: String
+    let spec: HUDDesignStateSpec
+    let state: HUDDesignPreview.State
+}
+
+private final class HUDCatalogItemView: NSStackView {
+    init(item: HUDCatalogItem, style: HUDDesignStyle) {
+        super.init(frame: .zero)
+        orientation = .vertical
+        alignment = .centerX
+        spacing = 6
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let preview = HUDDesignPreview(state: item.state)
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        preview.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        preview.heightAnchor.constraint(equalToConstant: 86).isActive = true
+
+        let empty = HUDDesignStateSpec(text: "", glyph: .none, layout: .iconOnly)
+        let configuration = HUDDesignConfiguration(
+            style: style,
+            menuBarIcon: .square,
+            listening: item.state == .listening ? item.spec : empty,
+            processing: item.state == .processing ? item.spec : empty,
+            copied: item.state == .copied ? item.spec : empty
+        )
+        preview.apply(configuration: configuration, state: item.state)
+
+        let title = NSTextField(labelWithString: item.title)
+        title.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        title.textColor = NSColor.secondaryLabelColor
+
+        addArrangedSubview(preview)
+        addArrangedSubview(title)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+}
+
 private final class HUDDesignGlyphView: NSView {
     private let spinner = NSProgressIndicator()
     private let textLayer = CATextLayer()
@@ -444,8 +547,16 @@ private final class HUDDesignGlyphView: NSView {
                 )
                 dot.cornerRadius = size / 2
             }
-        case .bars, .waveform:
-            let heights: [CGFloat] = kind == .bars ? [6, 12, 8, 14, 10] : [10, 6, 14, 8, 12]
+        case .bars, .waveform, .barsMini:
+            let heights: [CGFloat]
+            switch kind {
+            case .bars:
+                heights = [6, 12, 8, 14, 10]
+            case .waveform:
+                heights = [10, 6, 14, 8, 12]
+            default:
+                heights = [4, 7, 10, 7, 4]
+            }
             let width: CGFloat = 3
             let gap: CGFloat = 2
             let totalWidth = CGFloat(heights.count) * width + CGFloat(heights.count - 1) * gap
@@ -457,7 +568,7 @@ private final class HUDDesignGlyphView: NSView {
                 bar.frame = CGRect(x: x, y: y, width: width, height: height)
                 bar.cornerRadius = 1.5
             }
-        case .ring, .dial, .spinnerRing:
+        case .ring, .dial, .spinnerRing, .ringDash, .arcSweep, .pulseHalo:
             let size = min(bounds.width, bounds.height) - 6
             let rect = CGRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
             if let ring = shapeLayers.first as? CAShapeLayer {
@@ -488,7 +599,7 @@ private final class HUDDesignGlyphView: NSView {
                 )
                 cursor.cornerRadius = 1.5
             }
-        case .dots:
+        case .dots, .dotsPulse, .dotsFade:
             let size: CGFloat = 5
             let gap: CGFloat = 3
             let totalWidth = CGFloat(shapeLayers.count) * size + CGFloat(shapeLayers.count - 1) * gap
@@ -529,6 +640,116 @@ private final class HUDDesignGlyphView: NSView {
                 path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
                 path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
                 check.path = path
+            }
+        case .orbitDot:
+            let size = min(bounds.width, bounds.height) - 8
+            let rect = CGRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
+            if let ring = shapeLayers.first as? CAShapeLayer {
+                ring.frame = bounds
+                ring.path = CGPath(ellipseIn: rect, transform: nil)
+            }
+            if shapeLayers.count > 1 {
+                let dot = shapeLayers[1]
+                let dotSize: CGFloat = 4
+                dot.frame = CGRect(x: rect.midX - dotSize / 2, y: rect.maxY - dotSize / 2, width: dotSize, height: dotSize)
+                dot.cornerRadius = dotSize / 2
+                addOrbitIfNeeded(dot, in: rect)
+            }
+        case .scanLine:
+            if let line = shapeLayers.first {
+                let height: CGFloat = 2
+                line.frame = CGRect(x: bounds.minX, y: bounds.midY - height / 2, width: 16, height: height)
+                line.cornerRadius = height / 2
+                addScanIfNeeded(line)
+            }
+        case .checkCircle, .checkRing, .checkPulse, .checkStamp:
+            let size = min(bounds.width, bounds.height) - 6
+            let rect = CGRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
+            if let ring = shapeLayers.first as? CAShapeLayer {
+                ring.frame = bounds
+                ring.path = CGPath(ellipseIn: rect, transform: nil)
+            }
+            if shapeLayers.count > 1, let check = shapeLayers[1] as? CAShapeLayer {
+                let width: CGFloat = rect.width * 0.55
+                let height: CGFloat = width * 0.7
+                let origin = CGPoint(x: rect.midX - width / 2, y: rect.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
+        case .checkBadge, .checkTile:
+            let size = min(bounds.width, bounds.height) - 8
+            if let shape = shapeLayers.first {
+                shape.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+                shape.cornerRadius = kind == .checkTile ? 6 : size / 2
+            }
+            if shapeLayers.count > 1, let check = shapeLayers[1] as? CAShapeLayer {
+                let width: CGFloat = size * 0.55
+                let height: CGFloat = width * 0.7
+                let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
+        case .clipboardCheck:
+            if let clipboard = shapeLayers.first as? CAShapeLayer {
+                let rect = clipboardRect(in: bounds)
+                clipboard.path = clipboardPath(in: rect)
+            }
+            if shapeLayers.count > 1, let check = shapeLayers[1] as? CAShapeLayer {
+                let rect = clipboardRect(in: bounds)
+                let width = rect.width * 0.5
+                let height = width * 0.7
+                let origin = CGPoint(x: rect.midX - width / 2, y: rect.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
+        case .checkUnderline:
+            if let check = shapeLayers.first as? CAShapeLayer {
+                let width: CGFloat = 16
+                let height: CGFloat = 12
+                let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
+            if shapeLayers.count > 1, let underline = shapeLayers[1] as? CAShapeLayer {
+                let width: CGFloat = 18
+                let y = bounds.midY - 10
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: bounds.midX - width / 2, y: y))
+                path.addLine(to: CGPoint(x: bounds.midX + width / 2, y: y))
+                underline.path = path
+            }
+        case .checkSpark:
+            if let check = shapeLayers.first as? CAShapeLayer {
+                let width: CGFloat = 16
+                let height: CGFloat = 12
+                let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
+            if shapeLayers.count > 1, let sparks = shapeLayers[1] as? CAShapeLayer {
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: bounds.midX + 9, y: bounds.midY + 7))
+                path.addLine(to: CGPoint(x: bounds.midX + 14, y: bounds.midY + 11))
+                path.move(to: CGPoint(x: bounds.midX - 10, y: bounds.midY + 6))
+                path.addLine(to: CGPoint(x: bounds.midX - 14, y: bounds.midY + 10))
+                path.move(to: CGPoint(x: bounds.midX + 1, y: bounds.midY + 12))
+                path.addLine(to: CGPoint(x: bounds.midX + 1, y: bounds.midY + 16))
+                sparks.path = path
             }
         }
 
@@ -590,6 +811,32 @@ private final class HUDDesignGlyphView: NSView {
             rootLayer.addSublayer(ring)
             shapeLayers = [ring]
             addSpin(to: ring, duration: 2.4)
+        case .ringDash:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            ring.lineDashPattern = [4, 4]
+            rootLayer.addSublayer(ring)
+            shapeLayers = [ring]
+            addSpin(to: ring, duration: 1.6)
+        case .arcSweep:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            ring.lineCap = .round
+            rootLayer.addSublayer(ring)
+            shapeLayers = [ring]
+            addArcSweep(to: ring)
+        case .pulseHalo:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            rootLayer.addSublayer(ring)
+            shapeLayers = [ring]
+            addHaloPulse(to: ring)
         case .dial:
             let ring = CAShapeLayer()
             ring.strokeColor = style.textColor.withAlphaComponent(0.25).cgColor
@@ -609,7 +856,22 @@ private final class HUDDesignGlyphView: NSView {
             rootLayer.addSublayer(cursor)
             shapeLayers = [cursor]
             addBlink(to: cursor, duration: 0.9)
-        case .dots:
+        case .orbitDot:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.withAlphaComponent(0.35).cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 1.5
+            let dot = CALayer()
+            dot.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(ring)
+            rootLayer.addSublayer(dot)
+            shapeLayers = [ring, dot]
+        case .scanLine:
+            let line = CALayer()
+            line.backgroundColor = style.accentColor.cgColor
+            rootLayer.addSublayer(line)
+            shapeLayers = [line]
+        case .dots, .dotsPulse, .dotsFade:
             for _ in 0..<3 {
                 let dot = CALayer()
                 dot.backgroundColor = style.accentColor.cgColor
@@ -617,7 +879,14 @@ private final class HUDDesignGlyphView: NSView {
                 rootLayer.addSublayer(dot)
                 shapeLayers.append(dot)
             }
-            addStaggeredBounce(to: shapeLayers, baseDelay: 0.15)
+            switch kind {
+            case .dotsPulse:
+                addStaggeredPulse(to: shapeLayers, baseDelay: 0.12)
+            case .dotsFade:
+                addStaggeredFade(to: shapeLayers, baseDelay: 0.12)
+            default:
+                addStaggeredBounce(to: shapeLayers, baseDelay: 0.15)
+            }
         case .spark:
             let spark = CALayer()
             spark.backgroundColor = style.accentColor.cgColor
@@ -630,6 +899,15 @@ private final class HUDDesignGlyphView: NSView {
             rootLayer.addSublayer(leaf)
             shapeLayers = [leaf]
             addPulse(to: leaf, duration: 1.4, scale: 1.15)
+        case .barsMini:
+            let count = 5
+            for _ in 0..<count {
+                let bar = CALayer()
+                bar.backgroundColor = style.accentColor.cgColor
+                rootLayer.addSublayer(bar)
+                shapeLayers.append(bar)
+            }
+            addStaggeredWave(to: shapeLayers, baseDelay: 0.12)
         case .badge:
             let badge = CALayer()
             badge.backgroundColor = style.accentColor.cgColor
@@ -658,6 +936,103 @@ private final class HUDDesignGlyphView: NSView {
             animation.duration = 0.55
             animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
             check.add(animation, forKey: "check")
+        case .checkCircle, .checkRing, .checkPulse, .checkStamp:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 1.8
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            rootLayer.addSublayer(ring)
+            rootLayer.addSublayer(check)
+            shapeLayers = [ring, check]
+            addCheckDraw(to: check)
+            if kind == .checkPulse {
+                addHaloPulse(to: ring)
+            } else if kind == .checkStamp {
+                addPulse(to: ring, duration: 0.6, scale: 1.08)
+            } else if kind == .checkRing {
+                addSpin(to: ring, duration: 2.6)
+            }
+        case .checkBadge:
+            let shape = CALayer()
+            shape.backgroundColor = style.accentColor.cgColor
+            let check = CAShapeLayer()
+            check.strokeColor = NSColor.white.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            rootLayer.addSublayer(shape)
+            rootLayer.addSublayer(check)
+            shapeLayers = [shape, check]
+            addCheckDraw(to: check)
+        case .clipboardCheck:
+            let clipboard = CAShapeLayer()
+            clipboard.strokeColor = style.accentColor.withAlphaComponent(0.45).cgColor
+            clipboard.fillColor = NSColor.clear.cgColor
+            clipboard.lineWidth = 1.6
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            rootLayer.addSublayer(clipboard)
+            rootLayer.addSublayer(check)
+            shapeLayers = [clipboard, check]
+            addCheckDraw(to: check)
+        case .checkUnderline:
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            let underline = CAShapeLayer()
+            underline.strokeColor = style.accentColor.withAlphaComponent(0.6).cgColor
+            underline.fillColor = NSColor.clear.cgColor
+            underline.lineWidth = 2
+            underline.lineCap = .round
+            rootLayer.addSublayer(check)
+            rootLayer.addSublayer(underline)
+            shapeLayers = [check, underline]
+            addCheckDraw(to: check)
+            addUnderlineDraw(to: underline)
+        case .checkTile:
+            let shape = CALayer()
+            shape.backgroundColor = style.accentColor.withAlphaComponent(0.16).cgColor
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            rootLayer.addSublayer(shape)
+            rootLayer.addSublayer(check)
+            shapeLayers = [shape, check]
+            addCheckDraw(to: check)
+        case .checkSpark:
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            let sparks = CAShapeLayer()
+            sparks.strokeColor = style.accentColor.withAlphaComponent(0.6).cgColor
+            sparks.fillColor = NSColor.clear.cgColor
+            sparks.lineWidth = 1.6
+            sparks.lineCap = .round
+            rootLayer.addSublayer(check)
+            rootLayer.addSublayer(sparks)
+            shapeLayers = [check, sparks]
+            addCheckDraw(to: check)
+            addSparkFlash(to: sparks)
         }
     }
 
@@ -720,6 +1095,169 @@ private final class HUDDesignGlyphView: NSView {
             layer.add(animation, forKey: "bounce")
         }
     }
+
+    private func addStaggeredPulse(to layers: [CALayer], baseDelay: CFTimeInterval) {
+        let now = CACurrentMediaTime()
+        for (index, layer) in layers.enumerated() {
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 0.85
+            scale.toValue = 1.15
+            scale.autoreverses = true
+            scale.duration = 0.7
+            scale.repeatCount = .infinity
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.35
+            fade.toValue = 1
+            fade.autoreverses = true
+            fade.duration = 0.7
+            fade.repeatCount = .infinity
+
+            let group = CAAnimationGroup()
+            group.animations = [scale, fade]
+            group.duration = 0.7
+            group.autoreverses = true
+            group.repeatCount = .infinity
+            group.beginTime = now + CFTimeInterval(index) * baseDelay
+            group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(group, forKey: "pulseDots")
+        }
+    }
+
+    private func addStaggeredFade(to layers: [CALayer], baseDelay: CFTimeInterval) {
+        let now = CACurrentMediaTime()
+        for (index, layer) in layers.enumerated() {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0.2
+            fade.toValue = 1
+            fade.autoreverses = true
+            fade.duration = 0.8
+            fade.repeatCount = .infinity
+            fade.beginTime = now + CFTimeInterval(index) * baseDelay
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(fade, forKey: "fadeDots")
+        }
+    }
+
+    private func addArcSweep(to layer: CAShapeLayer) {
+        layer.strokeStart = 0
+        layer.strokeEnd = 0.35
+        let start = CABasicAnimation(keyPath: "strokeStart")
+        start.fromValue = 0
+        start.toValue = 0.6
+        let end = CABasicAnimation(keyPath: "strokeEnd")
+        end.fromValue = 0.2
+        end.toValue = 0.95
+        let group = CAAnimationGroup()
+        group.animations = [start, end]
+        group.duration = 1.2
+        group.repeatCount = .infinity
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(group, forKey: "arcSweep")
+        addSpin(to: layer, duration: 2.2)
+    }
+
+    private func addHaloPulse(to layer: CALayer) {
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.95
+        scale.toValue = 1.1
+        scale.autoreverses = true
+        scale.duration = 1.2
+        scale.repeatCount = .infinity
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.3
+        fade.toValue = 0.9
+        fade.autoreverses = true
+        fade.duration = 1.2
+        fade.repeatCount = .infinity
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = 1.2
+        group.repeatCount = .infinity
+        group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(group, forKey: "halo")
+    }
+
+    private func addCheckDraw(to layer: CAShapeLayer) {
+        let animation = CABasicAnimation(keyPath: "strokeEnd")
+        animation.fromValue = 0
+        animation.toValue = 1
+        animation.duration = 0.5
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "check")
+    }
+
+    private func addUnderlineDraw(to layer: CAShapeLayer) {
+        let animation = CABasicAnimation(keyPath: "strokeEnd")
+        animation.fromValue = 0
+        animation.toValue = 1
+        animation.duration = 0.4
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "underline")
+    }
+
+    private func addSparkFlash(to layer: CAShapeLayer) {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 0
+        animation.toValue = 1
+        animation.duration = 0.4
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        layer.add(animation, forKey: "spark")
+    }
+
+    private func addOrbitIfNeeded(_ layer: CALayer, in rect: CGRect) {
+        if layer.animation(forKey: "orbit") != nil {
+            return
+        }
+        let path = CGMutablePath()
+        path.addEllipse(in: rect)
+        let animation = CAKeyframeAnimation(keyPath: "position")
+        animation.path = path
+        animation.duration = 1.4
+        animation.repeatCount = .infinity
+        animation.calculationMode = .paced
+        layer.add(animation, forKey: "orbit")
+    }
+
+    private func addScan(to layer: CALayer, duration: CFTimeInterval) {
+        let animation = CABasicAnimation(keyPath: "position.x")
+        animation.fromValue = bounds.minX + 6
+        animation.toValue = bounds.maxX - 6
+        animation.duration = duration
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(animation, forKey: "scan")
+    }
+
+    private func addScanIfNeeded(_ layer: CALayer) {
+        if layer.animation(forKey: "scan") == nil {
+            addScan(to: layer, duration: 1.2)
+        }
+    }
+
+    private func clipboardRect(in rect: CGRect) -> CGRect {
+        let width = min(rect.width, rect.height) * 0.46
+        let height = width * 0.75
+        return CGRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)
+    }
+
+    private func clipboardPath(in rect: CGRect) -> CGPath {
+        let corner = rect.width * 0.12
+        let path = CGMutablePath()
+        path.addRoundedRect(in: rect, cornerWidth: corner, cornerHeight: corner)
+        let tabWidth = rect.width * 0.42
+        let tabHeight = rect.height * 0.2
+        let tabRect = CGRect(
+            x: rect.midX - tabWidth / 2,
+            y: rect.maxY - tabHeight * 0.6,
+            width: tabWidth,
+            height: tabHeight
+        )
+        path.addRoundedRect(in: tabRect, cornerWidth: tabHeight / 2, cornerHeight: tabHeight / 2)
+        return path
+    }
 }
 
 private struct HUDDesignStyle {
@@ -738,6 +1276,92 @@ private struct HUDDesignStyle {
     let letterSpacing: CGFloat
     let menubarBackground: NSColor
     let menubarText: NSColor
+}
+
+private enum HUDProcessingVariant: CaseIterable {
+    case dotsBounce
+    case dotsPulse
+    case dotsFade
+    case ringDash
+    case arcSweep
+    case orbitDot
+    case scanLine
+    case pulseHalo
+    case barsMini
+    case spinnerRing
+
+    var name: String {
+        switch self {
+        case .dotsBounce: return "Dots Bounce"
+        case .dotsPulse: return "Dots Pulse"
+        case .dotsFade: return "Dots Fade"
+        case .ringDash: return "Dash Ring"
+        case .arcSweep: return "Arc Sweep"
+        case .orbitDot: return "Orbit Dot"
+        case .scanLine: return "Scan Line"
+        case .pulseHalo: return "Pulse Halo"
+        case .barsMini: return "Mini Bars"
+        case .spinnerRing: return "Clean Ring"
+        }
+    }
+
+    var spec: HUDDesignStateSpec {
+        switch self {
+        case .dotsBounce: return HUDDesignStateSpec(text: "", glyph: .dots, layout: .iconOnly)
+        case .dotsPulse: return HUDDesignStateSpec(text: "", glyph: .dotsPulse, layout: .iconOnly)
+        case .dotsFade: return HUDDesignStateSpec(text: "", glyph: .dotsFade, layout: .iconOnly)
+        case .ringDash: return HUDDesignStateSpec(text: "", glyph: .ringDash, layout: .iconOnly)
+        case .arcSweep: return HUDDesignStateSpec(text: "", glyph: .arcSweep, layout: .iconOnly)
+        case .orbitDot: return HUDDesignStateSpec(text: "", glyph: .orbitDot, layout: .iconOnly)
+        case .scanLine: return HUDDesignStateSpec(text: "", glyph: .scanLine, layout: .iconOnly)
+        case .pulseHalo: return HUDDesignStateSpec(text: "", glyph: .pulseHalo, layout: .iconOnly)
+        case .barsMini: return HUDDesignStateSpec(text: "", glyph: .barsMini, layout: .iconOnly)
+        case .spinnerRing: return HUDDesignStateSpec(text: "", glyph: .spinnerRing, layout: .iconOnly)
+        }
+    }
+}
+
+private enum HUDCopiedVariant: CaseIterable {
+    case checkmark
+    case checkCircle
+    case checkRing
+    case checkBadge
+    case clipboardCheck
+    case checkUnderline
+    case checkTile
+    case checkSpark
+    case checkPulse
+    case checkStamp
+
+    var name: String {
+        switch self {
+        case .checkmark: return "Checkmark"
+        case .checkCircle: return "Check Circle"
+        case .checkRing: return "Check Ring"
+        case .checkBadge: return "Check Badge"
+        case .clipboardCheck: return "Clipboard"
+        case .checkUnderline: return "Underline"
+        case .checkTile: return "Check Tile"
+        case .checkSpark: return "Check Spark"
+        case .checkPulse: return "Pulse Ring"
+        case .checkStamp: return "Stamp"
+        }
+    }
+
+    var spec: HUDDesignStateSpec {
+        switch self {
+        case .checkmark: return HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
+        case .checkCircle: return HUDDesignStateSpec(text: "", glyph: .checkCircle, layout: .iconOnly)
+        case .checkRing: return HUDDesignStateSpec(text: "", glyph: .checkRing, layout: .iconOnly)
+        case .checkBadge: return HUDDesignStateSpec(text: "", glyph: .checkBadge, layout: .iconOnly)
+        case .clipboardCheck: return HUDDesignStateSpec(text: "", glyph: .clipboardCheck, layout: .iconOnly)
+        case .checkUnderline: return HUDDesignStateSpec(text: "", glyph: .checkUnderline, layout: .iconOnly)
+        case .checkTile: return HUDDesignStateSpec(text: "", glyph: .checkTile, layout: .iconOnly)
+        case .checkSpark: return HUDDesignStateSpec(text: "", glyph: .checkSpark, layout: .iconOnly)
+        case .checkPulse: return HUDDesignStateSpec(text: "", glyph: .checkPulse, layout: .iconOnly)
+        case .checkStamp: return HUDDesignStateSpec(text: "", glyph: .checkStamp, layout: .iconOnly)
+        }
+    }
 }
 
 private enum HUDDesignVariant: CaseIterable {
@@ -1111,5 +1735,19 @@ private extension NSColor {
         let green = CGFloat((hex >> 8) & 0xFF) / 255
         let blue = CGFloat(hex & 0xFF) / 255
         return NSColor(calibratedRed: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [] }
+        var result: [[Element]] = []
+        var index = 0
+        while index < count {
+            let end = Swift.min(index + size, count)
+            result.append(Array(self[index..<end]))
+            index = end
+        }
+        return result
     }
 }

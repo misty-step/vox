@@ -16,10 +16,10 @@ final class HUDView: NSView {
         static let accentColor = NSColor.hex(0x2F6DB6)
         static let cornerRadius: CGFloat = 20
         static let borderWidth: CGFloat = 1
-        static let barCount = 27
+        static let barCount = 31
         static let barWidth: CGFloat = 2
         static let minBarGap: CGFloat = 1
-        static let barFillRatio: CGFloat = 0.9
+        static let barFillRatio: CGFloat = 0.93
         static let barCornerRadius: CGFloat = 2
         static let spinnerLineWidth: CGFloat = 2
         static let checkLineWidth: CGFloat = 2
