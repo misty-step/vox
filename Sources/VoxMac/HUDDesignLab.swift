@@ -342,7 +342,6 @@ private enum HUDDesignVariant: CaseIterable {
     case vapor
     case verdant
     case slate
-    case orchid
 
     var name: String {
         switch self {
@@ -358,7 +357,6 @@ private enum HUDDesignVariant: CaseIterable {
         case .vapor: return "Vapor Orbit"
         case .verdant: return "Verdant Focus"
         case .slate: return "Slate Studio"
-        case .orchid: return "Orchid Bloom"
         }
     }
 
@@ -579,24 +577,6 @@ private enum HUDDesignVariant: CaseIterable {
                 letterSpacing: 0.2,
                 menubarBackground: .hex(0xD9E2ED),
                 menubarText: .hex(0x202B36)
-            )
-        case .orchid:
-            return HUDDesignStyle(
-                name: name,
-                backgroundTop: .hex(0x2B1A26),
-                backgroundBottom: .hex(0x160D14),
-                borderColor: .white.withAlphaComponent(0.12),
-                textColor: .white.withAlphaComponent(0.9),
-                accentColor: .hex(0xFF8CCF),
-                cornerRadius: 18,
-                borderWidth: 1,
-                shadowColor: .black,
-                shadowOpacity: 0.55,
-                shadowRadius: 16,
-                font: .systemFont(ofSize: 12, weight: .semibold),
-                letterSpacing: 0.2,
-                menubarBackground: .hex(0x1B1018),
-                menubarText: .hex(0xF7E7F0)
             )
         }
     }
