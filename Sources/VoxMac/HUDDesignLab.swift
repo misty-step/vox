@@ -238,6 +238,7 @@ private enum HUDDesignLayout {
     case inline
     case stacked
     case textOnly
+    case iconOnly
 }
 
 private struct HUDDesignStateSpec {
@@ -279,6 +280,8 @@ private enum HUDDesignGlyph {
     case leaf
     case badge
     case spinner
+    case spinnerRing
+    case checkmark
 }
 
 private final class HUDDesignPreview: NSView {
@@ -379,8 +382,12 @@ private final class HUDDesignPreview: NSView {
         case .textOnly:
             contentStack.orientation = .vertical
             contentStack.spacing = 0
+        case .iconOnly:
+            contentStack.orientation = .vertical
+            contentStack.spacing = 0
         }
 
+        messageField.isHidden = true
         glyphView.isHidden = spec.glyph == .none || spec.layout == .textOnly
         glyphView.configure(kind: spec.glyph, style: style)
         needsLayout = true
@@ -450,7 +457,7 @@ private final class HUDDesignGlyphView: NSView {
                 bar.frame = CGRect(x: x, y: y, width: width, height: height)
                 bar.cornerRadius = 1.5
             }
-        case .ring, .dial:
+        case .ring, .dial, .spinnerRing:
             let size: CGFloat = 18
             let rect = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
             if let ring = shapeLayers.first as? CAShapeLayer {
@@ -463,6 +470,10 @@ private final class HUDDesignGlyphView: NSView {
                 let endAngle = CGFloat(0.2 * Double.pi)
                 path.addArc(center: center, radius: size / 2, startAngle: startAngle, endAngle: endAngle, clockwise: false)
                 arc.path = path
+            }
+            if kind == .spinnerRing, let ring = shapeLayers.first as? CAShapeLayer {
+                ring.strokeStart = 0
+                ring.strokeEnd = 0.75
             }
         case .cursor:
             if let cursor = shapeLayers.first {
@@ -506,6 +517,17 @@ private final class HUDDesignGlyphView: NSView {
                 badge.cornerRadius = size / 2
             }
             textLayer.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - 6, width: size, height: 12)
+        case .checkmark:
+            if let check = shapeLayers.first as? CAShapeLayer {
+                let width: CGFloat = 16
+                let height: CGFloat = 12
+                let origin = CGPoint(x: bounds.midX - width / 2, y: bounds.midY - height / 2)
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: origin.x, y: origin.y + height * 0.55))
+                path.addLine(to: CGPoint(x: origin.x + width * 0.4, y: origin.y))
+                path.addLine(to: CGPoint(x: origin.x + width, y: origin.y + height))
+                check.path = path
+            }
         }
 
     }
@@ -530,6 +552,20 @@ private final class HUDDesignGlyphView: NSView {
                 spinner.centerYAnchor.constraint(equalTo: centerYAnchor)
             ])
             spinner.startAnimation(nil)
+        case .spinnerRing:
+            let ring = CAShapeLayer()
+            ring.strokeColor = style.accentColor.cgColor
+            ring.fillColor = NSColor.clear.cgColor
+            ring.lineWidth = 2
+            ring.lineCap = .round
+            rootLayer.addSublayer(ring)
+            shapeLayers = [ring]
+            let animation = CABasicAnimation(keyPath: "transform.rotation")
+            animation.fromValue = 0
+            animation.toValue = Double.pi * 2
+            animation.duration = 1
+            animation.repeatCount = .infinity
+            ring.add(animation, forKey: "spin")
         case .dot, .pulseDot:
             let dot = CALayer()
             dot.backgroundColor = style.accentColor.cgColor
@@ -605,6 +641,22 @@ private final class HUDDesignGlyphView: NSView {
             textLayer.alignmentMode = .center
             textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
             rootLayer.addSublayer(textLayer)
+        case .checkmark:
+            let check = CAShapeLayer()
+            check.strokeColor = style.accentColor.cgColor
+            check.fillColor = NSColor.clear.cgColor
+            check.lineWidth = 2
+            check.lineCap = .round
+            check.lineJoin = .round
+            check.strokeEnd = 1
+            rootLayer.addSublayer(check)
+            shapeLayers = [check]
+            let animation = CABasicAnimation(keyPath: "strokeEnd")
+            animation.fromValue = 0
+            animation.toValue = 1
+            animation.duration = 0.55
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            check.add(animation, forKey: "check")
         }
     }
 }
@@ -666,8 +718,8 @@ private enum HUDDesignVariant: CaseIterable {
                 style: style,
                 menuBarIcon: .dot,
                 listening: HUDDesignStateSpec(text: "Listening", glyph: .pulseDot, layout: .inline),
-                processing: HUDDesignStateSpec(text: "Processing", glyph: .spinner, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Copied", glyph: .badge, layout: .inline)
+                processing: HUDDesignStateSpec(text: "Processing", glyph: .spinnerRing, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Copied", glyph: .checkmark, layout: .inline)
             )
         case .obsidian:
             return HUDDesignConfiguration(
@@ -675,15 +727,15 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .ring,
                 listening: HUDDesignStateSpec(text: "Leveling", glyph: .dial, layout: .inline),
                 processing: HUDDesignStateSpec(text: "Routing", glyph: .dots, layout: .stacked),
-                copied: HUDDesignStateSpec(text: "Sent", glyph: .ring, layout: .stacked)
+                copied: HUDDesignStateSpec(text: "Sent", glyph: .checkmark, layout: .stacked)
             )
         case .paper:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .square,
                 listening: HUDDesignStateSpec(text: "Dictating", glyph: .cursor, layout: .inline),
-                processing: HUDDesignStateSpec(text: "Rewriting", glyph: .none, layout: .textOnly),
-                copied: HUDDesignStateSpec(text: "Stamped", glyph: .none, layout: .textOnly)
+                processing: HUDDesignStateSpec(text: "Rewriting", glyph: .spinnerRing, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "Stamped", glyph: .checkmark, layout: .iconOnly)
             )
         case .mint:
             return HUDDesignConfiguration(
@@ -691,23 +743,23 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .bars,
                 listening: HUDDesignStateSpec(text: "Listening", glyph: .waveform, layout: .inline),
                 processing: HUDDesignStateSpec(text: "Polishing", glyph: .bars, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Placed", glyph: .badge, layout: .inline)
+                copied: HUDDesignStateSpec(text: "Placed", glyph: .checkmark, layout: .inline)
             )
         case .signal:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .dot,
                 listening: HUDDesignStateSpec(text: "Scanning", glyph: .ring, layout: .inline),
-                processing: HUDDesignStateSpec(text: "Analyzing", glyph: .spinner, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Locked", glyph: .badge, layout: .textOnly)
+                processing: HUDDesignStateSpec(text: "Analyzing", glyph: .spinnerRing, layout: .inline),
+                copied: HUDDesignStateSpec(text: "Locked", glyph: .checkmark, layout: .iconOnly)
             )
         case .cobalt:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .bars,
                 listening: HUDDesignStateSpec(text: "Metering", glyph: .bars, layout: .inline),
-                processing: HUDDesignStateSpec(text: "Orbit", glyph: .spinner, layout: .stacked),
-                copied: HUDDesignStateSpec(text: "Injected", glyph: .badge, layout: .inline)
+                processing: HUDDesignStateSpec(text: "Orbit", glyph: .spinnerRing, layout: .stacked),
+                copied: HUDDesignStateSpec(text: "Injected", glyph: .checkmark, layout: .inline)
             )
         case .ember:
             return HUDDesignConfiguration(
@@ -715,15 +767,15 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .dot,
                 listening: HUDDesignStateSpec(text: "Warming", glyph: .pulseDot, layout: .stacked),
                 processing: HUDDesignStateSpec(text: "Blending", glyph: .spark, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Ready", glyph: .none, layout: .textOnly)
+                copied: HUDDesignStateSpec(text: "Ready", glyph: .checkmark, layout: .iconOnly)
             )
         case .ink:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .square,
-                listening: HUDDesignStateSpec(text: "LISTENING", glyph: .none, layout: .textOnly),
-                processing: HUDDesignStateSpec(text: "WORKING", glyph: .none, layout: .textOnly),
-                copied: HUDDesignStateSpec(text: "OK", glyph: .none, layout: .textOnly)
+                listening: HUDDesignStateSpec(text: "LISTENING", glyph: .dot, layout: .iconOnly),
+                processing: HUDDesignStateSpec(text: "WORKING", glyph: .spinnerRing, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "OK", glyph: .checkmark, layout: .iconOnly)
             )
         case .sandstone:
             return HUDDesignConfiguration(
@@ -731,7 +783,7 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .dot,
                 listening: HUDDesignStateSpec(text: "Listening", glyph: .dot, layout: .inline),
                 processing: HUDDesignStateSpec(text: "Thinking", glyph: .dots, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Delivered", glyph: .none, layout: .textOnly)
+                copied: HUDDesignStateSpec(text: "Delivered", glyph: .checkmark, layout: .iconOnly)
             )
         case .vapor:
             return HUDDesignConfiguration(
@@ -739,7 +791,7 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .ring,
                 listening: HUDDesignStateSpec(text: "Signal", glyph: .waveform, layout: .inline),
                 processing: HUDDesignStateSpec(text: "Synth", glyph: .dial, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Copied", glyph: .none, layout: .textOnly)
+                copied: HUDDesignStateSpec(text: "Copied", glyph: .checkmark, layout: .iconOnly)
             )
         case .verdant:
             return HUDDesignConfiguration(
@@ -747,15 +799,15 @@ private enum HUDDesignVariant: CaseIterable {
                 menuBarIcon: .bars,
                 listening: HUDDesignStateSpec(text: "Focus", glyph: .leaf, layout: .inline),
                 processing: HUDDesignStateSpec(text: "Refine", glyph: .bars, layout: .inline),
-                copied: HUDDesignStateSpec(text: "Saved", glyph: .badge, layout: .inline)
+                copied: HUDDesignStateSpec(text: "Saved", glyph: .checkmark, layout: .inline)
             )
         case .slate:
             return HUDDesignConfiguration(
                 style: style,
                 menuBarIcon: .square,
-                listening: HUDDesignStateSpec(text: "Listening", glyph: .bars, layout: .inline),
-                processing: HUDDesignStateSpec(text: "Processing", glyph: .spinner, layout: .stacked),
-                copied: HUDDesignStateSpec(text: "Captured", glyph: .none, layout: .textOnly)
+                listening: HUDDesignStateSpec(text: "", glyph: .bars, layout: .iconOnly),
+                processing: HUDDesignStateSpec(text: "", glyph: .spinnerRing, layout: .iconOnly),
+                copied: HUDDesignStateSpec(text: "", glyph: .checkmark, layout: .iconOnly)
             )
         }
     }
