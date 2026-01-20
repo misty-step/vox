@@ -11,7 +11,7 @@
 - GitHub Actions on `push` and `pull_request`
 - macOS runner
 - Cache: `.build`, `~/.swiftpm`, `~/Library/Caches/org.swift.swiftpm`
-- Secrets scan: Gitleaks (requires `GITLEAKS_LICENSE` secret; otherwise skipped)
+- Secrets scan: TruffleHog
 - `swift build`, `swift test`
 
 ## Testing scope
