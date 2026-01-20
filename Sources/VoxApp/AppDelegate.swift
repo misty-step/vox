@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             PermissionManager.promptForAccessibilityIfNeeded()
             Task { _ = await PermissionManager.requestMicrophoneAccess() }
+            HUDDesignLab.openIfEnabled()
         } catch {
             logger.error("Startup failed: \(String(describing: error))")
             showStartupError(String(describing: error))
