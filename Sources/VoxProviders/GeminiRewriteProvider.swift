@@ -36,23 +36,13 @@ public final class GeminiRewriteProvider: RewriteProvider {
     }
 
     public func rewrite(_ request: RewriteRequest) async throws -> RewriteResponse {
-        let systemInstruction = """
-        You are an expert editor. Rewrite the transcript into clear, articulate text while preserving meaning.
-        Do not add new facts. Do not invent details. Keep it faithful.
-        Output only the rewritten text with no commentary.
-        """
-
-        var prompt = "Transcript:\n<<<\n\(request.transcript.text)\n>>>\n"
-        if !request.context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            prompt.append("\nContext:\n<<<\n\(request.context)\n>>>\n")
-        }
-        prompt.append("\nRewrite now.")
+        let prompt = GeminiPromptBuilder.build(for: request)
 
         let payload = GeminiGenerateRequest(
             contents: [
-                GeminiContent(role: "user", parts: [GeminiPart(text: prompt)])
+                GeminiContent(role: "user", parts: [GeminiPart(text: prompt.userPrompt)])
             ],
-            systemInstruction: GeminiSystemInstruction(parts: [GeminiPart(text: systemInstruction)]),
+            systemInstruction: GeminiSystemInstruction(parts: [GeminiPart(text: prompt.systemInstruction)]),
             generationConfig: GeminiGenerationConfig(
                 temperature: config.temperature,
                 maxOutputTokens: config.maxOutputTokens,

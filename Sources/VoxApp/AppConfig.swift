@@ -28,12 +28,16 @@ struct AppConfig: Codable {
 
     let stt: STTConfig
     let rewrite: RewriteConfig
+    var processingLevel: ProcessingLevel?
     var hotkey: HotkeyConfig?
     var contextPath: String?
 
     mutating func normalized() {
         if hotkey == nil {
             hotkey = .default
+        }
+        if processingLevel == nil {
+            processingLevel = .light
         }
         if contextPath == nil {
             contextPath = AppConfig.defaultContextPath
@@ -71,6 +75,20 @@ enum ConfigLoader {
         return config
     }
 
+    static func save(_ config: AppConfig) throws {
+        var normalized = config
+        normalized.normalized()
+
+        let dir = configURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(normalized)
+        try data.write(to: configURL, options: .atomic)
+        Diagnostics.info("Saved config to \(configURL.path)")
+    }
+
     private static func createSampleConfig(at url: URL) throws {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -91,6 +109,7 @@ enum ConfigLoader {
                 maxOutputTokens: 2048,
                 thinkingLevel: "high"
             ),
+            processingLevel: .light,
             hotkey: .default,
             contextPath: AppConfig.defaultContextPath
         )
@@ -123,6 +142,8 @@ enum ConfigLoader {
         let thinking = env["GEMINI_THINKING_LEVEL"]
 
         let contextPath = env["VOX_CONTEXT_PATH"] ?? AppConfig.defaultContextPath
+        let processingLevelValue = env["VOX_PROCESSING_LEVEL"] ?? env["VOX_REWRITE_LEVEL"] ?? ""
+        let processingLevel = ProcessingLevel(rawValue: processingLevelValue.lowercased()) ?? .light
 
         var config = AppConfig(
             stt: AppConfig.STTConfig(
@@ -140,6 +161,7 @@ enum ConfigLoader {
                 maxOutputTokens: maxTokens,
                 thinkingLevel: thinking
             ),
+            processingLevel: processingLevel,
             hotkey: .default,
             contextPath: contextPath
         )

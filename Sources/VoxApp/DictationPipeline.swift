@@ -22,7 +22,7 @@ final class DictationPipeline {
         self.modelId = modelId
     }
 
-    func run(audioURL: URL) async throws -> String {
+    func run(audioURL: URL, processingLevel: ProcessingLevel) async throws -> String {
         let sessionId = UUID()
 
         Diagnostics.info("Submitting audio to STT provider.")
@@ -41,12 +41,18 @@ final class DictationPipeline {
             throw VoxError.noTranscript
         }
 
+        guard processingLevel != .off else {
+            Diagnostics.info("Processing level off. Skipping rewrite.")
+            return transcript.text
+        }
+
         let context = (try? String(contentsOf: contextURL)) ?? ""
         let request = RewriteRequest(
             sessionId: sessionId,
             locale: locale,
             transcript: TranscriptPayload(text: transcript.text),
-            context: context
+            context: context,
+            processingLevel: processingLevel
         )
 
         do {

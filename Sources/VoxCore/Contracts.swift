@@ -41,17 +41,53 @@ public struct RewriteRequest: Sendable, Equatable, Codable {
     public let locale: String
     public let transcript: TranscriptPayload
     public let context: String
+    public let processingLevel: ProcessingLevel
 
     public init(
         sessionId: UUID,
         locale: String,
         transcript: TranscriptPayload,
-        context: String
+        context: String,
+        processingLevel: ProcessingLevel = .light
     ) {
         self.sessionId = sessionId
         self.locale = locale
         self.transcript = transcript
         self.context = context
+        self.processingLevel = processingLevel
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionId
+        case locale
+        case transcript
+        case context
+        case processingLevel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let sessionId = try container.decode(UUID.self, forKey: .sessionId)
+        let locale = try container.decode(String.self, forKey: .locale)
+        let transcript = try container.decode(TranscriptPayload.self, forKey: .transcript)
+        let context = try container.decode(String.self, forKey: .context)
+        let processingLevel = try container.decodeIfPresent(ProcessingLevel.self, forKey: .processingLevel) ?? .light
+        self.init(
+            sessionId: sessionId,
+            locale: locale,
+            transcript: transcript,
+            context: context,
+            processingLevel: processingLevel
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sessionId, forKey: .sessionId)
+        try container.encode(locale, forKey: .locale)
+        try container.encode(transcript, forKey: .transcript)
+        try container.encode(context, forKey: .context)
+        try container.encode(processingLevel, forKey: .processingLevel)
     }
 }
 

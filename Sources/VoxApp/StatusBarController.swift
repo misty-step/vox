@@ -1,22 +1,45 @@
 import AppKit
 import Foundation
+import VoxCore
 
 final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let onToggle: () -> Void
+    private let onProcessingLevelChange: (ProcessingLevel) -> Void
     private let onQuit: () -> Void
     private var currentState: SessionController.State = .idle
     private var resetWorkItem: DispatchWorkItem?
+    private var processingLevel: ProcessingLevel
+    private var processingItems: [ProcessingLevel: NSMenuItem] = [:]
 
-    init(onToggle: @escaping () -> Void, onQuit: @escaping () -> Void) {
+    init(
+        onToggle: @escaping () -> Void,
+        onProcessingLevelChange: @escaping (ProcessingLevel) -> Void,
+        onQuit: @escaping () -> Void,
+        processingLevel: ProcessingLevel
+    ) {
         self.onToggle = onToggle
+        self.onProcessingLevelChange = onProcessingLevelChange
         self.onQuit = onQuit
+        self.processingLevel = processingLevel
         super.init()
 
         let menu = NSMenu()
         let toggleItem = NSMenuItem(title: "Toggle Recording", action: #selector(handleToggle), keyEquivalent: "")
         toggleItem.target = self
         menu.addItem(toggleItem)
+
+        let processingItem = NSMenuItem(title: "Processing", action: nil, keyEquivalent: "")
+        let processingMenu = NSMenu()
+        ProcessingLevel.allCases.forEach { level in
+            let item = NSMenuItem(title: title(for: level), action: #selector(handleProcessingLevel(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = level
+            processingMenu.addItem(item)
+            processingItems[level] = item
+        }
+        processingItem.submenu = processingMenu
+        menu.addItem(processingItem)
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit Vox", action: #selector(handleQuit), keyEquivalent: "q")
@@ -25,6 +48,7 @@ final class StatusBarController: NSObject {
 
         statusItem.menu = menu
         statusItem.button?.title = "Vox"
+        updateProcessingMenu()
     }
 
     func update(state: SessionController.State) {
@@ -37,6 +61,7 @@ final class StatusBarController: NSObject {
         case .processing:
             statusItem.button?.title = "… Vox"
         }
+        setProcessingMenuEnabled(state == .idle)
     }
 
     func showMessage(_ message: String, duration: TimeInterval = 4.0) {
@@ -55,7 +80,35 @@ final class StatusBarController: NSObject {
         onToggle()
     }
 
+    @objc private func handleProcessingLevel(_ sender: NSMenuItem) {
+        guard let level = sender.representedObject as? ProcessingLevel else { return }
+        processingLevel = level
+        updateProcessingMenu()
+        onProcessingLevelChange(level)
+    }
+
     @objc private func handleQuit(_ sender: NSMenuItem) {
         onQuit()
+    }
+
+    private func updateProcessingMenu() {
+        processingItems.forEach { level, item in
+            item.state = level == processingLevel ? .on : .off
+        }
+    }
+
+    private func setProcessingMenuEnabled(_ isEnabled: Bool) {
+        processingItems.values.forEach { $0.isEnabled = isEnabled }
+    }
+
+    private func title(for level: ProcessingLevel) -> String {
+        switch level {
+        case .off:
+            return "Off"
+        case .light:
+            return "Light"
+        case .aggressive:
+            return "Aggressive"
+        }
     }
 }
