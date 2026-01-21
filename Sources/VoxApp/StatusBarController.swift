@@ -102,13 +102,6 @@ final class StatusBarController: NSObject {
     }
 
     private func title(for level: ProcessingLevel) -> String {
-        switch level {
-        case .off:
-            return "Off"
-        case .light:
-            return "Light"
-        case .aggressive:
-            return "Aggressive"
-        }
+        level.rawValue.capitalized
     }
 }

@@ -18,6 +18,7 @@ final class SessionController {
     private var targetApp: NSRunningApplication?
     private let levelQueue = DispatchQueue(label: "vox.input-level")
     private var levelTimer: DispatchSourceTimer?
+    private let processingQueue = DispatchQueue(label: "vox.processing-level")
     private var processingLevel: ProcessingLevel
 
     private(set) var state: State = .idle {
@@ -41,7 +42,9 @@ final class SessionController {
     }
 
     func updateProcessingLevel(_ level: ProcessingLevel) {
-        processingLevel = level
+        processingQueue.sync {
+            processingLevel = level
+        }
     }
 
     func toggle() {
@@ -98,7 +101,7 @@ final class SessionController {
                 Diagnostics.error("Audio file is very small. Check microphone permission or input device.")
             }
         }
-        let currentProcessingLevel = processingLevel
+        let currentProcessingLevel = processingQueue.sync { processingLevel }
         state = .processing
         Task {
             defer {
