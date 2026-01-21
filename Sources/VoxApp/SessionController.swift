@@ -4,6 +4,7 @@ import os
 import VoxCore
 import VoxMac
 
+@MainActor
 final class SessionController {
     enum State {
         case idle
@@ -11,14 +12,14 @@ final class SessionController {
         case processing
     }
 
+    private static let levelMeterInterval: TimeInterval = 0.05
+
     private let pipeline: DictationPipeline
     private let audioRecorder = AudioRecorder()
     private let clipboardPaster: ClipboardPaster
     private let logger = Logger(subsystem: "vox", category: "session")
     private var targetApp: NSRunningApplication?
-    private let levelQueue = DispatchQueue(label: "vox.input-level")
     private var levelTimer: DispatchSourceTimer?
-    private let processingQueue = DispatchQueue(label: "vox.processing-level")
     private var processingLevel: ProcessingLevel
 
     private(set) var state: State = .idle {
@@ -42,9 +43,7 @@ final class SessionController {
     }
 
     func updateProcessingLevel(_ level: ProcessingLevel) {
-        processingQueue.sync {
-            processingLevel = level
-        }
+        processingLevel = level
     }
 
     func toggle() {
@@ -101,22 +100,39 @@ final class SessionController {
                 Diagnostics.error("Audio file is very small. Check microphone permission or input device.")
             }
         }
-        let currentProcessingLevel = processingQueue.sync { processingLevel }
+        let currentProcessingLevel = processingLevel
         state = .processing
-        Task {
-            defer {
-                try? FileManager.default.removeItem(at: audioURL)
-                state = .idle
-            }
-
+        Task.detached(priority: .userInitiated) { [pipeline] in
+            let result: Result<String, Error>
             do {
                 let finalText = try await pipeline.run(audioURL: audioURL, processingLevel: currentProcessingLevel)
-                try paste(finalText: finalText)
-            } catch VoxError.noTranscript {
-                Diagnostics.error("Transcript is empty. Check microphone input or STT configuration.")
+                result = .success(finalText)
             } catch {
-                logger.error("Processing failed: \(String(describing: error))")
-                Diagnostics.error("Processing failed: \(String(describing: error))")
+                result = .failure(error)
+            }
+
+            try? FileManager.default.removeItem(at: audioURL)
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                defer { self.state = .idle }
+
+                switch result {
+                case .success(let finalText):
+                    do {
+                        try self.paste(finalText: finalText)
+                    } catch {
+                        self.logger.error("Paste failed: \(String(describing: error))")
+                        Diagnostics.error("Paste failed: \(String(describing: error))")
+                    }
+                case .failure(let error):
+                    if case VoxError.noTranscript = error {
+                        Diagnostics.error("Transcript is empty. Check microphone input or STT configuration.")
+                    } else {
+                        self.logger.error("Processing failed: \(String(describing: error))")
+                        Diagnostics.error("Processing failed: \(String(describing: error))")
+                    }
+                }
             }
         }
     }
@@ -142,14 +158,12 @@ final class SessionController {
 
     private func startLevelMetering() {
         stopLevelMetering()
-        let timer = DispatchSource.makeTimerSource(queue: levelQueue)
-        timer.schedule(deadline: .now(), repeating: 0.02)
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: Self.levelMeterInterval)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let levels = self.audioRecorder.currentLevel()
-            DispatchQueue.main.async { [weak self] in
-                self?.inputLevelDidChange?(levels.average, levels.peak)
-            }
+            self.inputLevelDidChange?(levels.average, levels.peak)
         }
         levelTimer = timer
         timer.resume()
@@ -158,20 +172,14 @@ final class SessionController {
     private func stopLevelMetering() {
         levelTimer?.cancel()
         levelTimer = nil
-        DispatchQueue.main.async { [weak self] in
-            self?.inputLevelDidChange?(0, 0)
-        }
+        inputLevelDidChange?(0, 0)
     }
 
     private func notifyState(_ state: State) {
-        DispatchQueue.main.async { [weak self] in
-            self?.stateDidChange?(state)
-        }
+        stateDidChange?(state)
     }
 
     private func notifyStatus(_ message: String) {
-        DispatchQueue.main.async { [weak self] in
-            self?.statusDidChange?(message)
-        }
+        statusDidChange?(message)
     }
 }
