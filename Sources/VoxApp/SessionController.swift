@@ -12,6 +12,8 @@ final class SessionController {
         case processing
     }
 
+    private static let levelMeterInterval: TimeInterval = 0.05
+
     private let pipeline: DictationPipeline
     private let audioRecorder = AudioRecorder()
     private let clipboardPaster: ClipboardPaster
@@ -100,20 +102,37 @@ final class SessionController {
         }
         let currentProcessingLevel = processingLevel
         state = .processing
-        Task {
-            defer {
-                try? FileManager.default.removeItem(at: audioURL)
-                state = .idle
-            }
-
+        Task.detached(priority: .userInitiated) { [pipeline] in
+            let result: Result<String, Error>
             do {
                 let finalText = try await pipeline.run(audioURL: audioURL, processingLevel: currentProcessingLevel)
-                try paste(finalText: finalText)
-            } catch VoxError.noTranscript {
-                Diagnostics.error("Transcript is empty. Check microphone input or STT configuration.")
+                result = .success(finalText)
             } catch {
-                logger.error("Processing failed: \(String(describing: error))")
-                Diagnostics.error("Processing failed: \(String(describing: error))")
+                result = .failure(error)
+            }
+
+            try? FileManager.default.removeItem(at: audioURL)
+
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                defer { self.state = .idle }
+
+                switch result {
+                case .success(let finalText):
+                    do {
+                        try self.paste(finalText: finalText)
+                    } catch {
+                        self.logger.error("Paste failed: \(String(describing: error))")
+                        Diagnostics.error("Paste failed: \(String(describing: error))")
+                    }
+                case .failure(let error):
+                    if case VoxError.noTranscript = error {
+                        Diagnostics.error("Transcript is empty. Check microphone input or STT configuration.")
+                    } else {
+                        self.logger.error("Processing failed: \(String(describing: error))")
+                        Diagnostics.error("Processing failed: \(String(describing: error))")
+                    }
+                }
             }
         }
     }
@@ -140,7 +159,7 @@ final class SessionController {
     private func startLevelMetering() {
         stopLevelMetering()
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 0.02)
+        timer.schedule(deadline: .now(), repeating: Self.levelMeterInterval)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let levels = self.audioRecorder.currentLevel()
