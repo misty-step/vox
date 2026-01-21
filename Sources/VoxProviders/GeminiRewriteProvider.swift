@@ -36,7 +36,7 @@ public final class GeminiRewriteProvider: RewriteProvider {
     }
 
     public func rewrite(_ request: RewriteRequest) async throws -> RewriteResponse {
-        let prompt = GeminiPromptBuilder.build(for: request)
+        let prompt = RewritePromptBuilder.build(for: request)
 
         let payload = GeminiGenerateRequest(
             contents: [

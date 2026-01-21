@@ -15,9 +15,13 @@ Status: working prototype.
 
 ## Config
 Preferred: `.env.local`
-- Required: `ELEVENLABS_API_KEY`, `GEMINI_API_KEY`
+- Required: `ELEVENLABS_API_KEY`
+- Rewrite provider: `VOX_REWRITE_PROVIDER` (gemini | openrouter, default: gemini)
+- Gemini: `GEMINI_API_KEY` required when provider=gemini
+- Optional (Gemini): `GEMINI_MODEL_ID` (gemini-3-pro* or gemini-3-flash*), `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS` (default: 65536), `GEMINI_THINKING_LEVEL`
+- OpenRouter: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL_ID` required when provider=openrouter
+- Optional (OpenRouter): `OPENROUTER_TEMPERATURE`, `OPENROUTER_MAX_TOKENS`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
-- Optional: `GEMINI_MODEL_ID` (gemini-3-pro* or gemini-3-flash*), `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS` (default: 65536), `GEMINI_THINKING_LEVEL`
 - Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
   - `VOX_PROCESSING_LEVEL` overrides menu selection; UI changes won’t persist until removed
 - Optional: `VOX_HISTORY=0` disable local history artifacts (default: on)
@@ -27,6 +31,8 @@ Preferred: `.env.local`
 
 Fallback: `~/Documents/Vox/config.json`
 - Auto-generated on first run if missing
+- `rewrite.provider` selects provider id
+- `rewrite.providers` list: `{ id, apiKey, modelId, temperature?, maxOutputTokens?, thinkingLevel? }`
 - `processingLevel`: off | light | aggressive (default: light)
 
 ## Usage

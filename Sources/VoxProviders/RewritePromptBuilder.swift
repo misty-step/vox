@@ -1,13 +1,13 @@
 import Foundation
 import VoxCore
 
-struct GeminiPrompt {
+struct RewritePrompt {
     let systemInstruction: String
     let userPrompt: String
 }
 
-enum GeminiPromptBuilder {
-    static func build(for request: RewriteRequest) -> GeminiPrompt {
+enum RewritePromptBuilder {
+    static func build(for request: RewriteRequest) -> RewritePrompt {
         let systemInstruction: String
         switch request.processingLevel {
         case .light:
@@ -46,6 +46,6 @@ enum GeminiPromptBuilder {
         }
         prompt.append("\nRewrite now.")
 
-        return GeminiPrompt(systemInstruction: systemInstruction, userPrompt: prompt)
+        return RewritePrompt(systemInstruction: systemInstruction, userPrompt: prompt)
     }
 }

@@ -2,7 +2,7 @@ import XCTest
 @testable import VoxProviders
 @testable import VoxCore
 
-final class GeminiPromptBuilderTests: XCTestCase {
+final class RewritePromptBuilderTests: XCTestCase {
     func testLightPromptEmphasizesMinimalEdits() {
         let request = RewriteRequest(
             sessionId: UUID(),
@@ -12,7 +12,7 @@ final class GeminiPromptBuilderTests: XCTestCase {
             processingLevel: .light
         )
 
-        let prompt = GeminiPromptBuilder.build(for: request)
+        let prompt = RewritePromptBuilder.build(for: request)
 
         XCTAssertTrue(prompt.systemInstruction.contains("light cleanup"))
         XCTAssertTrue(prompt.systemInstruction.contains("remove obvious filler words"))
@@ -30,7 +30,7 @@ final class GeminiPromptBuilderTests: XCTestCase {
             processingLevel: .aggressive
         )
 
-        let prompt = GeminiPromptBuilder.build(for: request)
+        let prompt = RewritePromptBuilder.build(for: request)
 
         XCTAssertTrue(prompt.systemInstruction.contains("executive editor"))
         XCTAssertTrue(prompt.systemInstruction.contains("Do not change the speech act"))

@@ -25,20 +25,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Diagnostics.info("Config source: \(loaded.source == .envLocal ? ".env.local" : "config.json")")
             appConfig = config
             let sttProvider = try ProviderFactory.makeSTT(config: config.stt)
-            let rewriteProvider = try ProviderFactory.makeRewrite(config: config.rewrite)
+            let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
+            let rewriteProvider = try ProviderFactory.makeRewrite(selection: rewriteSelection)
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)
             let locale = config.stt.languageCode ?? Locale.current.identifier
             let processingLevel = config.processingLevel ?? .light
             Diagnostics.info("Processing level: \(processingLevel.rawValue)")
             let historyStore = HistoryStore()
+            let rewriteTemperature = rewriteSelection.temperature ?? 0.2
+            let rewriteMaxTokens: Int? = {
+                if rewriteSelection.id == "gemini" {
+                    return GeminiModelPolicy.effectiveMaxOutputTokens(
+                        requested: rewriteSelection.maxOutputTokens,
+                        modelId: rewriteSelection.modelId
+                    )
+                }
+                return rewriteSelection.maxOutputTokens
+            }()
             let metadataConfig = SessionMetadataConfig(
                 locale: locale,
                 sttModelId: config.stt.modelId,
-                rewriteModelId: config.rewrite.modelId,
-                maxOutputTokens: config.rewrite.maxOutputTokens,
-                temperature: config.rewrite.temperature,
-                thinkingLevel: config.rewrite.thinkingLevel,
+                rewriteModelId: rewriteSelection.modelId,
+                maxOutputTokens: rewriteMaxTokens,
+                temperature: rewriteTemperature,
+                thinkingLevel: rewriteSelection.thinkingLevel,
                 contextPath: contextURL.path
             )
             let pipeline = DictationPipeline(
