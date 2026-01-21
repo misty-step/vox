@@ -19,7 +19,14 @@
 - Provider adapters tested via pure functions only
 - Network calls are not mocked yet
 
+## Releases
+- Automated via Release Please on merges to `master`
+- Conventional commits drive SemVer:
+  - `feat:` → minor
+  - `fix:`/`perf:` → patch
+  - `!` or `BREAKING CHANGE` → major
+- Release PR updates `CHANGELOG.md`, merge creates tag + GitHub release
+
 ## Gaps / follow-ups
 - Coverage reporting + delta thresholds
 - Lint/format automation (SwiftFormat/SwiftLint)
-- Release automation + changelog
