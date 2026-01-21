@@ -23,12 +23,17 @@ enum ProviderFactory {
     static func makeRewrite(config: AppConfig.RewriteConfig) throws -> RewriteProvider {
         switch config.provider {
         case "gemini":
+            try GeminiModelPolicy.ensureSupported(config.modelId)
+            let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
+                requested: config.maxOutputTokens,
+                modelId: config.modelId
+            )
             return GeminiRewriteProvider(
                 config: GeminiConfig(
                     apiKey: config.apiKey,
                     modelId: config.modelId,
                     temperature: config.temperature ?? 0.2,
-                    maxOutputTokens: config.maxOutputTokens ?? 2048,
+                    maxOutputTokens: maxTokens,
                     thinkingLevel: config.thinkingLevel
                 )
             )

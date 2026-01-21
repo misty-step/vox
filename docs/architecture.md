@@ -24,6 +24,7 @@
 3. STT returns raw transcript
 4. LLM rewrites transcript (fallback to raw on failure)
 5. Paste into target app, keep clipboard for manual paste
+6. Persist session artifacts (raw/rewrite/final + metadata)
 
 ## State model
 - `idle` → `recording` → `processing` → `idle`
@@ -43,6 +44,7 @@
 - STT fail: stop, log, no paste
 - Rewrite fail: use raw transcript
 - Paste fail: keep clipboard + show message
+- Always write session history artifacts for recovery
 
 ## Config
 - `.env.local` overrides, else `~/Documents/Vox/config.json`

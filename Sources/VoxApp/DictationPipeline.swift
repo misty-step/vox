@@ -22,9 +22,12 @@ final class DictationPipeline {
         self.modelId = modelId
     }
 
-    func run(audioURL: URL, processingLevel: ProcessingLevel) async throws -> String {
-        let sessionId = UUID()
-
+    func run(
+        sessionId: UUID,
+        audioURL: URL,
+        processingLevel: ProcessingLevel,
+        history: HistorySession?
+    ) async throws -> String {
         Diagnostics.info("Session \(sessionId.uuidString) processing level: \(processingLevel.rawValue).")
         Diagnostics.info("Submitting audio to STT provider.")
         let transcript = try await sttProvider.transcribe(
@@ -36,6 +39,9 @@ final class DictationPipeline {
             )
         )
         Diagnostics.info("STT completed. Transcript length: \(transcript.text.count) chars.")
+        if let history {
+            await history.recordTranscript(transcript.text)
+        }
 
         let trimmed = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -44,6 +50,9 @@ final class DictationPipeline {
 
         guard processingLevel != .off else {
             Diagnostics.info("Processing level off. Skipping rewrite.")
+            if let history {
+                await history.recordFinal(transcript.text)
+            }
             return transcript.text
         }
 
@@ -62,13 +71,38 @@ final class DictationPipeline {
             let candidate = response.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
             if candidate.isEmpty {
                 Diagnostics.error("Rewrite returned empty text. Using raw transcript.")
+                if let history {
+                    await history.recordRewrite(candidate, ratio: 0)
+                    await history.recordFinal(transcript.text)
+                }
                 return transcript.text
             }
-            let ratio = Double(candidate.count) / Double(max(transcript.text.count, 1))
-            Diagnostics.info("Rewrite completed. Output length: \(candidate.count) chars. Ratio: \(String(format: "%.2f", ratio)).")
+            let evaluation = RewriteQualityGate.evaluate(
+                raw: transcript.text,
+                candidate: candidate,
+                level: processingLevel
+            )
+            if let history {
+                await history.recordRewrite(candidate, ratio: evaluation.ratio)
+            }
+            Diagnostics.info("Rewrite completed. Output length: \(candidate.count) chars. Ratio: \(String(format: "%.2f", evaluation.ratio)).")
+            guard evaluation.isAcceptable else {
+                Diagnostics.error("Rewrite too short (ratio \(String(format: "%.2f", evaluation.ratio)) < \(String(format: "%.2f", evaluation.minimumRatio))). Using raw transcript.")
+                if let history {
+                    await history.recordFinal(transcript.text)
+                }
+                return transcript.text
+            }
+            if let history {
+                await history.recordFinal(candidate)
+            }
             return candidate
         } catch {
             Diagnostics.error("Rewrite failed: \(String(describing: error)). Using raw transcript.")
+            if let history {
+                await history.recordError("Rewrite failed: \(String(describing: error))")
+                await history.recordFinal(transcript.text)
+            }
             return transcript.text
         }
     }

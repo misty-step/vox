@@ -31,6 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let locale = config.stt.languageCode ?? Locale.current.identifier
             let processingLevel = config.processingLevel ?? .light
             Diagnostics.info("Processing level: \(processingLevel.rawValue)")
+            let historyStore = HistoryStore()
+            let metadataConfig = SessionMetadataConfig(
+                locale: locale,
+                sttModelId: config.stt.modelId,
+                rewriteModelId: config.rewrite.modelId,
+                maxOutputTokens: config.rewrite.maxOutputTokens,
+                temperature: config.rewrite.temperature,
+                thinkingLevel: config.rewrite.thinkingLevel,
+                contextPath: contextURL.path
+            )
             let pipeline = DictationPipeline(
                 sttProvider: sttProvider,
                 rewriteProvider: rewriteProvider,
@@ -40,7 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let session = SessionController(
                 pipeline: pipeline,
-                processingLevel: processingLevel
+                processingLevel: processingLevel,
+                historyStore: historyStore,
+                metadataConfig: metadataConfig
             )
 
             let statusBar = StatusBarController(
