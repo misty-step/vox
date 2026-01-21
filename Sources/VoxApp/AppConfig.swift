@@ -50,6 +50,11 @@ struct AppConfig: Codable {
     }
 }
 
+struct ProcessingLevelOverride: Equatable {
+    let level: ProcessingLevel
+    let sourceKey: String
+}
+
 enum ConfigLoader {
     enum Source {
         case envLocal
@@ -59,6 +64,7 @@ enum ConfigLoader {
     struct LoadedConfig {
         let config: AppConfig
         let source: Source
+        let processingLevelOverride: ProcessingLevelOverride?
     }
 
     static let configURL: URL = {
@@ -67,9 +73,9 @@ enum ConfigLoader {
     }()
 
     static func load() throws -> LoadedConfig {
-        if let config = try loadFromDotEnv() {
+        if let loaded = try loadFromDotEnv() {
             Diagnostics.info("Loaded config from .env.local")
-            return LoadedConfig(config: config, source: .envLocal)
+            return loaded
         }
 
         let fileManager = FileManager.default
@@ -82,7 +88,7 @@ enum ConfigLoader {
         var config = try JSONDecoder().decode(AppConfig.self, from: data)
         config.normalized()
         Diagnostics.info("Loaded config from \(configURL.path)")
-        return LoadedConfig(config: config, source: .file)
+        return LoadedConfig(config: config, source: .file, processingLevelOverride: nil)
     }
 
     static func save(_ config: AppConfig) throws {
@@ -130,7 +136,7 @@ enum ConfigLoader {
         try data.write(to: url, options: .atomic)
     }
 
-    private static func loadFromDotEnv() throws -> AppConfig? {
+    private static func loadFromDotEnv() throws -> LoadedConfig? {
         let url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".env.local")
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -152,8 +158,8 @@ enum ConfigLoader {
         let thinking = env["GEMINI_THINKING_LEVEL"]
 
         let contextPath = env["VOX_CONTEXT_PATH"] ?? AppConfig.defaultContextPath
-        let processingLevelValue = env["VOX_PROCESSING_LEVEL"] ?? env["VOX_REWRITE_LEVEL"] ?? ""
-        let envProcessingLevel = ProcessingLevel(rawValue: processingLevelValue.lowercased())
+        let processingLevelOverride = processingLevelOverride(from: env)
+        let envProcessingLevel = processingLevelOverride?.level
         let storedProcessingLevel = ProcessingLevelStore.load() ?? loadProcessingLevelFromConfigFile()
         let processingLevel = envProcessingLevel ?? storedProcessingLevel ?? .light
 
@@ -178,7 +184,11 @@ enum ConfigLoader {
             contextPath: contextPath
         )
         config.normalized()
-        return config
+        return LoadedConfig(
+            config: config,
+            source: .envLocal,
+            processingLevelOverride: processingLevelOverride
+        )
     }
 
     private static func loadProcessingLevelFromConfigFile() -> ProcessingLevel? {
@@ -188,5 +198,19 @@ enum ConfigLoader {
             return nil
         }
         return config.processingLevel
+    }
+
+    static func processingLevelOverride(from env: [String: String]) -> ProcessingLevelOverride? {
+        if let raw = env["VOX_PROCESSING_LEVEL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty,
+           let level = ProcessingLevel(rawValue: raw.lowercased()) {
+            return ProcessingLevelOverride(level: level, sourceKey: "VOX_PROCESSING_LEVEL")
+        }
+        if let raw = env["VOX_REWRITE_LEVEL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty,
+           let level = ProcessingLevel(rawValue: raw.lowercased()) {
+            return ProcessingLevelOverride(level: level, sourceKey: "VOX_REWRITE_LEVEL")
+        }
+        return nil
     }
 }

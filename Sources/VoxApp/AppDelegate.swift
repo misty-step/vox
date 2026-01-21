@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hudController: HUDController?
     private var appConfig: AppConfig?
     private var configSource: ConfigLoader.Source?
+    private var processingLevelOverride: ProcessingLevelOverride?
     private let logger = Logger(subsystem: "vox", category: "app")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let loaded = try ConfigLoader.load()
             let config = loaded.config
             configSource = loaded.source
+            processingLevelOverride = loaded.processingLevelOverride
             Diagnostics.info("Config source: \(loaded.source == .envLocal ? ".env.local" : "config.json")")
             appConfig = config
             let sttProvider = try ProviderFactory.makeSTT(config: config.stt)
@@ -46,8 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     session?.updateProcessingLevel(level)
                     self?.persistProcessingLevel(level)
                 },
+                onProcessingLevelOverrideAttempt: { [weak self] in
+                    self?.showProcessingLevelOverrideMessage()
+                },
                 onQuit: { NSApplication.shared.terminate(nil) },
-                processingLevel: processingLevel
+                processingLevel: processingLevel,
+                processingLevelOverride: processingLevelOverride
             )
             let hud = HUDController()
 
@@ -117,5 +123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Quit")
         alert.runModal()
         NSApplication.shared.terminate(nil)
+    }
+
+    private func showProcessingLevelOverrideMessage() {
+        guard let override = processingLevelOverride else { return }
+        let message = "Processing locked by \(override.sourceKey). Edit .env.local to change."
+        statusBarController?.showMessage(message)
+        hudController?.showMessage(message)
     }
 }

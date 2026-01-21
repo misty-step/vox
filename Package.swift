@@ -28,6 +28,10 @@ let package = Package(
         .testTarget(
             name: "VoxProvidersTests",
             dependencies: ["VoxProviders"]
+        ),
+        .testTarget(
+            name: "VoxAppTests",
+            dependencies: ["VoxApp"]
         )
     ]
 )

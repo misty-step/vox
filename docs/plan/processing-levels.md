@@ -22,6 +22,7 @@
 - Config surfaces:
   - `.env.local` → `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`)
   - `~/Documents/Vox/config.json` → `processingLevel`
+  - Env var wins over menu + config; UI should indicate override
 
 ## Level 1 — Off (Raw Transcript)
 - Pipeline: STT only, no LLM call

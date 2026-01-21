@@ -6,22 +6,28 @@ final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let onToggle: () -> Void
     private let onProcessingLevelChange: (ProcessingLevel) -> Void
+    private let onProcessingLevelOverrideAttempt: (() -> Void)?
     private let onQuit: () -> Void
     private var currentState: SessionController.State = .idle
     private var resetWorkItem: DispatchWorkItem?
     private var processingLevel: ProcessingLevel
+    private let processingLevelOverride: ProcessingLevelOverride?
     private var processingItems: [ProcessingLevel: NSMenuItem] = [:]
 
     init(
         onToggle: @escaping () -> Void,
         onProcessingLevelChange: @escaping (ProcessingLevel) -> Void,
+        onProcessingLevelOverrideAttempt: (() -> Void)? = nil,
         onQuit: @escaping () -> Void,
-        processingLevel: ProcessingLevel
+        processingLevel: ProcessingLevel,
+        processingLevelOverride: ProcessingLevelOverride?
     ) {
         self.onToggle = onToggle
         self.onProcessingLevelChange = onProcessingLevelChange
+        self.onProcessingLevelOverrideAttempt = onProcessingLevelOverrideAttempt
         self.onQuit = onQuit
         self.processingLevel = processingLevel
+        self.processingLevelOverride = processingLevelOverride
         super.init()
 
         let menu = NSMenu()
@@ -29,8 +35,14 @@ final class StatusBarController: NSObject {
         toggleItem.target = self
         menu.addItem(toggleItem)
 
-        let processingItem = NSMenuItem(title: "Processing", action: nil, keyEquivalent: "")
+        let processingItem = NSMenuItem(title: processingMenuTitle(), action: nil, keyEquivalent: "")
         let processingMenu = NSMenu()
+        if let override = processingLevelOverride {
+            let overrideItem = NSMenuItem(title: "Locked by \(override.sourceKey)", action: nil, keyEquivalent: "")
+            overrideItem.isEnabled = false
+            processingMenu.addItem(overrideItem)
+            processingMenu.addItem(NSMenuItem.separator())
+        }
         ProcessingLevel.allCases.forEach { level in
             let item = NSMenuItem(title: title(for: level), action: #selector(handleProcessingLevel(_:)), keyEquivalent: "")
             item.target = self
@@ -82,6 +94,12 @@ final class StatusBarController: NSObject {
 
     @objc private func handleProcessingLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? ProcessingLevel else { return }
+        if let override = processingLevelOverride {
+            processingLevel = override.level
+            updateProcessingMenu()
+            onProcessingLevelOverrideAttempt?()
+            return
+        }
         processingLevel = level
         updateProcessingMenu()
         onProcessingLevelChange(level)
@@ -103,5 +121,9 @@ final class StatusBarController: NSObject {
 
     private func title(for level: ProcessingLevel) -> String {
         level.rawValue.capitalized
+    }
+
+    private func processingMenuTitle() -> String {
+        processingLevelOverride == nil ? "Processing" : "Processing (Locked)"
     }
 }
