@@ -7,6 +7,7 @@
 - Rewrite for quality, not speed
 - Insert at cursor reliably
 - Minimal config file (prototype)
+- Single rewrite level setting (off/light/aggressive)
 
 ## Non-goals (MVP)
 - Commands or agent actions
