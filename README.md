@@ -46,4 +46,5 @@ Fallback: `~/Documents/Vox/config.json`
 
 ## Quality gates
 - Hooks: `git config core.hooksPath .githooks`
+- Hooks skip when no Swift/Package changes; targets: pre-commit <5s, pre-push <15s
 - CI: GitHub Actions on push/PR

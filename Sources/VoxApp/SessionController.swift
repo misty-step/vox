@@ -16,6 +16,8 @@ final class SessionController {
     private let clipboardPaster: ClipboardPaster
     private let logger = Logger(subsystem: "vox", category: "session")
     private var targetApp: NSRunningApplication?
+    private let levelQueue = DispatchQueue(label: "vox.input-level")
+    private var levelTimer: DispatchSourceTimer?
 
     private(set) var state: State = .idle {
         didSet { notifyState(state) }
@@ -23,6 +25,7 @@ final class SessionController {
 
     var stateDidChange: ((State) -> Void)?
     var statusDidChange: ((String) -> Void)?
+    var inputLevelDidChange: ((Float, Float) -> Void)?
 
     init(
         pipeline: DictationPipeline
@@ -61,6 +64,7 @@ final class SessionController {
         do {
             try audioRecorder.start()
             Diagnostics.info("Recording started.")
+            startLevelMetering()
         } catch {
             logger.error("Failed to start recording: \(String(describing: error))")
             Diagnostics.error("Failed to start recording: \(String(describing: error))")
@@ -72,6 +76,7 @@ final class SessionController {
         let audioURL: URL
         do {
             audioURL = try audioRecorder.stop()
+            stopLevelMetering()
         } catch {
             logger.error("Failed to stop recording: \(String(describing: error))")
             Diagnostics.error("Failed to stop recording: \(String(describing: error))")
@@ -122,6 +127,29 @@ final class SessionController {
         try clipboardPaster.paste(text: finalText, restoreAfter: restoreAfter)
         Diagnostics.info("Paste completed. Clipboard restore: \(PasteOptions.shouldRestore ? "on" : "off"), delay: \(restoreAfter ?? 0)s")
         notifyStatus("Copied to clipboard")
+    }
+
+    private func startLevelMetering() {
+        stopLevelMetering()
+        let timer = DispatchSource.makeTimerSource(queue: levelQueue)
+        timer.schedule(deadline: .now(), repeating: 0.02)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let levels = self.audioRecorder.currentLevel()
+            DispatchQueue.main.async { [weak self] in
+                self?.inputLevelDidChange?(levels.average, levels.peak)
+            }
+        }
+        levelTimer = timer
+        timer.resume()
+    }
+
+    private func stopLevelMetering() {
+        levelTimer?.cancel()
+        levelTimer = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.inputLevelDidChange?(0, 0)
+        }
     }
 
     private func notifyState(_ state: State) {

@@ -26,6 +26,7 @@ public final class AudioRecorder {
         ]
 
         let recorder = try AVAudioRecorder(url: url, settings: settings)
+        recorder.isMeteringEnabled = true
         recorder.prepareToRecord()
         guard recorder.record() else {
             throw VoxError.internalError("Failed to start recording.")
@@ -33,6 +34,19 @@ public final class AudioRecorder {
 
         self.recorder = recorder
         self.currentURL = url
+    }
+
+    public func currentLevel() -> (average: Float, peak: Float) {
+        guard let recorder else { return (average: 0, peak: 0) }
+        recorder.updateMeters()
+        let averagePower = recorder.averagePower(forChannel: 0)
+        let peakPower = recorder.peakPower(forChannel: 0)
+        let minDb: Float = -50
+        let averageClamped = max(min(averagePower, 0), minDb)
+        let peakClamped = max(min(peakPower, 0), minDb)
+        let averageLevel = (averageClamped - minDb) / (0 - minDb)
+        let peakLevel = (peakClamped - minDb) / (0 - minDb)
+        return (average: averageLevel, peak: peakLevel)
     }
 
     public func stop() throws -> URL {
