@@ -16,6 +16,7 @@ Measure twice, cut once. Planning docs only, no code.
 - `docs/plan/backend.md` — gateway scope, endpoints, ops
 - `docs/plan/verification-and-safety.md` — no-hallucination plan
 - `docs/plan/testing-and-eval.md` — test lists + metrics
+- `docs/plan/processing-levels.md` — rewrite levels + config
 - `docs/plan/roadmap-mvp.md` — milestones, exit criteria, risks
 
 ## Rules of the road

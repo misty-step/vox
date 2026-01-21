@@ -13,6 +13,11 @@
 ## UI feedback (prototype)
 - Menu bar title changes: idle / recording / processing
 
+## Settings (menu bar)
+- One setting: `Processing` with levels (Off / Light / Aggressive)
+- Radio/checkmark selection in menu
+- Persists to config file
+
 ## Audio pipeline
 - AVAudioRecorder to temp file
 - Linear PCM, 16kHz, mono

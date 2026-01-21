@@ -22,9 +22,10 @@ final class DictationPipeline {
         self.modelId = modelId
     }
 
-    func run(audioURL: URL) async throws -> String {
+    func run(audioURL: URL, processingLevel: ProcessingLevel) async throws -> String {
         let sessionId = UUID()
 
+        Diagnostics.info("Session \(sessionId.uuidString) processing level: \(processingLevel.rawValue).")
         Diagnostics.info("Submitting audio to STT provider.")
         let transcript = try await sttProvider.transcribe(
             TranscriptionRequest(
@@ -41,23 +42,30 @@ final class DictationPipeline {
             throw VoxError.noTranscript
         }
 
+        guard processingLevel != .off else {
+            Diagnostics.info("Processing level off. Skipping rewrite.")
+            return transcript.text
+        }
+
         let context = (try? String(contentsOf: contextURL)) ?? ""
         let request = RewriteRequest(
             sessionId: sessionId,
             locale: locale,
             transcript: TranscriptPayload(text: transcript.text),
-            context: context
+            context: context,
+            processingLevel: processingLevel
         )
 
         do {
-            Diagnostics.info("Submitting transcript to rewrite provider.")
+            Diagnostics.info("Submitting transcript to rewrite provider. Level: \(processingLevel.rawValue).")
             let response = try await rewriteProvider.rewrite(request)
             let candidate = response.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
             if candidate.isEmpty {
                 Diagnostics.error("Rewrite returned empty text. Using raw transcript.")
                 return transcript.text
             }
-            Diagnostics.info("Rewrite completed. Output length: \(candidate.count) chars.")
+            let ratio = Double(candidate.count) / Double(max(transcript.text.count, 1))
+            Diagnostics.info("Rewrite completed. Output length: \(candidate.count) chars. Ratio: \(String(format: "%.2f", ratio)).")
             return candidate
         } catch {
             Diagnostics.error("Rewrite failed: \(String(describing: error)). Using raw transcript.")

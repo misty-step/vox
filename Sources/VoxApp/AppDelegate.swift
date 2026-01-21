@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import os
+import VoxCore
 import VoxMac
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,17 +9,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor?
     private var sessionController: SessionController?
     private var hudController: HUDController?
+    private var appConfig: AppConfig?
+    private var configSource: ConfigLoader.Source?
     private let logger = Logger(subsystem: "vox", category: "app")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diagnostics.info("Vox starting.")
         do {
-            let config = try ConfigLoader.load()
+            let loaded = try ConfigLoader.load()
+            let config = loaded.config
+            configSource = loaded.source
+            Diagnostics.info("Config source: \(loaded.source == .envLocal ? ".env.local" : "config.json")")
+            appConfig = config
             let sttProvider = try ProviderFactory.makeSTT(config: config.stt)
             let rewriteProvider = try ProviderFactory.makeRewrite(config: config.rewrite)
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)
             let locale = config.stt.languageCode ?? Locale.current.identifier
+            let processingLevel = config.processingLevel ?? .light
+            Diagnostics.info("Processing level: \(processingLevel.rawValue)")
             let pipeline = DictationPipeline(
                 sttProvider: sttProvider,
                 rewriteProvider: rewriteProvider,
@@ -27,12 +36,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 modelId: config.stt.modelId
             )
             let session = SessionController(
-                pipeline: pipeline
+                pipeline: pipeline,
+                processingLevel: processingLevel
             )
 
             let statusBar = StatusBarController(
                 onToggle: { session.toggle() },
-                onQuit: { NSApplication.shared.terminate(nil) }
+                onProcessingLevelChange: { [weak self, weak session] level in
+                    session?.updateProcessingLevel(level)
+                    self?.persistProcessingLevel(level)
+                },
+                onQuit: { NSApplication.shared.terminate(nil) },
+                processingLevel: processingLevel
             )
             let hud = HUDController()
 
@@ -70,6 +85,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             logger.error("Startup failed: \(String(describing: error))")
             showStartupError(String(describing: error))
+        }
+    }
+
+    private func persistProcessingLevel(_ level: ProcessingLevel) {
+        guard var config = appConfig else { return }
+        config.processingLevel = level
+        appConfig = config
+        switch configSource {
+        case .envLocal:
+            ProcessingLevelStore.save(level)
+            Diagnostics.info("Saved processing level to preferences.")
+        case .file:
+            do {
+                try ConfigLoader.save(config)
+            } catch {
+                Diagnostics.error("Failed to save processing level: \(String(describing: error))")
+                statusBarController?.showMessage("Failed to save processing level")
+                hudController?.showMessage("Failed to save processing level")
+            }
+        case .none:
+            break
         }
     }
 

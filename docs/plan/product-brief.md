@@ -3,6 +3,7 @@
 ## Thesis
 - Invisible editor: spoken intent → clean text at cursor
 - No commands, no modes, no settings maze
+- One optional setting: processing/rewrite level
 
 ## Core loop
 - Tap hotkey to start listening

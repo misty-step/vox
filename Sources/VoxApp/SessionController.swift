@@ -18,6 +18,8 @@ final class SessionController {
     private var targetApp: NSRunningApplication?
     private let levelQueue = DispatchQueue(label: "vox.input-level")
     private var levelTimer: DispatchSourceTimer?
+    private let processingQueue = DispatchQueue(label: "vox.processing-level")
+    private var processingLevel: ProcessingLevel
 
     private(set) var state: State = .idle {
         didSet { notifyState(state) }
@@ -28,13 +30,21 @@ final class SessionController {
     var inputLevelDidChange: ((Float, Float) -> Void)?
 
     init(
-        pipeline: DictationPipeline
+        pipeline: DictationPipeline,
+        processingLevel: ProcessingLevel
     ) {
         self.pipeline = pipeline
+        self.processingLevel = processingLevel
         self.clipboardPaster = ClipboardPaster(
             restoreDelay: PasteOptions.restoreDelay,
             shouldRestore: PasteOptions.shouldRestore
         )
+    }
+
+    func updateProcessingLevel(_ level: ProcessingLevel) {
+        processingQueue.sync {
+            processingLevel = level
+        }
     }
 
     func toggle() {
@@ -91,6 +101,7 @@ final class SessionController {
                 Diagnostics.error("Audio file is very small. Check microphone permission or input device.")
             }
         }
+        let currentProcessingLevel = processingQueue.sync { processingLevel }
         state = .processing
         Task {
             defer {
@@ -99,7 +110,7 @@ final class SessionController {
             }
 
             do {
-                let finalText = try await pipeline.run(audioURL: audioURL)
+                let finalText = try await pipeline.run(audioURL: audioURL, processingLevel: currentProcessingLevel)
                 try paste(finalText: finalText)
             } catch VoxError.noTranscript {
                 Diagnostics.error("Transcript is empty. Check microphone input or STT configuration.")

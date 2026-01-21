@@ -18,10 +18,11 @@ Preferred: `.env.local`
 - Required: `ELEVENLABS_API_KEY`, `GEMINI_API_KEY`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
 - Optional: `GEMINI_MODEL_ID`, `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS`, `GEMINI_THINKING_LEVEL`
-- Optional: `VOX_CONTEXT_PATH`
+- Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
 
 Fallback: `~/Documents/Vox/config.json`
 - Auto-generated on first run if missing
+- `processingLevel`: off | light | aggressive (default: light)
 
 ## Usage
 - Hotkey: Option+Space (default)
