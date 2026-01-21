@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var processingLevelOverride: ProcessingLevelOverride?
     private let logger = Logger(subsystem: "vox", category: "app")
 
+    @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diagnostics.info("Vox starting.")
         do {
@@ -43,10 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
 
             let statusBar = StatusBarController(
-                onToggle: { session.toggle() },
+                onToggle: {
+                    Task { @MainActor in
+                        session.toggle()
+                    }
+                },
                 onProcessingLevelChange: { [weak self, weak session] level in
-                    session?.updateProcessingLevel(level)
-                    self?.persistProcessingLevel(level)
+                    Task { @MainActor in
+                        guard let session else { return }
+                        session.updateProcessingLevel(level)
+                        self?.persistProcessingLevel(level)
+                    }
                 },
                 onProcessingLevelOverrideAttempt: { [weak self] in
                     self?.showProcessingLevelOverrideMessage()
@@ -79,7 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let hotkey = config.hotkey ?? .default
             let modifiers = HotkeyParser.modifiers(from: hotkey.modifiers)
             hotkeyMonitor = try HotkeyMonitor(keyCode: hotkey.keyCode, modifiers: modifiers) {
-                session.toggle()
+                Task { @MainActor in
+                    session.toggle()
+                }
             }
 
             statusBarController = statusBar

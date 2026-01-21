@@ -4,6 +4,7 @@ import os
 import VoxCore
 import VoxMac
 
+@MainActor
 final class SessionController {
     enum State {
         case idle
@@ -16,9 +17,7 @@ final class SessionController {
     private let clipboardPaster: ClipboardPaster
     private let logger = Logger(subsystem: "vox", category: "session")
     private var targetApp: NSRunningApplication?
-    private let levelQueue = DispatchQueue(label: "vox.input-level")
     private var levelTimer: DispatchSourceTimer?
-    private let processingQueue = DispatchQueue(label: "vox.processing-level")
     private var processingLevel: ProcessingLevel
 
     private(set) var state: State = .idle {
@@ -42,9 +41,7 @@ final class SessionController {
     }
 
     func updateProcessingLevel(_ level: ProcessingLevel) {
-        processingQueue.sync {
-            processingLevel = level
-        }
+        processingLevel = level
     }
 
     func toggle() {
@@ -101,7 +98,7 @@ final class SessionController {
                 Diagnostics.error("Audio file is very small. Check microphone permission or input device.")
             }
         }
-        let currentProcessingLevel = processingQueue.sync { processingLevel }
+        let currentProcessingLevel = processingLevel
         state = .processing
         Task {
             defer {
@@ -142,14 +139,12 @@ final class SessionController {
 
     private func startLevelMetering() {
         stopLevelMetering()
-        let timer = DispatchSource.makeTimerSource(queue: levelQueue)
+        let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: 0.02)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             let levels = self.audioRecorder.currentLevel()
-            DispatchQueue.main.async { [weak self] in
-                self?.inputLevelDidChange?(levels.average, levels.peak)
-            }
+            self.inputLevelDidChange?(levels.average, levels.peak)
         }
         levelTimer = timer
         timer.resume()
@@ -158,20 +153,14 @@ final class SessionController {
     private func stopLevelMetering() {
         levelTimer?.cancel()
         levelTimer = nil
-        DispatchQueue.main.async { [weak self] in
-            self?.inputLevelDidChange?(0, 0)
-        }
+        inputLevelDidChange?(0, 0)
     }
 
     private func notifyState(_ state: State) {
-        DispatchQueue.main.async { [weak self] in
-            self?.stateDidChange?(state)
-        }
+        stateDidChange?(state)
     }
 
     private func notifyStatus(_ message: String) {
-        DispatchQueue.main.async { [weak self] in
-            self?.statusDidChange?(message)
-        }
+        statusDidChange?(message)
     }
 }
