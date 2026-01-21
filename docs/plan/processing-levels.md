@@ -35,7 +35,7 @@
   - Light formatting (new lines, simple lists)
   - Preserve wording and order
 - Guardrails:
-  - Do not remove filler words
+  - Remove only obvious filler words and stutters
   - Do not paraphrase or summarize
   - Keep numbers, acronyms, proper nouns verbatim
 
@@ -50,6 +50,8 @@
   - Suitable for coding/LLM instructions
 - Guardrails:
   - No new facts
+  - Preserve speech act (statement vs question vs command)
+  - Keep original perspective and modality
   - Keep all named entities + numbers
   - If unsure, keep original phrasing
 

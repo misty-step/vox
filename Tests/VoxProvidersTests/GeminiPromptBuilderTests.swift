@@ -15,8 +15,9 @@ final class GeminiPromptBuilderTests: XCTestCase {
         let prompt = GeminiPromptBuilder.build(for: request)
 
         XCTAssertTrue(prompt.systemInstruction.contains("light cleanup"))
+        XCTAssertTrue(prompt.systemInstruction.contains("remove obvious filler words"))
         XCTAssertTrue(prompt.systemInstruction.contains("Do not paraphrase or summarize"))
-        XCTAssertTrue(prompt.systemInstruction.contains("Do not remove filler words"))
+        XCTAssertTrue(prompt.systemInstruction.contains("Keep original perspective"))
     }
 
     func testAggressivePromptPreservesEntitiesAndIntent() {
@@ -31,6 +32,7 @@ final class GeminiPromptBuilderTests: XCTestCase {
         let prompt = GeminiPromptBuilder.build(for: request)
 
         XCTAssertTrue(prompt.systemInstruction.contains("executive editor"))
+        XCTAssertTrue(prompt.systemInstruction.contains("Do not change the speech act"))
         XCTAssertTrue(prompt.systemInstruction.contains("Keep every specific noun"))
         XCTAssertTrue(prompt.userPrompt.contains("Context:"))
     }
