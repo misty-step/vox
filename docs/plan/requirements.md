@@ -24,6 +24,7 @@
 
 ## Data and storage
 - Local: `context.md`, config, logs (redacted)
+- Local history artifacts: raw/rewrite/final + metadata in `~/Documents/Vox/history` (disable: `VOX_HISTORY=0`, redact: `VOX_HISTORY_REDACT=1`)
 - No audio retention by default
 
 ## Permissions

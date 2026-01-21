@@ -17,6 +17,8 @@ final class SessionController {
     private let pipeline: DictationPipeline
     private let audioRecorder = AudioRecorder()
     private let clipboardPaster: ClipboardPaster
+    private let historyStore: HistoryStore?
+    private let metadataConfig: SessionMetadataConfig
     private let logger = Logger(subsystem: "vox", category: "session")
     private var targetApp: NSRunningApplication?
     private var levelTimer: DispatchSourceTimer?
@@ -32,10 +34,14 @@ final class SessionController {
 
     init(
         pipeline: DictationPipeline,
-        processingLevel: ProcessingLevel
+        processingLevel: ProcessingLevel,
+        historyStore: HistoryStore?,
+        metadataConfig: SessionMetadataConfig
     ) {
         self.pipeline = pipeline
         self.processingLevel = processingLevel
+        self.historyStore = historyStore
+        self.metadataConfig = metadataConfig
         self.clipboardPaster = ClipboardPaster(
             restoreDelay: PasteOptions.restoreDelay,
             shouldRestore: PasteOptions.shouldRestore
@@ -82,7 +88,9 @@ final class SessionController {
     }
 
     private func stopAndProcess() {
+        let sessionId = UUID()
         let audioURL: URL
+        var audioSizeBytes: Int?
         do {
             audioURL = try audioRecorder.stop()
             stopLevelMetering()
@@ -96,22 +104,57 @@ final class SessionController {
         Diagnostics.info("Recording stopped. Processing audio at \(audioURL.lastPathComponent)")
         if let size = try? FileManager.default.attributesOfItem(atPath: audioURL.path)[.size] as? NSNumber {
             Diagnostics.info("Audio file size: \(size.intValue) bytes.")
+            audioSizeBytes = size.intValue
             if size.intValue < 1024 {
                 Diagnostics.error("Audio file is very small. Check microphone permission or input device.")
             }
         }
         let currentProcessingLevel = processingLevel
+        let history = historyStore?.startSession(
+            metadata: HistoryMetadata(
+                sessionId: sessionId,
+                startedAt: Date(),
+                updatedAt: Date(),
+                processingLevel: currentProcessingLevel.rawValue,
+                locale: metadataConfig.locale,
+                sttModelId: metadataConfig.sttModelId,
+                rewriteModelId: metadataConfig.rewriteModelId,
+                maxOutputTokens: metadataConfig.maxOutputTokens,
+                temperature: metadataConfig.temperature,
+                thinkingLevel: metadataConfig.thinkingLevel,
+                targetAppBundleId: targetApp?.bundleIdentifier,
+                audioFileName: audioURL.lastPathComponent,
+                audioFileSizeBytes: audioSizeBytes,
+                transcriptLength: nil,
+                rewriteLength: nil,
+                finalLength: nil,
+                rewriteRatio: nil,
+                pasteSucceeded: nil,
+                errors: []
+            )
+        )
         state = .processing
         Task.detached(priority: .userInitiated) { [pipeline] in
             let result: Result<String, Error>
             do {
-                let finalText = try await pipeline.run(audioURL: audioURL, processingLevel: currentProcessingLevel)
+                let finalText = try await pipeline.run(
+                    sessionId: sessionId,
+                    audioURL: audioURL,
+                    processingLevel: currentProcessingLevel,
+                    history: history
+                )
                 result = .success(finalText)
             } catch {
                 result = .failure(error)
             }
 
             try? FileManager.default.removeItem(at: audioURL)
+
+            if case .failure(let error) = result {
+                if let history {
+                    await history.recordError("Processing failed: \(String(describing: error))")
+                }
+            }
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
@@ -121,9 +164,11 @@ final class SessionController {
                 case .success(let finalText):
                     do {
                         try self.paste(finalText: finalText)
+                        Task { await history?.recordPaste(success: true) }
                     } catch {
                         self.logger.error("Paste failed: \(String(describing: error))")
                         Diagnostics.error("Paste failed: \(String(describing: error))")
+                        Task { await history?.recordPaste(success: false, error: String(describing: error)) }
                     }
                 case .failure(let error):
                     if case VoxError.noTranscript = error {

@@ -86,6 +86,9 @@ enum ConfigLoader {
 
         let data = try Data(contentsOf: configURL)
         var config = try JSONDecoder().decode(AppConfig.self, from: data)
+        if config.rewrite.provider == "gemini" {
+            try GeminiModelPolicy.ensureSupported(config.rewrite.modelId)
+        }
         config.normalized()
         Diagnostics.info("Loaded config from \(configURL.path)")
         return LoadedConfig(config: config, source: .file, processingLevelOverride: nil)
@@ -120,9 +123,9 @@ enum ConfigLoader {
             rewrite: AppConfig.RewriteConfig(
                 provider: "gemini",
                 apiKey: "YOUR_GEMINI_API_KEY",
-                modelId: "gemini-3-flash-preview",
+                modelId: "gemini-3-pro-preview",
                 temperature: 0.2,
-                maxOutputTokens: 2048,
+                maxOutputTokens: GeminiModelPolicy.maxOutputTokens(for: "gemini-3-pro-preview"),
                 thinkingLevel: "high"
             ),
             processingLevel: .light,
@@ -152,9 +155,14 @@ enum ConfigLoader {
         let sttModel = env["ELEVENLABS_MODEL_ID"] ?? "scribe_v2"
         let sttLanguage = env["ELEVENLABS_LANGUAGE"]
 
-        let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-flash-preview"
+        let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-pro-preview"
+        try GeminiModelPolicy.ensureSupported(rewriteModel)
         let temperature = Double(env["GEMINI_TEMPERATURE"] ?? "") ?? 0.2
-        let maxTokens = Int(env["GEMINI_MAX_TOKENS"] ?? "") ?? 2048
+        let requestedMaxTokens = Int(env["GEMINI_MAX_TOKENS"] ?? "")
+        let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
+            requested: requestedMaxTokens,
+            modelId: rewriteModel
+        )
         let thinking = env["GEMINI_THINKING_LEVEL"]
 
         let contextPath = env["VOX_CONTEXT_PATH"] ?? AppConfig.defaultContextPath

@@ -17,9 +17,12 @@ Status: working prototype.
 Preferred: `.env.local`
 - Required: `ELEVENLABS_API_KEY`, `GEMINI_API_KEY`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
-- Optional: `GEMINI_MODEL_ID`, `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS`, `GEMINI_THINKING_LEVEL`
+- Optional: `GEMINI_MODEL_ID` (gemini-3-pro* or gemini-3-flash*), `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS` (default: 65536), `GEMINI_THINKING_LEVEL`
 - Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
   - `VOX_PROCESSING_LEVEL` overrides menu selection; UI changes won’t persist until removed
+- Optional: `VOX_HISTORY=0` disable local history artifacts (default: on)
+- Optional: `VOX_HISTORY_DIR=/path/to/dir` override history location
+- Optional: `VOX_HISTORY_REDACT=1` store redacted history text
 - Optional: `VOX_LOG_LEVEL` (debug | info | error | off; default: info)
 
 Fallback: `~/Documents/Vox/config.json`
@@ -30,6 +33,7 @@ Fallback: `~/Documents/Vox/config.json`
 - Hotkey: Option+Space (default)
 - HUD states: recording → processing → copied
 - If paste is blocked, Vox keeps text on clipboard
+- History artifacts: `~/Documents/Vox/history/YYYY-MM-DD/<sessionId>` (raw/rewrite/final + metadata)
 
 ## Paste controls
 - `VOX_PASTE_RESTORE=0` keep clipboard contents
