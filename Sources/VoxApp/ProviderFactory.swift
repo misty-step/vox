@@ -21,24 +21,34 @@ enum ProviderFactory {
     }
 
     static func makeRewrite(config: AppConfig.RewriteConfig) throws -> RewriteProvider {
-        switch config.provider {
+        let selection = try RewriteConfigResolver.resolve(config)
+        switch selection.id {
         case "gemini":
-            try GeminiModelPolicy.ensureSupported(config.modelId)
             let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
-                requested: config.maxOutputTokens,
-                modelId: config.modelId
+                requested: selection.maxOutputTokens,
+                modelId: selection.modelId
             )
             return GeminiRewriteProvider(
                 config: GeminiConfig(
-                    apiKey: config.apiKey,
-                    modelId: config.modelId,
-                    temperature: config.temperature ?? 0.2,
+                    apiKey: selection.apiKey,
+                    modelId: selection.modelId,
+                    temperature: selection.temperature ?? 0.2,
                     maxOutputTokens: maxTokens,
-                    thinkingLevel: config.thinkingLevel
+                    thinkingLevel: selection.thinkingLevel
+                )
+            )
+        case "openrouter":
+            let maxTokens = selection.maxOutputTokens.flatMap { $0 > 0 ? $0 : nil }
+            return OpenRouterRewriteProvider(
+                config: OpenRouterConfig(
+                    apiKey: selection.apiKey,
+                    modelId: selection.modelId,
+                    temperature: selection.temperature ?? 0.2,
+                    maxOutputTokens: maxTokens
                 )
             )
         default:
-            throw VoxError.internalError("Unsupported rewrite provider: \(config.provider)")
+            throw VoxError.internalError("Unsupported rewrite provider: \(selection.id)")
         }
     }
 }
