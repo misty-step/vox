@@ -12,5 +12,8 @@ Use Release Please (GitHub Action) with conventional commits. Release PR updates
 
 ## Consequences
 - Commit messages must follow the existing `feat:`/`fix:`/`chore:` prefixes.
-- Version bumps follow SemVer based on commit type.
+- SemVer mapping is conventional-commit based:
+  - `feat:` → minor
+  - `fix:`/`perf:` → patch
+  - `!` or `BREAKING CHANGE` → major
 - Release PR becomes the audit trail for changes.
