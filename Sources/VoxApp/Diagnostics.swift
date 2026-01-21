@@ -9,6 +9,8 @@ enum Diagnostics {
         case off = 3
     }
 
+    private static let currentLogLevel = logLevel(from: ProcessInfo.processInfo.environment)
+
     static var alertsEnabled: Bool {
         ProcessInfo.processInfo.environment["VOX_DEBUG_ALERTS"] == "1"
     }
@@ -48,20 +50,16 @@ enum Diagnostics {
     }
 
     static func error(_ message: String) {
-        guard shouldLog(.error) else {
-            if alertsEnabled {
-                showAlert(title: "Vox Error", message: message)
-            }
-            return
+        if shouldLog(.error) {
+            print("[Vox][error][\(timestamp())] \(message)")
         }
-        print("[Vox][error][\(timestamp())] \(message)")
         if alertsEnabled {
             showAlert(title: "Vox Error", message: message)
         }
     }
 
     private static func shouldLog(_ level: LogLevel) -> Bool {
-        shouldLog(level, env: ProcessInfo.processInfo.environment)
+        level.rawValue >= currentLogLevel.rawValue
     }
 
     private static func timestamp() -> String {
