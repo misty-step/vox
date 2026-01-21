@@ -47,30 +47,25 @@ struct AppConfig: Codable {
                 throw VoxError.internalError("Rewrite provider is required.")
             }
 
+            let rawConfig: RewriteProviderConfig
             if let providers {
                 guard let match = providers.first(where: { $0.normalizedId == selectedId }) else {
                     throw VoxError.internalError("Missing rewrite provider config for '\(selectedId)'.")
                 }
-                let apiKey = match.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                let modelId = match.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !apiKey.isEmpty else {
-                    throw VoxError.internalError("Missing API key for rewrite provider '\(selectedId)'.")
-                }
-                guard !modelId.isEmpty else {
-                    throw VoxError.internalError("Missing model id for rewrite provider '\(selectedId)'.")
-                }
-                return RewriteProviderSelection(
+                rawConfig = match
+            } else {
+                rawConfig = RewriteProviderConfig(
                     id: selectedId,
-                    apiKey: apiKey,
-                    modelId: modelId,
-                    temperature: match.temperature,
-                    maxOutputTokens: match.maxOutputTokens,
-                    thinkingLevel: match.thinkingLevel
+                    apiKey: apiKey ?? "",
+                    modelId: modelId ?? "",
+                    temperature: temperature,
+                    maxOutputTokens: maxOutputTokens,
+                    thinkingLevel: thinkingLevel
                 )
             }
 
-            let apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let modelId = modelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let apiKey = rawConfig.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let modelId = rawConfig.modelId.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !apiKey.isEmpty else {
                 throw VoxError.internalError("Missing API key for rewrite provider '\(selectedId)'.")
             }
@@ -81,9 +76,9 @@ struct AppConfig: Codable {
                 id: selectedId,
                 apiKey: apiKey,
                 modelId: modelId,
-                temperature: temperature,
-                maxOutputTokens: maxOutputTokens,
-                thinkingLevel: thinkingLevel
+                temperature: rawConfig.temperature,
+                maxOutputTokens: rawConfig.maxOutputTokens,
+                thinkingLevel: rawConfig.thinkingLevel
             )
         }
     }
@@ -237,7 +232,6 @@ enum ConfigLoader {
 
         if let geminiKey = env["GEMINI_API_KEY"] {
             let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-pro-preview"
-            try GeminiModelPolicy.ensureSupported(rewriteModel)
             let temperature = Double(env["GEMINI_TEMPERATURE"] ?? "") ?? 0.2
             let requestedMaxTokens = Int(env["GEMINI_MAX_TOKENS"] ?? "")
             let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(

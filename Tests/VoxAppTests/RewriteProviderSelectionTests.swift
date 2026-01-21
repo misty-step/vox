@@ -107,7 +107,8 @@ final class RewriteProviderSelectionTests: XCTestCase {
             thinkingLevel: nil
         )
 
-        let provider = try ProviderFactory.makeRewrite(config: config)
+        let selection = try RewriteConfigResolver.resolve(config)
+        let provider = try ProviderFactory.makeRewrite(selection: selection)
 
         XCTAssertEqual(provider.id, "openrouter")
     }

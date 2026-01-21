@@ -20,8 +20,7 @@ enum ProviderFactory {
         }
     }
 
-    static func makeRewrite(config: AppConfig.RewriteConfig) throws -> RewriteProvider {
-        let selection = try RewriteConfigResolver.resolve(config)
+    static func makeRewrite(selection: RewriteProviderSelection) throws -> RewriteProvider {
         switch selection.id {
         case "gemini":
             let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(

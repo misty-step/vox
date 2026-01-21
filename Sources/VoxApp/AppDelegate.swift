@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appConfig = config
             let sttProvider = try ProviderFactory.makeSTT(config: config.stt)
             let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
-            let rewriteProvider = try ProviderFactory.makeRewrite(config: config.rewrite)
+            let rewriteProvider = try ProviderFactory.makeRewrite(selection: rewriteSelection)
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)
             let locale = config.stt.languageCode ?? Locale.current.identifier
