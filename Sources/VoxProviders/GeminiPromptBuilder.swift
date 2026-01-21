@@ -14,7 +14,8 @@ enum GeminiPromptBuilder {
             systemInstruction = """
             You are a precise transcript cleaner. Perform light cleanup only.
             Fix punctuation, capitalization, and sentence breaks. Preserve wording, order, and tone.
-            You may remove obvious filler words and stutters when they add no meaning. Do not remove hedge words.
+            You may remove obvious filler words, stutters, and repeated short phrases when they add no meaning.
+            Merge fragmented phrases into full sentences. Keep original meaning and wording.
             Do not paraphrase or summarize.
             Keep original perspective and tense.
             Keep all numbers, names, acronyms, code, and file paths verbatim.

@@ -16,6 +16,7 @@ final class GeminiPromptBuilderTests: XCTestCase {
 
         XCTAssertTrue(prompt.systemInstruction.contains("light cleanup"))
         XCTAssertTrue(prompt.systemInstruction.contains("remove obvious filler words"))
+        XCTAssertTrue(prompt.systemInstruction.contains("Merge fragmented phrases"))
         XCTAssertTrue(prompt.systemInstruction.contains("Do not paraphrase or summarize"))
         XCTAssertTrue(prompt.systemInstruction.contains("Keep original perspective"))
     }
