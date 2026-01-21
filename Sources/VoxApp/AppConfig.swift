@@ -51,15 +51,25 @@ struct AppConfig: Codable {
 }
 
 enum ConfigLoader {
+    enum Source {
+        case envLocal
+        case file
+    }
+
+    struct LoadedConfig {
+        let config: AppConfig
+        let source: Source
+    }
+
     static let configURL: URL = {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return home.appendingPathComponent("Documents/Vox/config.json")
     }()
 
-    static func load() throws -> AppConfig {
+    static func load() throws -> LoadedConfig {
         if let config = try loadFromDotEnv() {
             Diagnostics.info("Loaded config from .env.local")
-            return config
+            return LoadedConfig(config: config, source: .envLocal)
         }
 
         let fileManager = FileManager.default
@@ -72,7 +82,7 @@ enum ConfigLoader {
         var config = try JSONDecoder().decode(AppConfig.self, from: data)
         config.normalized()
         Diagnostics.info("Loaded config from \(configURL.path)")
-        return config
+        return LoadedConfig(config: config, source: .file)
     }
 
     static func save(_ config: AppConfig) throws {
@@ -143,7 +153,9 @@ enum ConfigLoader {
 
         let contextPath = env["VOX_CONTEXT_PATH"] ?? AppConfig.defaultContextPath
         let processingLevelValue = env["VOX_PROCESSING_LEVEL"] ?? env["VOX_REWRITE_LEVEL"] ?? ""
-        let processingLevel = ProcessingLevel(rawValue: processingLevelValue.lowercased()) ?? .light
+        let envProcessingLevel = ProcessingLevel(rawValue: processingLevelValue.lowercased())
+        let storedProcessingLevel = ProcessingLevelStore.load() ?? loadProcessingLevelFromConfigFile()
+        let processingLevel = envProcessingLevel ?? storedProcessingLevel ?? .light
 
         var config = AppConfig(
             stt: AppConfig.STTConfig(
@@ -167,5 +179,14 @@ enum ConfigLoader {
         )
         config.normalized()
         return config
+    }
+
+    private static func loadProcessingLevelFromConfigFile() -> ProcessingLevel? {
+        guard FileManager.default.fileExists(atPath: configURL.path),
+              let data = try? Data(contentsOf: configURL),
+              let config = try? JSONDecoder().decode(AppConfig.self, from: data) else {
+            return nil
+        }
+        return config.processingLevel
     }
 }
