@@ -20,6 +20,7 @@ Preferred: `.env.local`
 - Optional: `GEMINI_MODEL_ID`, `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS`, `GEMINI_THINKING_LEVEL`
 - Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
   - `VOX_PROCESSING_LEVEL` overrides menu selection; UI changes won’t persist until removed
+- Optional: `VOX_LOG_LEVEL` (debug | info | error | off; default: info)
 
 Fallback: `~/Documents/Vox/config.json`
 - Auto-generated on first run if missing
