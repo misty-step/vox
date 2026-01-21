@@ -105,22 +105,26 @@ private struct GeminiThinkingConfig: Encodable {
     let thinkingLevel: String
 }
 
-private struct GeminiResponse: Decodable {
+struct GeminiResponse: Decodable {
     let candidates: [GeminiCandidate]?
 
     var firstText: String? {
-        candidates?.first?.content.parts.first?.text
+        guard let parts = candidates?.first?.content.parts else {
+            return nil
+        }
+        let joined = parts.compactMap(\.text).joined()
+        return joined.isEmpty ? nil : joined
     }
 }
 
-private struct GeminiCandidate: Decodable {
+struct GeminiCandidate: Decodable {
     let content: GeminiContentResponse
 }
 
-private struct GeminiContentResponse: Decodable {
+struct GeminiContentResponse: Decodable {
     let parts: [GeminiPartResponse]
 }
 
-private struct GeminiPartResponse: Decodable {
+struct GeminiPartResponse: Decodable {
     let text: String?
 }
