@@ -1,0 +1,9 @@
+{
+  "name": "vox",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @vox/web dev",
+    "dev:gateway": "pnpm --filter @vox/gateway dev"
+  }
+}
