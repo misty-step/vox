@@ -6,14 +6,16 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/gateway:
     dependencies:
       '@clerk/nextjs':
         specifier: latest
         version: 6.36.9(next@16.1.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       convex:
         specifier: latest
-        version: 1.31.5(@clerk/clerk-react@5.59.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
+        version: 1.31.6(@clerk/clerk-react@5.59.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
       next:
         specifier: latest
         version: 16.1.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -26,6 +28,18 @@ importers:
       stripe:
         specifier: latest
         version: 20.2.0
+
+  apps/web:
+    dependencies:
+      next:
+        specifier: latest
+        version: 16.1.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react:
+        specifier: latest
+        version: 19.2.3
+      react-dom:
+        specifier: latest
+        version: 19.2.3(react@19.2.3)
 
 packages:
 
@@ -435,8 +449,8 @@ packages:
   client-only@0.0.1:
     resolution: {integrity: sha512-IV3Ou0jSMzZrd3pZ48nLkT9DA7Ag1pnPzaiQhpW7c3RbcqqzvzzVu+L8gfqMp/8IM2MQtSiqaCxrrcfu8I8rMA==}
 
-  convex@1.31.5:
-    resolution: {integrity: sha512-E1IuJKFwMCHDToNGukBPs6c7RFaarR3t8chLF9n98TM5/Tgmj8lM6l7sKM1aJ3VwqGaB4wbeUAPY8osbCOXBhQ==}
+  convex@1.31.6:
+    resolution: {integrity: sha512-9cIsOzepa3s9DURRF+fZHxbNuzLgilg9XGQCc45v0Xx4FemqeIezpPFSJF9WHC9ckk43TDUUXLecvLVt9djPkw==}
     engines: {node: '>=18.0.0', npm: '>=7.0.0'}
     hasBin: true
     peerDependencies:
@@ -929,7 +943,7 @@ snapshots:
 
   client-only@0.0.1: {}
 
-  convex@1.31.5(@clerk/clerk-react@5.59.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3):
+  convex@1.31.6(@clerk/clerk-react@5.59.5(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.8.1

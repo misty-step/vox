@@ -1,8 +1,9 @@
 {
   "name": "vox",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
+    "preinstall": "node ./scripts/ensure-pnpm.js",
     "dev:web": "pnpm --filter @vox/web dev",
     "dev:gateway": "pnpm --filter @vox/gateway dev"
   }
