@@ -18,6 +18,7 @@ Measure twice, cut once. Planning docs only, no code.
 - `docs/plan/testing-and-eval.md` — test lists + metrics
 - `docs/plan/processing-levels.md` — rewrite levels + config
 - `docs/plan/roadmap-mvp.md` — milestones, exit criteria, risks
+- `docs/plan/monorepo-layout.md` — repo layout + boundaries
 
 ## Rules of the road
 - Prefer deletion over addition

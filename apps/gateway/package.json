@@ -1,0 +1,19 @@
+{
+  "name": "@vox/gateway",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "latest",
+    "convex": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "stripe": "latest"
+  },
+  "packageManager": "pnpm@10.22.0+sha512.bf049efe995b28f527fd2b41ae0474ce29186f7edcb3bf545087bd61fbbebb2bf75362d1307fda09c2d288e1e499787ac12d4fcb617a974718a6051f2eee741c"
+}

@@ -4,3 +4,6 @@
 .swiftpm
 DerivedData
 *.xcuserstate
+node_modules
+.next
+out

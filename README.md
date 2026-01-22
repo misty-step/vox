@@ -56,6 +56,11 @@ Fallback: `~/Documents/Vox/config.json`
 - Architecture: `docs/architecture.md`
 - Quality gates: `docs/quality.md`
 - ADRs: `docs/adr/`
+- Monorepo layout: `docs/plan/monorepo-layout.md`
+
+## Monorepo apps
+- `apps/web` — marketing + download + checkout UI (Next.js)
+- `apps/gateway` — API gateway + webhooks (Next.js, Node runtime)
 
 ## Quality gates
 - Hooks: `git config core.hooksPath .githooks`
