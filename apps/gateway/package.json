@@ -5,19 +5,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "^2.29.4",
     "@clerk/nextjs": "latest",
     "convex": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "stripe": "latest"
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
-    "typescript": "latest"
+    "@vitejs/plugin-react": "^5.1.2",
+    "msw": "^2.12.7",
+    "typescript": "latest",
+    "vitest": "^4.0.18"
   }
 }

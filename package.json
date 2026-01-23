@@ -5,6 +5,13 @@
   "scripts": {
     "preinstall": "node ./scripts/ensure-pnpm.js",
     "dev:web": "pnpm --filter @vox/web dev",
-    "dev:gateway": "pnpm --filter @vox/gateway dev"
+    "dev:gateway": "pnpm --filter @vox/gateway dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:swift": "swift test",
+    "test:gateway": "pnpm --filter @vox/gateway test",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "smoke": "./scripts/smoke-test.sh"
   }
 }
