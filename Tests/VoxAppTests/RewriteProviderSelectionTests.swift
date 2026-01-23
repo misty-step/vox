@@ -7,7 +7,7 @@ final class RewriteProviderSelectionTests: XCTestCase {
             provider: "gemini",
             providers: nil,
             apiKey: "test-key",
-            modelId: "gemini-3-pro-preview",
+            modelId: "gemini-3-flash-preview",
             temperature: 0.1,
             maxOutputTokens: 123,
             thinkingLevel: "high"
@@ -17,7 +17,7 @@ final class RewriteProviderSelectionTests: XCTestCase {
 
         XCTAssertEqual(selection.id, "gemini")
         XCTAssertEqual(selection.apiKey, "test-key")
-        XCTAssertEqual(selection.modelId, "gemini-3-pro-preview")
+        XCTAssertEqual(selection.modelId, "gemini-3-flash-preview")
         XCTAssertEqual(selection.temperature, 0.1)
         XCTAssertEqual(selection.maxOutputTokens, 123)
         XCTAssertEqual(selection.thinkingLevel, "high")
@@ -28,7 +28,7 @@ final class RewriteProviderSelectionTests: XCTestCase {
             RewriteProviderConfig(
                 id: "gemini",
                 apiKey: "gemini-key",
-                modelId: "gemini-3-pro-preview",
+                modelId: "gemini-3-flash-preview",
                 temperature: 0.2,
                 maxOutputTokens: 100,
                 thinkingLevel: nil
@@ -111,5 +111,21 @@ final class RewriteProviderSelectionTests: XCTestCase {
         let provider = try ProviderFactory.makeRewrite(selection: selection)
 
         XCTAssertEqual(provider.id, "openrouter")
+    }
+
+    func testNormalizesGeminiModelIdToPreview() throws {
+        let config = AppConfig.RewriteConfig(
+            provider: "gemini",
+            providers: nil,
+            apiKey: "test-key",
+            modelId: "gemini-3-flash",
+            temperature: 0.1,
+            maxOutputTokens: 123,
+            thinkingLevel: nil
+        )
+
+        let selection = try RewriteConfigResolver.resolve(config)
+
+        XCTAssertEqual(selection.modelId, "gemini-3-flash-preview")
     }
 }

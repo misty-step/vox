@@ -5,7 +5,8 @@ final class GeminiModelPolicyTests: XCTestCase {
     func testAcceptsGemini3ProAndFlash() throws {
         XCTAssertTrue(GeminiModelPolicy.isSupported("gemini-3-pro-preview"))
         XCTAssertTrue(GeminiModelPolicy.isSupported("gemini-3-flash-preview"))
-        XCTAssertNoThrow(try GeminiModelPolicy.ensureSupported("gemini-3-pro-preview"))
+        XCTAssertTrue(GeminiModelPolicy.isSupported("gemini-3-flash"))
+        XCTAssertNoThrow(try GeminiModelPolicy.ensureSupported("gemini-3-flash-preview"))
     }
 
     func testRejectsNonGemini3OrImageModels() {
@@ -14,10 +15,14 @@ final class GeminiModelPolicyTests: XCTestCase {
     }
 
     func testEffectiveMaxTokensClampsToLimit() {
-        let max = GeminiModelPolicy.maxOutputTokens(for: "gemini-3-pro-preview")
+        let max = GeminiModelPolicy.maxOutputTokens(for: "gemini-3-flash-preview")
 
-        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: nil, modelId: "gemini-3-pro-preview"), max)
-        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: max + 1, modelId: "gemini-3-pro-preview"), max)
-        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: max - 1, modelId: "gemini-3-pro-preview"), max - 1)
+        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: nil, modelId: "gemini-3-flash-preview"), max)
+        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: max + 1, modelId: "gemini-3-flash-preview"), max)
+        XCTAssertEqual(GeminiModelPolicy.effectiveMaxOutputTokens(requested: max - 1, modelId: "gemini-3-flash-preview"), max - 1)
+    }
+
+    func testNormalizesFlashToPreview() {
+        XCTAssertEqual(GeminiModelPolicy.normalizedModelId("gemini-3-flash"), "gemini-3-flash-preview")
     }
 }

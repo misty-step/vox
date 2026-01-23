@@ -32,4 +32,17 @@ enum GeminiModelPolicy {
         }
         return min(requested, maxTokens)
     }
+
+    static func normalizedModelId(_ modelId: String) -> String {
+        let trimmed = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.lowercased()
+        switch normalized {
+        case "gemini-3-flash":
+            return "gemini-3-flash-preview"
+        case "gemini-3-pro":
+            return "gemini-3-pro-preview"
+        default:
+            return trimmed
+        }
+    }
 }
