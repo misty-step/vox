@@ -1,6 +1,7 @@
 {
   "name": "vox",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "preinstall": "node ./scripts/ensure-pnpm.js",
@@ -12,6 +13,10 @@
     "test:gateway": "pnpm --filter @vox/gateway test",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "smoke": "./scripts/smoke-test.sh"
+    "smoke": "./scripts/smoke-test.sh",
+    "upload-release": "node scripts/upload-release.mjs"
+  },
+  "devDependencies": {
+    "@vercel/blob": "^0.27.0"
   }
 }

@@ -14,3 +14,7 @@ out
 
 # Temporary design exploration
 .design-catalogue/
+.vercel
+
+# Build artifacts
+dist/

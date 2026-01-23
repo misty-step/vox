@@ -1,21 +1,22 @@
 import "./globals.css";
-import { Fraunces, Space_Grotesk } from "next/font/google";
+import { Inter } from "next/font/google";
 
-const bodyFont = Space_Grotesk({
+const inter = Inter({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-body"
-});
-
-const displayFont = Fraunces({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-display"
+  variable: "--font-inter"
 });
 
 export const metadata = {
-  title: "Vox",
-  description: "Invisible editor for macOS."
+  title: "Vox - Say it messy. Get it clean.",
+  description:
+    "Dictation that cleans up after you. Talk naturally, get polished text at your cursor. Fast.",
+  openGraph: {
+    title: "Vox - Say it messy. Get it clean.",
+    description:
+      "Dictation that cleans up after you. Talk naturally, get polished text at your cursor. Fast.",
+    type: "website"
+  }
 };
 
 export default function RootLayout({
@@ -24,7 +25,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme');
+                  if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                  }
+                } catch (e) {}
+              })();
+            `
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
