@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/misty-step/vox/compare/v1.0.0...v1.1.0) (2026-01-23)
+
+
+### Features
+
+* enable download button with release pipeline ([3f4c293](https://github.com/misty-step/vox/commit/3f4c293bd912ee35f001e5f02570d4acef4fcb0d))
+
 ## 1.0.0 (2026-01-21)
 
 
