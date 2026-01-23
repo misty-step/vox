@@ -5,8 +5,9 @@ enum Diagnostics {
     enum LogLevel: Int {
         case debug = 0
         case info = 1
-        case error = 2
-        case off = 3
+        case warning = 2
+        case error = 3
+        case off = 4
     }
 
     private static let currentLogLevel = logLevel(from: ProcessInfo.processInfo.environment)
@@ -26,6 +27,8 @@ enum Diagnostics {
             return .debug
         case "info":
             return .info
+        case "warning":
+            return .warning
         case "error":
             return .error
         case "off":
@@ -47,6 +50,11 @@ enum Diagnostics {
     static func debug(_ message: String) {
         guard shouldLog(.debug) else { return }
         print("[Vox][debug][\(timestamp())] \(message)")
+    }
+
+    static func warning(_ message: String) {
+        guard shouldLog(.warning) else { return }
+        print("[Vox][warning][\(timestamp())] \(message)")
     }
 
     static func error(_ message: String) {
