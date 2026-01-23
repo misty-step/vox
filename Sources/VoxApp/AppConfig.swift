@@ -183,15 +183,23 @@ enum ConfigLoader {
                 fileFormat: nil
             ),
             rewrite: AppConfig.RewriteConfig(
-                provider: "gemini",
+                provider: "openrouter",
                 providers: [
+                    RewriteProviderConfig(
+                        id: "openrouter",
+                        apiKey: "YOUR_OPENROUTER_API_KEY",
+                        modelId: "xiaomi/mimo-v2-flash",
+                        temperature: 0.2,
+                        maxOutputTokens: 4096,
+                        thinkingLevel: nil
+                    ),
                     RewriteProviderConfig(
                         id: "gemini",
                         apiKey: "YOUR_GEMINI_API_KEY",
-                        modelId: "gemini-3-pro-preview",
+                        modelId: "gemini-3-flash-preview",
                         temperature: 0.2,
-                        maxOutputTokens: GeminiModelPolicy.maxOutputTokens(for: "gemini-3-pro-preview"),
-                        thinkingLevel: "high"
+                        maxOutputTokens: GeminiModelPolicy.maxOutputTokens(for: "gemini-3-flash-preview"),
+                        thinkingLevel: nil
                     )
                 ],
                 apiKey: nil,
@@ -231,7 +239,7 @@ enum ConfigLoader {
         var rewriteProviders: [RewriteProviderConfig] = []
 
         if let geminiKey = env["GEMINI_API_KEY"] {
-            let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-pro-preview"
+            let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-flash-preview"
             let temperature = Double(env["GEMINI_TEMPERATURE"] ?? "") ?? 0.2
             let requestedMaxTokens = Int(env["GEMINI_MAX_TOKENS"] ?? "")
             let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
@@ -252,7 +260,7 @@ enum ConfigLoader {
         }
 
         if let openRouterKey = env["OPENROUTER_API_KEY"] {
-            let modelId = env["OPENROUTER_MODEL_ID"] ?? ""
+            let modelId = env["OPENROUTER_MODEL_ID"] ?? "xiaomi/mimo-v2-flash"
             let temperature = Double(env["OPENROUTER_TEMPERATURE"] ?? "")
             let maxTokens = Int(env["OPENROUTER_MAX_TOKENS"] ?? "")
             rewriteProviders.append(

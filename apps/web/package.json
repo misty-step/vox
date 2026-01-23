@@ -1,0 +1,23 @@
+{
+  "name": "@vox/web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.4",
+    "typescript": "latest"
+  }
+}

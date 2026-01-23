@@ -25,7 +25,8 @@ jobs:
           path: .
           base: ${{ github.event.before }}
           head: ${{ github.sha }}
-  build:
+
+  swift:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +46,49 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+        env:
+          # Provide dummy env vars for build (not used at build time)
+          CLERK_SECRET_KEY: sk_test_placeholder
+          CONVEX_URL: https://placeholder.convex.cloud
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Build
+        run: pnpm build

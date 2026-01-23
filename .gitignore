@@ -1,6 +1,20 @@
 .env*
+!.env.example
 .DS_Store
 .build
 .swiftpm
 DerivedData
 *.xcuserstate
+node_modules
+.next
+out
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# Temporary design exploration
+.design-catalogue/
+.vercel
+
+# Build artifacts
+dist/

@@ -56,7 +56,10 @@ public final class GeminiRewriteProvider: RewriteProvider {
         urlRequest.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
         urlRequest.httpBody = try JSONEncoder().encode(payload)
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let sessionConfig = URLSessionConfiguration.default
+        sessionConfig.timeoutIntervalForRequest = 10
+        let session = URLSession(configuration: sessionConfig)
+        let (data, response) = try await session.data(for: urlRequest)
         guard let http = response as? HTTPURLResponse else {
             throw RewriteError.network("Missing HTTP response.")
         }
