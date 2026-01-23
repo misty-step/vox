@@ -8,3 +8,9 @@ DerivedData
 node_modules
 .next
 out
+
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# Temporary design exploration
+.design-catalogue/

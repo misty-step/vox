@@ -17,8 +17,9 @@ Status: working prototype.
 Preferred: `.env.local`
 - Required: `ELEVENLABS_API_KEY`
 - Rewrite provider: `VOX_REWRITE_PROVIDER` (gemini | openrouter, default: gemini)
+- Optional gateway: `VOX_GATEWAY_URL`, `VOX_GATEWAY_TOKEN` (routes STT + rewrite via gateway)
 - Gemini: `GEMINI_API_KEY` required when provider=gemini
-- Optional (Gemini): `GEMINI_MODEL_ID` (gemini-3-pro* or gemini-3-flash*), `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS` (default: 65536), `GEMINI_THINKING_LEVEL`
+- Optional (Gemini): `GEMINI_MODEL_ID` (default: `gemini-3-flash-preview`, accepts gemini-3-pro* or gemini-3-flash*), `GEMINI_TEMPERATURE`, `GEMINI_MAX_TOKENS` (default: 65536), `GEMINI_THINKING_LEVEL`
 - OpenRouter: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL_ID` required when provider=openrouter
 - Optional (OpenRouter): `OPENROUTER_TEMPERATURE`, `OPENROUTER_MAX_TOKENS`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
