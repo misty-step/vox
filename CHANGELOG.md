@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/misty-step/vox/compare/v1.1.0...v1.2.0) (2026-01-24)
+
+
+### Features
+
+* **gateway:** enforce entitlements on STT and rewrite endpoints ([#43](https://github.com/misty-step/vox/issues/43)) ([04b0267](https://github.com/misty-step/vox/commit/04b0267880147e7772d8843ec1f74c7135aea3bf))
+
 ## [1.1.0](https://github.com/misty-step/vox/compare/v1.0.0...v1.1.0) (2026-01-23)
 
 
