@@ -1,12 +1,11 @@
 "use client";
 
-import { SignIn, useAuth, useClerk } from "@clerk/nextjs";
+import { SignIn, useAuth } from "@clerk/nextjs";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 function DesktopAuthContent() {
   const { isSignedIn, getToken } = useAuth();
-  const { session } = useClerk();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"loading" | "signin" | "redirecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,7 +27,8 @@ function DesktopAuthContent() {
           return;
         }
 
-        const redirectUri = searchParams.get("redirect") || "vox://auth";
+        const redirectParam = searchParams.get("redirect");
+        const redirectUri = redirectParam?.startsWith("vox://") ? redirectParam : "vox://auth";
         const deepLink = `${redirectUri}?token=${encodeURIComponent(token)}`;
 
         window.location.href = deepLink;
@@ -39,7 +39,7 @@ function DesktopAuthContent() {
     }
 
     redirectToApp();
-  }, [isSignedIn, getToken, session, searchParams]);
+  }, [isSignedIn, getToken, searchParams]);
 
   if (status === "loading") {
     return <AuthCard><p>Loading...</p></AuthCard>;

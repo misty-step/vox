@@ -1,11 +1,12 @@
 import Foundation
 import Security
+import VoxCore
 
 enum KeychainHelper {
     private static let service = "com.vox.auth"
     private static let account = "gateway_token"
 
-    static func save(token: String) {
+    static func save(token: String) throws {
         let data = Data(token.utf8)
         let query = baseQuery()
         var attributes = query
@@ -20,10 +21,14 @@ enum KeychainHelper {
             if updateStatus == errSecSuccess {
                 Diagnostics.info("Updated auth token in keychain.")
             } else {
-                logError("Failed to update auth token", status: updateStatus)
+                let message = errorMessage("Failed to update auth token", status: updateStatus)
+                Diagnostics.error(message)
+                throw VoxError.internalError(message)
             }
         default:
-            logError("Failed to save auth token", status: status)
+            let message = errorMessage("Failed to save auth token", status: status)
+            Diagnostics.error(message)
+            throw VoxError.internalError(message)
         }
     }
 
@@ -46,18 +51,21 @@ enum KeychainHelper {
         case errSecItemNotFound:
             return nil
         default:
-            logError("Failed to load auth token", status: status)
+            let message = errorMessage("Failed to load auth token", status: status)
+            Diagnostics.error(message)
             return nil
         }
     }
 
-    static func delete() {
+    static func delete() throws {
         let status = SecItemDelete(baseQuery() as CFDictionary)
         switch status {
         case errSecSuccess, errSecItemNotFound:
             Diagnostics.info("Cleared auth token from keychain.")
         default:
-            logError("Failed to delete auth token", status: status)
+            let message = errorMessage("Failed to delete auth token", status: status)
+            Diagnostics.error(message)
+            throw VoxError.internalError(message)
         }
     }
 
@@ -69,8 +77,8 @@ enum KeychainHelper {
         ]
     }
 
-    private static func logError(_ message: String, status: OSStatus) {
+    private static func errorMessage(_ prefix: String, status: OSStatus) -> String {
         let description = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
-        Diagnostics.error("\(message): \(description)")
+        return "\(prefix): \(description)"
     }
 }

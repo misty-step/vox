@@ -46,14 +46,22 @@ final class AuthManager: ObservableObject {
             return
         }
 
-        KeychainHelper.save(token: token)
-        state = .authenticated(token: token)
-        Diagnostics.info("Stored auth token from deep link.")
+        do {
+            try KeychainHelper.save(token: token)
+            state = .authenticated(token: token)
+            Diagnostics.info("Stored auth token from deep link.")
+        } catch {
+            Diagnostics.warning("Failed to save auth token: \(error.localizedDescription)")
+        }
     }
 
     func signOut() {
-        KeychainHelper.delete()
-        state = .unauthenticated
-        Diagnostics.info("Signed out.")
+        do {
+            try KeychainHelper.delete()
+            state = .unauthenticated
+            Diagnostics.info("Signed out.")
+        } catch {
+            Diagnostics.warning("Failed to delete auth token: \(error.localizedDescription)")
+        }
     }
 }
