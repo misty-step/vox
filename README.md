@@ -42,6 +42,19 @@ Fallback: `~/Documents/Vox/config.json`
 - If paste is blocked, Vox keeps text on clipboard
 - History artifacts: `~/Documents/Vox/history/YYYY-MM-DD/<sessionId>` (raw/rewrite/final + metadata)
 
+## Auth (gateway mode)
+When using `VOX_GATEWAY_URL`, authentication is required:
+1. First launch shows "Sign In Required" paywall
+2. Click "Sign In" → opens browser for Clerk auth
+3. After sign-in, browser redirects to `vox://auth?token=...`
+4. Token stored in Keychain, entitlements fetched from gateway
+5. If subscription expires, paywall shows "Upgrade Now"
+
+Status bar badges:
+- 🔑 = sign-in required
+- 🔒 = subscription expired
+- ⚠️ = connection error or grace period
+
 ## Paste controls
 - `VOX_PASTE_RESTORE=0` keep clipboard contents
 - `VOX_PASTE_RESTORE_DELAY_MS=500` delay restore
