@@ -49,6 +49,17 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
     <string>${APP_NAME}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>${BUNDLE_ID}</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>vox</string>
+            </array>
+        </dict>
+    </array>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>

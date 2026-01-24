@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appConfig: AppConfig?
     private var configSource: ConfigLoader.Source?
     private var processingLevelOverride: ProcessingLevelOverride?
+    private let authManager = AuthManager.shared
     private let logger = Logger(subsystem: "vox", category: "app")
 
     @MainActor
@@ -124,6 +125,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             logger.error("Startup failed: \(String(describing: error))")
             showStartupError(String(describing: error))
+        }
+    }
+
+    @MainActor
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let authURLs = urls.filter { url in
+            url.scheme == "vox" && (url.host == "auth" || url.path == "/auth")
+        }
+        guard !authURLs.isEmpty else { return }
+        for url in authURLs {
+            authManager.handleDeepLink(url: url)
         }
     }
 
