@@ -32,14 +32,9 @@ export async function getEntitlement(
     email,
   });
 
-  // Get entitlement, create trial if none exists
-  let entitlement = await convex.query(api.entitlements.getByUserId, { userId });
-
-  if (!entitlement) {
-    entitlement = await convex.mutation(api.entitlements.getOrCreateTrial, {
-      userId,
-    });
-  }
+  const entitlement = await convex.mutation(api.entitlements.getOrCreateTrial, {
+    userId,
+  });
 
   if (!entitlement) {
     return { ok: false, error: "entitlement_creation_failed", statusCode: 500 };

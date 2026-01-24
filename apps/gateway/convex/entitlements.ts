@@ -59,29 +59,6 @@ export const getOrCreateTrial = mutation({
   },
 });
 
-/** @deprecated Use getOrCreateTrial instead. */
-export const createTrial = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("entitlements")
-      .withIndex("by_user_id", (q) => q.eq("userId", args.userId))
-      .unique();
-
-    if (existing) {
-      return existing._id;
-    }
-
-    return await ctx.db.insert("entitlements", {
-      userId: args.userId,
-      plan: "trial",
-      status: "active",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  },
-});
-
 export const activateSubscription = mutation({
   args: {
     userId: v.id("users"),
