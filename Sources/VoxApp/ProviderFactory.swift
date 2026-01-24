@@ -67,10 +67,18 @@ enum ProviderFactory {
         guard let url = URL(string: rawURL), url.scheme != nil else {
             throw VoxError.internalError("Invalid VOX_GATEWAY_URL: \(rawURL)")
         }
-        guard let rawToken = env["VOX_GATEWAY_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawToken.isEmpty else {
-            throw VoxError.internalError("Missing VOX_GATEWAY_TOKEN for gateway auth.")
+        let keychainToken: String? = {
+            if Thread.isMainThread {
+                return MainActor.assumeIsolated { AuthManager.shared.token }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return KeychainHelper.load()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }()
+        let envToken = env["VOX_GATEWAY_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawToken = (keychainToken?.isEmpty == false) ? keychainToken : envToken
+        guard let token = rawToken, !token.isEmpty else {
+            throw VoxError.internalError("Missing gateway auth token (Keychain or VOX_GATEWAY_TOKEN).")
         }
-        return GatewayClient(baseURL: url, token: rawToken)
+        return GatewayClient(baseURL: url, token: token)
     }
 }
