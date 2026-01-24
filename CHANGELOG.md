@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/misty-step/vox/compare/v1.2.0...v1.3.0) (2026-01-24)
+
+
+### Features
+
+* **auth:** add client auth with Keychain storage + deep link flow ([#47](https://github.com/misty-step/vox/issues/47)) ([d5d5002](https://github.com/misty-step/vox/commit/d5d50021a0fc8275a5ce67cf03fc8f7325fb4521))
+
 ## [1.2.0](https://github.com/misty-step/vox/compare/v1.1.0...v1.2.0) (2026-01-24)
 
 
