@@ -5,6 +5,7 @@ export type EntitlementInfo = {
   status: string;
   features: string[];
   currentPeriodEnd?: number;
+  stripeCustomerId?: string;
 };
 
 export type RequireEntitlementResult =
@@ -51,6 +52,7 @@ export async function getEntitlement(
     status: entitlement.status,
     features,
     currentPeriodEnd: entitlement.currentPeriodEnd,
+    stripeCustomerId: entitlement.stripeCustomerId,
   };
 }
 

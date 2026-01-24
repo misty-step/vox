@@ -4,7 +4,7 @@ import { getConvexClient, api } from "../../../../lib/convex";
 export const runtime = "nodejs";
 
 function getStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
   if (!key) {
     throw new Error("STRIPE_SECRET_KEY not configured");
   }
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "missing_signature" }, { status: 400 });
   }
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
   if (!webhookSecret) {
     console.error("STRIPE_WEBHOOK_SECRET not configured");
     return Response.json({ error: "webhook_not_configured" }, { status: 501 });
@@ -39,6 +39,14 @@ export async function POST(request: Request) {
   const convex = getConvexClient();
 
   try {
+    const alreadyProcessed = await convex.query(api.stripeEvents.isEventProcessed, {
+      eventId: event.id,
+    });
+
+    if (alreadyProcessed) {
+      return Response.json({ received: true, skipped: true });
+    }
+
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -59,9 +67,26 @@ export async function POST(request: Request) {
         break;
       }
 
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoicePaymentSucceeded(convex, invoice);
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoicePaymentFailed(convex, invoice);
+        break;
+      }
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
+
+    await convex.mutation(api.stripeEvents.markEventProcessed, {
+      eventId: event.id,
+      eventType: event.type,
+    });
   } catch (err) {
     console.error(`Error handling ${event.type}:`, err);
     return Response.json({ error: "handler_failed" }, { status: 500 });
@@ -139,6 +164,64 @@ async function handleSubscriptionDeleted(
   } catch (err) {
     console.error(`Could not cancel subscription ${subscription.id}:`, err);
   }
+}
+
+async function handleInvoicePaymentSucceeded(
+  convex: ReturnType<typeof getConvexClient>,
+  invoice: Stripe.Invoice
+) {
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  if (!subscriptionId) {
+    console.log(`No subscription on invoice ${invoice.id}`);
+    return;
+  }
+
+  const periodEnd = invoice.lines.data[0]?.period?.end;
+  if (!periodEnd) {
+    console.log(`No period end on invoice ${invoice.id}`);
+    return;
+  }
+
+  try {
+    await convex.mutation(api.entitlements.updateSubscription, {
+      stripeSubscriptionId: subscriptionId,
+      status: "active",
+      currentPeriodEnd: periodEnd * 1000,
+    });
+    console.log(`Updated subscription ${subscriptionId} period end to ${periodEnd}`);
+  } catch (err) {
+    console.log(`Could not update subscription ${subscriptionId}:`, err);
+  }
+}
+
+async function handleInvoicePaymentFailed(
+  convex: ReturnType<typeof getConvexClient>,
+  invoice: Stripe.Invoice
+) {
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  if (!subscriptionId) {
+    console.log(`No subscription on invoice ${invoice.id}`);
+    return;
+  }
+
+  try {
+    await convex.mutation(api.entitlements.updateSubscription, {
+      stripeSubscriptionId: subscriptionId,
+      status: "past_due",
+    });
+    console.log(`Updated subscription ${subscriptionId} to past_due`);
+  } catch (err) {
+    console.log(`Could not update subscription ${subscriptionId}:`, err);
+  }
+}
+
+function getInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  if (!invoice.subscription) {
+    return null;
+  }
+  return typeof invoice.subscription === "string"
+    ? invoice.subscription
+    : invoice.subscription.id;
 }
 
 function mapSubscriptionStatus(

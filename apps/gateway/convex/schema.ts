@@ -20,4 +20,10 @@ export default defineSchema({
   }).index("by_user_id", ["userId"])
     .index("by_stripe_customer", ["stripeCustomerId"])
     .index("by_stripe_subscription", ["stripeSubscriptionId"]),
+
+  processedStripeEvents: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    processedAt: v.number(),
+  }).index("by_event_id", ["eventId"]),
 });
