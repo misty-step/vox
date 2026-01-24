@@ -33,16 +33,37 @@ export async function POST(request: Request) {
   }
 
   const defaultPriceId = process.env.STRIPE_PRICE_ID?.trim();
-  const priceId = body.priceId?.trim() || defaultPriceId;
-  if (!priceId) {
+  if (!defaultPriceId) {
     return Response.json({ error: "price_not_configured" }, { status: 501 });
   }
 
+  const clientPriceId = body.priceId?.trim();
+  if (clientPriceId && clientPriceId !== defaultPriceId) {
+    return Response.json({ error: "invalid_price_id" }, { status: 400 });
+  }
+
   const defaultAppUrl = process.env.VOX_APP_URL?.trim();
+  if (!defaultAppUrl) {
+    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+  }
+
+  let appOrigin: string;
+  try {
+    appOrigin = new URL(defaultAppUrl).origin;
+  } catch (error) {
+    console.error("Invalid VOX_APP_URL:", error);
+    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+  }
+
   const successUrl = body.successUrl?.trim() || defaultAppUrl;
   const cancelUrl = body.cancelUrl?.trim() || defaultAppUrl;
-  if (!successUrl || !cancelUrl) {
-    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+  if (
+    !successUrl ||
+    !cancelUrl ||
+    !isAllowedRedirectUrl(successUrl, appOrigin) ||
+    !isAllowedRedirectUrl(cancelUrl, appOrigin)
+  ) {
+    return Response.json({ error: "invalid_redirect_url" }, { status: 400 });
   }
 
   const entitlement = await getEntitlement(auth.subject, auth.email);
@@ -65,7 +86,7 @@ export async function POST(request: Request) {
     const stripe = new Stripe(stripeKey);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: defaultPriceId, quantity: 1 }],
       client_reference_id: auth.subject,
       success_url: successUrl,
       cancel_url: cancelUrl,
@@ -81,5 +102,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Stripe checkout session failed:", error);
     return Response.json({ error: "stripe_checkout_failed" }, { status: 502 });
+  }
+}
+
+function isAllowedRedirectUrl(candidate: string, appOrigin: string) {
+  try {
+    return new URL(candidate).origin === appOrigin;
+  } catch {
+    return false;
   }
 }

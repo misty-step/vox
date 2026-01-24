@@ -36,8 +36,9 @@ export async function getEntitlement(
   let entitlement = await convex.query(api.entitlements.getByUserId, { userId });
 
   if (!entitlement) {
-    await convex.mutation(api.entitlements.createTrial, { userId });
-    entitlement = await convex.query(api.entitlements.getByUserId, { userId });
+    entitlement = await convex.mutation(api.entitlements.getOrCreateTrial, {
+      userId,
+    });
   }
 
   if (!entitlement) {

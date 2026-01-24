@@ -39,11 +39,12 @@ export async function POST(request: Request) {
   const convex = getConvexClient();
 
   try {
-    const alreadyProcessed = await convex.query(api.stripeEvents.isEventProcessed, {
+    const claimed = await convex.mutation(api.stripeEvents.claimEvent, {
       eventId: event.id,
+      eventType: event.type,
     });
 
-    if (alreadyProcessed) {
+    if (!claimed) {
       return Response.json({ received: true, skipped: true });
     }
 
@@ -83,10 +84,6 @@ export async function POST(request: Request) {
         console.log(`Unhandled event type: ${event.type}`);
     }
 
-    await convex.mutation(api.stripeEvents.markEventProcessed, {
-      eventId: event.id,
-      eventType: event.type,
-    });
   } catch (err) {
     console.error(`Error handling ${event.type}:`, err);
     return Response.json({ error: "handler_failed" }, { status: 500 });
@@ -176,7 +173,10 @@ async function handleInvoicePaymentSucceeded(
     return;
   }
 
-  const periodEnd = invoice.lines.data[0]?.period?.end;
+  const subscriptionLine = invoice.lines.data.find(
+    (line) => line.type === "subscription"
+  );
+  const periodEnd = subscriptionLine?.period?.end ?? invoice.period_end;
   if (!periodEnd) {
     console.log(`No period end on invoice ${invoice.id}`);
     return;

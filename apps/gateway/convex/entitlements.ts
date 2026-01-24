@@ -31,6 +31,35 @@ export const getByStripeSubscription = query({
   },
 });
 
+export const getOrCreateTrial = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("entitlements")
+      .withIndex("by_user_id", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (existing) {
+      return existing;
+    }
+
+    const now = Date.now();
+    const entitlementId = await ctx.db.insert("entitlements", {
+      userId: args.userId,
+      plan: "trial",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const entitlement = await ctx.db.get(entitlementId);
+    if (!entitlement) {
+      throw new Error(`Entitlement insert failed for user ${args.userId}`);
+    }
+    return entitlement;
+  },
+});
+
+/** @deprecated Use getOrCreateTrial instead. */
 export const createTrial = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {

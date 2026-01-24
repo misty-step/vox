@@ -31,9 +31,21 @@ export async function POST(request: Request) {
   }
 
   const defaultAppUrl = process.env.VOX_APP_URL?.trim();
-  const returnUrl = body.returnUrl?.trim() || defaultAppUrl;
-  if (!returnUrl) {
+  if (!defaultAppUrl) {
     return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+  }
+
+  let appOrigin: string;
+  try {
+    appOrigin = new URL(defaultAppUrl).origin;
+  } catch (error) {
+    console.error("Invalid VOX_APP_URL:", error);
+    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+  }
+
+  const returnUrl = body.returnUrl?.trim() || defaultAppUrl;
+  if (!returnUrl || !isAllowedRedirectUrl(returnUrl, appOrigin)) {
+    return Response.json({ error: "invalid_return_url" }, { status: 400 });
   }
 
   const entitlement = await getEntitlement(auth.subject, auth.email);
@@ -65,5 +77,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Stripe portal session failed:", error);
     return Response.json({ error: "stripe_portal_failed" }, { status: 502 });
+  }
+}
+
+function isAllowedRedirectUrl(candidate: string, appOrigin: string) {
+  try {
+    return new URL(candidate).origin === appOrigin;
+  } catch {
+    return false;
   }
 }
