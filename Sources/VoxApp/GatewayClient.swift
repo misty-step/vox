@@ -11,70 +11,49 @@ public final class GatewayClient: Sendable {
         self.authToken = token
     }
 
+    // MARK: - Public API
+
     /// Fetch a short-lived STT provider token from the gateway
     public func getSTTToken() async throws -> STTTokenResponse {
-        let url = baseURL.appendingPathComponent("v1/stt/token")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw GatewayError.network("Missing HTTP response")
-        }
-
-        guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw GatewayError.httpError(http.statusCode, body)
-        }
-
-        return try JSONDecoder().decode(STTTokenResponse.self, from: data)
+        try await request("POST", path: "v1/stt/token")
     }
 
     /// Fetch entitlements for the current user from the gateway
     public func getEntitlements() async throws -> EntitlementResponse {
-        let url = baseURL.appendingPathComponent("v1/entitlements")
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw GatewayError.network("Missing HTTP response")
-        }
-
-        guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw GatewayError.httpError(http.statusCode, body)
-        }
-
-        return try JSONDecoder().decode(EntitlementResponse.self, from: data)
+        try await request("GET", path: "v1/entitlements")
     }
 
     /// Proxy a rewrite request through the gateway
-    public func rewrite(_ request: RewriteRequest) async throws -> RewriteResponse {
-        let url = baseURL.appendingPathComponent("v1/rewrite")
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(request)
+    public func rewrite(_ body: RewriteRequest) async throws -> RewriteResponse {
+        try await request("POST", path: "v1/rewrite", body: body)
+    }
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+    // MARK: - Private HTTP Helper
+
+    private func request<T: Decodable>(
+        _ method: String,
+        path: String,
+        body: (some Encodable)? = nil as EmptyBody?
+    ) async throws -> T {
+        let url = baseURL.appendingPathComponent(path)
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let body { req.httpBody = try JSONEncoder().encode(body) }
+
+        let (data, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse else {
             throw GatewayError.network("Missing HTTP response")
         }
-
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw GatewayError.httpError(http.statusCode, body)
+            throw GatewayError.httpError(http.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
-
-        return try JSONDecoder().decode(RewriteResponse.self, from: data)
+        return try JSONDecoder().decode(T.self, from: data)
     }
 }
+
+private struct EmptyBody: Encodable {}
 
 /// Response from /v1/stt/token
 public struct STTTokenResponse: Codable, Sendable {
@@ -115,5 +94,20 @@ enum GatewayURL {
             return nil
         }
         return URL(string: raw)
+    }
+
+    /// Auth page for desktop sign-in flow
+    static var authDesktop: URL? {
+        guard let base = current,
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = "/auth/desktop"
+        return components.url
+    }
+
+    /// Stripe checkout page
+    static var checkout: URL? {
+        current?.appendingPathComponent("api/stripe/checkout")
     }
 }

@@ -3,21 +3,19 @@ import Foundation
 /// Cached entitlement stored in Keychain
 /// Enables optimistic access while background refresh happens
 struct EntitlementCache: Codable, Equatable, Sendable {
+    /// Soft TTL: trigger background refresh
+    private static let staleTTL: TimeInterval = 4 * 3600  // 4 hours
+    /// Hard TTL: block user without verification
+    private static let validTTL: TimeInterval = 24 * 3600 // 24 hours
+
     let plan: String
     let status: String
     let features: [String]
     let currentPeriodEnd: Date?
     let lastVerified: Date
 
-    /// Soft TTL: trigger background refresh after 4 hours
-    var isStale: Bool {
-        Date().timeIntervalSince(lastVerified) > 4 * 3600
-    }
-
-    /// Hard TTL: block user after 24 hours without verification
-    var isValid: Bool {
-        Date().timeIntervalSince(lastVerified) < 24 * 3600
-    }
+    var isStale: Bool { Date().timeIntervalSince(lastVerified) > Self.staleTTL }
+    var isValid: Bool { Date().timeIntervalSince(lastVerified) < Self.validTTL }
 
     /// Whether the subscription itself is active
     var isActive: Bool {

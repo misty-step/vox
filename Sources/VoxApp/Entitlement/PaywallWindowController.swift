@@ -41,34 +41,22 @@ final class PaywallWindowController: NSWindowController {
     }
 
     private func handleSignIn() {
-        guard let baseURL = GatewayURL.current else {
+        guard let url = GatewayURL.authDesktop else {
             Diagnostics.error("No gateway URL configured for sign-in")
             return
         }
-
-        // Auth page is on the web app (same origin, /auth/desktop path)
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-        components?.path = "/auth/desktop"
-
-        guard let url = components?.url else {
-            Diagnostics.error("Failed to construct auth URL")
-            return
-        }
-
         Diagnostics.info("Opening sign-in page: \(url.absoluteString)")
         NSWorkspace.shared.open(url)
         startAuthPolling()
     }
 
     private func handleUpgrade() {
-        guard let baseURL = GatewayURL.current else {
+        guard let url = GatewayURL.checkout else {
             Diagnostics.error("No gateway URL configured for upgrade")
             return
         }
-
-        let checkoutURL = baseURL.appendingPathComponent("api/stripe/checkout")
-        Diagnostics.info("Opening checkout: \(checkoutURL.absoluteString)")
-        NSWorkspace.shared.open(checkoutURL)
+        Diagnostics.info("Opening checkout: \(url.absoluteString)")
+        NSWorkspace.shared.open(url)
         startPaymentPolling()
     }
 

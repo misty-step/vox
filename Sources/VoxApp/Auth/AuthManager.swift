@@ -20,6 +20,10 @@ final class AuthManager: ObservableObject {
         return nil
     }
 
+    var isAuthenticated: Bool {
+        token != nil
+    }
+
     init() {
         if let token = KeychainHelper.load(), !token.isEmpty {
             state = .authenticated(token: token)

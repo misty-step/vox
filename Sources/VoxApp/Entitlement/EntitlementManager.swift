@@ -41,8 +41,8 @@ final class EntitlementManager: ObservableObject {
         case .entitled, .gracePeriod:
             return true
         case .unknown:
-            // Optimistic: allow if we have a token but haven't fetched yet
-            return AuthManager.shared.token != nil
+            // Optimistic: allow if authenticated but haven't fetched yet
+            return AuthManager.shared.isAuthenticated
         default:
             return false
         }
@@ -54,7 +54,7 @@ final class EntitlementManager: ObservableObject {
         case .entitled(let cache), .gracePeriod(let cache):
             return cache.isStale
         case .unknown:
-            return AuthManager.shared.token != nil
+            return AuthManager.shared.isAuthenticated
         default:
             return false
         }
@@ -67,7 +67,7 @@ final class EntitlementManager: ObservableObject {
 
     /// Load cached entitlement from Keychain
     private func loadFromCache() {
-        guard AuthManager.shared.token != nil else {
+        guard AuthManager.shared.isAuthenticated else {
             state = .unauthenticated
             return
         }
@@ -176,6 +176,6 @@ final class EntitlementManager: ObservableObject {
     /// Invalidate cache (e.g., after gateway 403)
     func invalidate() {
         KeychainHelper.deleteEntitlement()
-        state = AuthManager.shared.token != nil ? .expired : .unauthenticated
+        state = AuthManager.shared.isAuthenticated ? .expired : .unauthenticated
     }
 }
