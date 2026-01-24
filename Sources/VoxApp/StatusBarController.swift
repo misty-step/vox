@@ -9,6 +9,7 @@ final class StatusBarController: NSObject {
     private let onProcessingLevelOverrideAttempt: (() -> Void)?
     private let onQuit: () -> Void
     private var currentState: SessionController.State = .idle
+    private var currentEntitlementState: EntitlementState = .unknown
     private var resetWorkItem: DispatchWorkItem?
     private var processingLevel: ProcessingLevel
     private let processingLevelOverride: ProcessingLevelOverride?
@@ -65,15 +66,34 @@ final class StatusBarController: NSObject {
 
     func update(state: SessionController.State) {
         currentState = state
-        switch state {
+        updateTitle()
+        setProcessingMenuEnabled(state == .idle)
+    }
+
+    func updateEntitlementState(_ entitlementState: EntitlementState) {
+        currentEntitlementState = entitlementState
+        updateTitle()
+    }
+
+    private func updateTitle() {
+        let badge = entitlementBadge()
+        switch currentState {
         case .idle:
-            statusItem.button?.title = "Vox"
+            statusItem.button?.title = badge.isEmpty ? "Vox" : "\(badge) Vox"
         case .recording:
             statusItem.button?.title = "● Vox"
         case .processing:
             statusItem.button?.title = "… Vox"
         }
-        setProcessingMenuEnabled(state == .idle)
+    }
+
+    private func entitlementBadge() -> String {
+        switch currentEntitlementState {
+        case .entitled, .unknown: ""
+        case .gracePeriod, .error: "⚠️"
+        case .expired: "🔒"
+        case .unauthenticated: "🔑"
+        }
     }
 
     func showMessage(_ message: String, duration: TimeInterval = 4.0) {

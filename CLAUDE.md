@@ -33,6 +33,15 @@ Sources/
 │   ├── SessionController    # Hotkey toggle, state machine, UI signals
 │   ├── DictationPipeline    # STT → rewrite, returns final text
 │   ├── ProviderFactory      # Creates STT/rewrite providers from config
+│   ├── GatewayClient        # HTTP client for gateway API
+│   ├── Auth/
+│   │   ├── AuthManager      # Token state, deep link, sign-out
+│   │   └── KeychainHelper   # Secure storage (tokens + cache)
+│   ├── Entitlement/
+│   │   ├── EntitlementManager    # State machine + caching
+│   │   ├── EntitlementCache      # Codable with TTL (4h/24h)
+│   │   ├── PaywallView           # SwiftUI paywall UI
+│   │   └── PaywallWindowController # AppKit host + polling
 │   └── AppConfig/GeminiModelPolicy/OpenRouterModelPolicy
 ├── VoxCore/         # Contracts, errors, utilities
 │   ├── Contracts    # STTProvider, RewriteProvider protocols
@@ -61,9 +70,13 @@ Sources/
 5. Paste into target app via Cmd+V
 6. Persist history artifacts (raw/rewrite/final + metadata)
 
-### State Machine
+### State Machines
 
-`idle` → `recording` → `processing` → `idle`
+**Session:** `idle` → `recording` → `processing` → `idle`
+
+**Entitlement:** `unknown` | `entitled` | `gracePeriod` | `expired` | `unauthenticated` | `error`
+- Optimistic caching: 4h soft TTL (background refresh), 24h hard TTL (block)
+- `isAllowed` = O(1) check, never blocks hotkey
 
 ### Core Contracts
 
@@ -98,10 +111,13 @@ Providers are pure adapters—no UI logic, no state.
 
 Precedence: `.env.local` > `~/Documents/Vox/config.json`
 
-Required:
+**Local mode** (no gateway):
 - `ELEVENLABS_API_KEY`
 - `GEMINI_API_KEY` (when `VOX_REWRITE_PROVIDER=gemini`)
 - `OPENROUTER_API_KEY` + `OPENROUTER_MODEL_ID` (when `VOX_REWRITE_PROVIDER=openrouter`)
+
+**Gateway mode** (production):
+- `VOX_GATEWAY_URL` — gateway base URL (enables auth + entitlements)
 
 ## Quality Gates
 

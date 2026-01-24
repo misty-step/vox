@@ -34,6 +34,7 @@ final class SessionController {
     var stateDidChange: ((State) -> Void)?
     var statusDidChange: ((String) -> Void)?
     var inputLevelDidChange: ((Float, Float) -> Void)?
+    var entitlementBlocked: ((EntitlementState) -> Void)?
 
     init(
         pipeline: DictationPipeline,
@@ -58,6 +59,19 @@ final class SessionController {
     func toggle() {
         switch state {
         case .idle:
+            // Check entitlement before starting recording
+            let entitlementManager = EntitlementManager.shared
+            guard entitlementManager.isAllowed else {
+                Diagnostics.info("Recording blocked: not entitled")
+                entitlementBlocked?(entitlementManager.state)
+                return
+            }
+
+            // Trigger background refresh if stale
+            if entitlementManager.shouldRefresh {
+                Task { await entitlementManager.refresh() }
+            }
+
             state = .recording
             Task { await startRecording() }
         case .recording:
