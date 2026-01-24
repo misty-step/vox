@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import os
 import VoxCore
@@ -13,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var configSource: ConfigLoader.Source?
     private var processingLevelOverride: ProcessingLevelOverride?
     private let authManager = AuthManager.shared
+    private let entitlementManager = EntitlementManager.shared
+    private var entitlementCancellable: AnyCancellable?
     private let logger = Logger(subsystem: "vox", category: "app")
 
     @MainActor
@@ -107,6 +110,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.inputLevelDidChange = { [weak hud] average, peak in
                 hud?.updateInputLevels(average: average, peak: peak)
             }
+            session.entitlementBlocked = { state in
+                PaywallWindowController.show(for: state)
+            }
+
+            // Observe entitlement state changes for status bar badge
+            entitlementCancellable = entitlementManager.$state
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusBar] state in
+                    statusBar?.updateEntitlementState(state)
+                }
 
             let hotkey = config.hotkey ?? .default
             let modifiers = HotkeyParser.modifiers(from: hotkey.modifiers)
@@ -122,6 +135,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             PermissionManager.promptForAccessibilityIfNeeded()
             Task { _ = await PermissionManager.requestMicrophoneAccess() }
+
+            // Initial entitlement check (background)
+            Task { await entitlementManager.refresh() }
         } catch {
             logger.error("Startup failed: \(String(describing: error))")
             showStartupError(String(describing: error))
