@@ -9,6 +9,7 @@
  */
 
 import type * as entitlements from "../entitlements.js";
+import type * as stripeEvents from "../stripeEvents.js";
 import type * as users from "../users.js";
 
 import type {
@@ -19,6 +20,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   entitlements: typeof entitlements;
+  stripeEvents: typeof stripeEvents;
   users: typeof users;
 }>;
 

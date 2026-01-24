@@ -5,12 +5,18 @@ vi.mock("../../lib/auth", () => ({
   requireAuth: vi.fn(),
 }));
 
+// Mock the entitlements module
+vi.mock("../../lib/entitlements", () => ({
+  requireEntitlement: vi.fn(),
+}));
+
 // Mock global fetch for Gemini API calls
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
 import { POST } from "../../app/v1/rewrite/route";
 import { requireAuth } from "../../lib/auth";
+import { requireEntitlement } from "../../lib/entitlements";
 
 describe("/v1/rewrite", () => {
   beforeEach(() => {
@@ -33,10 +39,50 @@ describe("/v1/rewrite", () => {
     expect(response.status).toBe(401);
   });
 
+  it("returns 403 when entitlement check fails", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: false,
+      error: "subscription_inactive",
+      statusCode: 403,
+    });
+
+    const request = new Request("http://localhost/v1/rewrite", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId: "test",
+        locale: "en",
+        transcript: { text: "test" },
+        context: "",
+        processingLevel: "light",
+      }),
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toBe("subscription_inactive");
+  });
+
   it("returns 400 for invalid JSON body", async () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
     });
 
     const request = new Request("http://localhost/v1/rewrite", {
@@ -60,6 +106,13 @@ describe("/v1/rewrite", () => {
       subject: "user_123",
     });
 
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
     const request = new Request("http://localhost/v1/rewrite", {
       method: "POST",
       headers: {
@@ -79,6 +132,13 @@ describe("/v1/rewrite", () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
     });
 
     mockFetch.mockResolvedValue({
@@ -128,6 +188,13 @@ describe("/v1/rewrite", () => {
       subject: "user_123",
     });
 
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
     mockFetch.mockResolvedValue({
       ok: false,
       status: 500,
@@ -160,6 +227,13 @@ describe("/v1/rewrite", () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
     });
 
     mockFetch.mockResolvedValue({
@@ -198,6 +272,13 @@ describe("/v1/rewrite", () => {
       subject: "user_123",
     });
 
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -224,5 +305,45 @@ describe("/v1/rewrite", () => {
     const [, options] = mockFetch.mock.calls[0];
     const body = JSON.parse(options.body);
     expect(body.systemInstruction.parts[0].text).toContain("expert editor");
+  });
+
+  it("passes required feature to entitlement check", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_123",
+      email: "test@example.com",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "Result." }] } }],
+      }),
+    });
+
+    const request = new Request("http://localhost/v1/rewrite", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId: "test",
+        locale: "en",
+        transcript: { text: "text" },
+        context: "",
+        processingLevel: "light",
+      }),
+    });
+    await POST(request);
+
+    expect(requireEntitlement).toHaveBeenCalledWith("user_123", "test@example.com", "rewrite");
   });
 });

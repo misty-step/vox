@@ -5,28 +5,18 @@ vi.mock("../../lib/auth", () => ({
   requireAuth: vi.fn(),
 }));
 
-// Mock the convex module
-vi.mock("../../lib/convex", () => ({
-  getConvexClient: vi.fn(),
-  api: {
-    users: { getOrCreate: "users:getOrCreate" },
-    entitlements: { getByUserId: "entitlements:getByUserId", createTrial: "entitlements:createTrial" },
-  },
+// Mock the entitlements module
+vi.mock("../../lib/entitlements", () => ({
+  getEntitlement: vi.fn(),
 }));
 
 import { GET } from "../../app/v1/entitlements/route";
 import { requireAuth } from "../../lib/auth";
-import { getConvexClient } from "../../lib/convex";
+import { getEntitlement } from "../../lib/entitlements";
 
 describe("/v1/entitlements", () => {
-  const mockConvexClient = {
-    query: vi.fn(),
-    mutation: vi.fn(),
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getConvexClient).mockReturnValue(mockConvexClient as any);
   });
 
   it("returns 401 when auth fails", async () => {
@@ -48,11 +38,11 @@ describe("/v1/entitlements", () => {
       email: "test@example.com",
     });
 
-    mockConvexClient.mutation.mockResolvedValue("user_id_123");
-    mockConvexClient.query.mockResolvedValue({
+    vi.mocked(getEntitlement).mockResolvedValue({
+      ok: true,
       plan: "trial",
       status: "active",
-      currentPeriodEnd: null,
+      features: ["rewrite", "stt"],
     });
 
     const request = new Request("http://localhost/v1/entitlements", {
@@ -76,10 +66,11 @@ describe("/v1/entitlements", () => {
     });
 
     const periodEnd = Date.now() + 30 * 24 * 60 * 60 * 1000;
-    mockConvexClient.mutation.mockResolvedValue("user_id_456");
-    mockConvexClient.query.mockResolvedValue({
+    vi.mocked(getEntitlement).mockResolvedValue({
+      ok: true,
       plan: "pro",
       status: "active",
+      features: ["rewrite", "stt", "unlimited"],
       currentPeriodEnd: periodEnd,
     });
 
@@ -92,7 +83,57 @@ describe("/v1/entitlements", () => {
     expect(response.status).toBe(200);
     expect(data.plan).toBe("pro");
     expect(data.status).toBe("active");
-    expect(data.currentPeriodEnd).toBe(periodEnd);
     expect(data.features).toContain("unlimited");
+    expect(data.currentPeriodEnd).toBe(periodEnd);
+  });
+
+  it("returns cancelled entitlement info (does not block)", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_789",
+      email: "cancelled@example.com",
+    });
+
+    vi.mocked(getEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "cancelled",
+      status: "cancelled",
+      features: [],
+    });
+
+    const request = new Request("http://localhost/v1/entitlements", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+    const response = await GET(request);
+    const data = await response.json();
+
+    // Entitlements endpoint returns info even for cancelled users
+    expect(response.status).toBe(200);
+    expect(data.plan).toBe("cancelled");
+    expect(data.status).toBe("cancelled");
+    expect(data.features).toEqual([]);
+  });
+
+  it("returns error when entitlement fetch fails", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_error",
+      email: "error@example.com",
+    });
+
+    vi.mocked(getEntitlement).mockResolvedValue({
+      ok: false,
+      error: "entitlement_creation_failed",
+      statusCode: 500,
+    });
+
+    const request = new Request("http://localhost/v1/entitlements", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe("entitlement_creation_failed");
   });
 });

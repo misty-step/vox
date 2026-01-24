@@ -1,4 +1,5 @@
 import { requireAuth } from "../../../../lib/auth";
+import { requireEntitlement } from "../../../../lib/entitlements";
 
 export const runtime = "nodejs";
 
@@ -6,6 +7,15 @@ export async function POST(request: Request) {
   const auth = await requireAuth(request);
   if (!auth.ok) {
     return auth.response;
+  }
+
+  // Check entitlement before providing STT token
+  const entitlement = await requireEntitlement(auth.subject, auth.email, "stt");
+  if (!entitlement.ok) {
+    return Response.json(
+      { error: entitlement.error },
+      { status: entitlement.statusCode }
+    );
   }
 
   const token = process.env.ELEVENLABS_API_KEY;

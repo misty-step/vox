@@ -1,5 +1,5 @@
 import { requireAuth } from "../../../lib/auth";
-import { getConvexClient, api } from "../../../lib/convex";
+import { getEntitlement } from "../../../lib/entitlements";
 
 export const runtime = "nodejs";
 
@@ -9,46 +9,22 @@ export async function GET(request: Request) {
     return auth.response;
   }
 
-  const convex = getConvexClient();
+  // Get entitlement (creates trial if none exists)
+  // Always returns entitlement info regardless of status
+  const entitlement = await getEntitlement(auth.subject, auth.email);
 
-  // Get or create user
-  const userId = await convex.mutation(api.users.getOrCreate, {
-    clerkId: auth.subject,
-    email: auth.email,
-  });
-
-  // Get entitlement, create trial if none exists
-  let entitlement = await convex.query(api.entitlements.getByUserId, { userId });
-
-  if (!entitlement) {
-    await convex.mutation(api.entitlements.createTrial, { userId });
-    entitlement = await convex.query(api.entitlements.getByUserId, { userId });
-  }
-
-  if (!entitlement) {
-    return Response.json({ error: "entitlement_creation_failed" }, { status: 500 });
+  if (!entitlement.ok) {
+    return Response.json(
+      { error: entitlement.error },
+      { status: entitlement.statusCode }
+    );
   }
 
   return Response.json({
     subject: auth.subject,
     plan: entitlement.plan,
     status: entitlement.status,
-    features: getFeatures(entitlement.plan, entitlement.status),
+    features: entitlement.features,
     currentPeriodEnd: entitlement.currentPeriodEnd,
   });
-}
-
-function getFeatures(plan: string, status: string): string[] {
-  if (status !== "active") {
-    return [];
-  }
-
-  switch (plan) {
-    case "pro":
-      return ["rewrite", "stt", "unlimited"];
-    case "trial":
-      return ["rewrite", "stt"];
-    default:
-      return [];
-  }
 }
