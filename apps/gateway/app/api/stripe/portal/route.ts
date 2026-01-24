@@ -1,6 +1,9 @@
-import Stripe from "stripe";
 import { requireAuth } from "../../../../lib/auth";
 import { getEntitlement } from "../../../../lib/entitlements";
+import {
+  getStripeConfig,
+  validateRedirectUrl,
+} from "../../../../lib/stripe-route";
 
 export const runtime = "nodejs";
 
@@ -25,26 +28,24 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!stripeKey) {
-    return Response.json({ error: "stripe_not_configured" }, { status: 501 });
-  }
-
-  const defaultAppUrl = process.env.VOX_APP_URL?.trim();
-  if (!defaultAppUrl) {
-    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
-  }
-
+  let stripe: ReturnType<typeof getStripeConfig>["stripe"];
   let appOrigin: string;
   try {
-    appOrigin = new URL(defaultAppUrl).origin;
+    ({ stripe, appOrigin } = getStripeConfig());
   } catch (error) {
-    console.error("Invalid VOX_APP_URL:", error);
-    return Response.json({ error: "app_url_not_configured" }, { status: 501 });
+    const response = stripeConfigErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
   }
 
-  const returnUrl = body.returnUrl?.trim() || defaultAppUrl;
-  if (!returnUrl || !isAllowedRedirectUrl(returnUrl, appOrigin)) {
+  const defaultAppUrl = process.env.VOX_APP_URL!.trim();
+  const returnCandidate = body.returnUrl;
+  const returnUrl = returnCandidate?.trim()
+    ? validateRedirectUrl(returnCandidate, appOrigin)
+    : defaultAppUrl;
+  if (!returnUrl) {
     return Response.json({ error: "invalid_return_url" }, { status: 400 });
   }
 
@@ -62,7 +63,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const stripe = new Stripe(stripeKey);
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
       return_url: returnUrl,
@@ -80,10 +80,13 @@ export async function POST(request: Request) {
   }
 }
 
-function isAllowedRedirectUrl(candidate: string, appOrigin: string) {
-  try {
-    return new URL(candidate).origin === appOrigin;
-  } catch {
-    return false;
+function stripeConfigErrorResponse(error: unknown): Response | null {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? (error as { code?: string }).code
+      : undefined;
+  if (code === "stripe_not_configured" || code === "app_url_not_configured") {
+    return Response.json({ error: code }, { status: 501 });
   }
+  return null;
 }
