@@ -5,8 +5,14 @@ vi.mock("../../lib/auth", () => ({
   requireAuth: vi.fn(),
 }));
 
+// Mock the entitlements module
+vi.mock("../../lib/entitlements", () => ({
+  requireEntitlement: vi.fn(),
+}));
+
 import { POST } from "../../app/v1/stt/token/route";
 import { requireAuth } from "../../lib/auth";
+import { requireEntitlement } from "../../lib/entitlements";
 
 describe("/v1/stt/token", () => {
   beforeEach(() => {
@@ -27,10 +33,40 @@ describe("/v1/stt/token", () => {
     expect(response.status).toBe(401);
   });
 
-  it("returns token response when auth succeeds", async () => {
+  it("returns 403 when entitlement check fails", async () => {
     vi.mocked(requireAuth).mockResolvedValue({
       ok: true,
       subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: false,
+      error: "subscription_inactive",
+      statusCode: 403,
+    });
+
+    const request = new Request("http://localhost/v1/stt/token", {
+      method: "POST",
+      headers: { Authorization: "Bearer test-token" },
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.error).toBe("subscription_inactive");
+  });
+
+  it("returns token response when auth and entitlement succeed", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_123",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
     });
 
     const request = new Request("http://localhost/v1/stt/token", {
@@ -52,6 +88,13 @@ describe("/v1/stt/token", () => {
       subject: "user_123",
     });
 
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
     const request = new Request("http://localhost/v1/stt/token", {
       method: "POST",
       headers: { Authorization: "Bearer test-token" },
@@ -63,5 +106,28 @@ describe("/v1/stt/token", () => {
     const now = new Date();
     // Token should expire in the future (within 1 hour typically)
     expect(expiresAt.getTime()).toBeGreaterThan(now.getTime());
+  });
+
+  it("passes required feature to entitlement check", async () => {
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      subject: "user_123",
+      email: "test@example.com",
+    });
+
+    vi.mocked(requireEntitlement).mockResolvedValue({
+      ok: true,
+      plan: "trial",
+      status: "active",
+      features: ["stt", "rewrite"],
+    });
+
+    const request = new Request("http://localhost/v1/stt/token", {
+      method: "POST",
+      headers: { Authorization: "Bearer test-token" },
+    });
+    await POST(request);
+
+    expect(requireEntitlement).toHaveBeenCalledWith("user_123", "test@example.com", "stt");
   });
 });
