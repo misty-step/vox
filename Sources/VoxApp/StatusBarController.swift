@@ -89,18 +89,10 @@ final class StatusBarController: NSObject {
 
     private func entitlementBadge() -> String {
         switch currentEntitlementState {
-        case .entitled:
-            return ""
-        case .gracePeriod:
-            return "⚠️" // Stale cache, network issue
-        case .expired:
-            return "🔒" // Subscription expired
-        case .unauthenticated:
-            return "🔑" // Needs sign-in
-        case .error:
-            return "⚠️" // Network error
-        case .unknown:
-            return ""
+        case .entitled, .unknown: ""
+        case .gracePeriod, .error: "⚠️"
+        case .expired: "🔒"
+        case .unauthenticated: "🔑"
         }
     }
 

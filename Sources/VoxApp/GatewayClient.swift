@@ -106,3 +106,14 @@ public enum GatewayError: Error, LocalizedError {
         }
     }
 }
+
+/// Gateway URL from environment
+enum GatewayURL {
+    static var current: URL? {
+        guard let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
+              !raw.isEmpty else {
+            return nil
+        }
+        return URL(string: raw)
+    }
+}

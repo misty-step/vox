@@ -4,115 +4,87 @@ import VoxCore
 
 enum KeychainHelper {
     private static let service = "com.vox.auth"
-    private static let account = "gateway_token"
-    private static let entitlementAccount = "entitlement_cache"
+
+    private enum Account: String {
+        case token = "gateway_token"
+        case entitlement = "entitlement_cache"
+    }
+
+    // MARK: - Auth Token
 
     static func save(token: String) throws {
-        let data = Data(token.utf8)
-        let query = baseQuery()
-        var attributes = query
-        attributes[kSecValueData as String] = data
-
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        switch status {
-        case errSecSuccess:
-            Diagnostics.info("Saved auth token to keychain.")
-        case errSecDuplicateItem:
-            let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-            if updateStatus == errSecSuccess {
-                Diagnostics.info("Updated auth token in keychain.")
-            } else {
-                let message = errorMessage("Failed to update auth token", status: updateStatus)
-                Diagnostics.error(message)
-                throw VoxError.internalError(message)
-            }
-        default:
-            let message = errorMessage("Failed to save auth token", status: status)
-            Diagnostics.error(message)
-            throw VoxError.internalError(message)
-        }
+        try saveData(Data(token.utf8), account: .token, name: "auth token")
     }
 
     static func load() -> String? {
-        var query = baseQuery()
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            guard let data = item as? Data,
-                  let token = String(data: data, encoding: .utf8),
-                  !token.isEmpty else {
-                Diagnostics.error("Failed to decode auth token from keychain.")
-                return nil
-            }
-            return token
-        case errSecItemNotFound:
-            return nil
-        default:
-            let message = errorMessage("Failed to load auth token", status: status)
-            Diagnostics.error(message)
+        guard let data = loadData(account: .token, name: "auth token"),
+              let token = String(data: data, encoding: .utf8),
+              !token.isEmpty else {
             return nil
         }
+        return token
     }
 
     static func delete() throws {
-        let status = SecItemDelete(baseQuery() as CFDictionary)
-        switch status {
-        case errSecSuccess, errSecItemNotFound:
-            Diagnostics.info("Cleared auth token from keychain.")
-        default:
-            let message = errorMessage("Failed to delete auth token", status: status)
-            Diagnostics.error(message)
-            throw VoxError.internalError(message)
-        }
-    }
-
-    private static func baseQuery() -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-    }
-
-    private static func errorMessage(_ prefix: String, status: OSStatus) -> String {
-        let description = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
-        return "\(prefix): \(description)"
+        try deleteData(account: .token, name: "auth token", throwing: true)
     }
 
     // MARK: - Entitlement Cache
 
     static func saveEntitlement(_ cache: EntitlementCache) throws {
         let data = try JSONEncoder().encode(cache)
-        let query = entitlementQuery()
+        try saveData(data, account: .entitlement, name: "entitlement cache")
+    }
+
+    static func loadEntitlement() -> EntitlementCache? {
+        guard let data = loadData(account: .entitlement, name: "entitlement cache") else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(EntitlementCache.self, from: data)
+        } catch {
+            Diagnostics.error("Failed to decode entitlement cache: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    static func deleteEntitlement() {
+        try? deleteData(account: .entitlement, name: "entitlement cache", throwing: false)
+    }
+
+    // MARK: - Private Helpers
+
+    private static func query(for account: Account) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account.rawValue
+        ]
+    }
+
+    private static func saveData(_ data: Data, account: Account, name: String) throws {
+        let query = query(for: account)
         var attributes = query
         attributes[kSecValueData as String] = data
 
         let status = SecItemAdd(attributes as CFDictionary, nil)
         switch status {
         case errSecSuccess:
-            Diagnostics.info("Saved entitlement cache to keychain.")
+            Diagnostics.info("Saved \(name) to keychain.")
         case errSecDuplicateItem:
             let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
             if updateStatus == errSecSuccess {
-                Diagnostics.info("Updated entitlement cache in keychain.")
+                Diagnostics.info("Updated \(name) in keychain.")
             } else {
-                let message = errorMessage("Failed to update entitlement cache", status: updateStatus)
-                Diagnostics.error(message)
-                throw VoxError.internalError(message)
+                throw keychainError("Failed to update \(name)", status: updateStatus)
             }
         default:
-            let message = errorMessage("Failed to save entitlement cache", status: status)
-            Diagnostics.error(message)
-            throw VoxError.internalError(message)
+            throw keychainError("Failed to save \(name)", status: status)
         }
     }
 
-    static func loadEntitlement() -> EntitlementCache? {
-        var query = entitlementQuery()
+    private static func loadData(account: Account, name: String) -> Data? {
+        var query = query(for: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -121,40 +93,41 @@ enum KeychainHelper {
         switch status {
         case errSecSuccess:
             guard let data = item as? Data else {
-                Diagnostics.error("Failed to decode entitlement cache from keychain.")
+                Diagnostics.error("Failed to decode \(name) from keychain.")
                 return nil
             }
-            do {
-                return try JSONDecoder().decode(EntitlementCache.self, from: data)
-            } catch {
-                Diagnostics.error("Failed to decode entitlement cache: \(error.localizedDescription)")
-                return nil
-            }
+            return data
         case errSecItemNotFound:
             return nil
         default:
-            let message = errorMessage("Failed to load entitlement cache", status: status)
-            Diagnostics.error(message)
+            Diagnostics.error(errorMessage("Failed to load \(name)", status: status))
             return nil
         }
     }
 
-    static func deleteEntitlement() {
-        let status = SecItemDelete(entitlementQuery() as CFDictionary)
+    private static func deleteData(account: Account, name: String, throwing: Bool) throws {
+        let status = SecItemDelete(query(for: account) as CFDictionary)
         switch status {
         case errSecSuccess, errSecItemNotFound:
-            Diagnostics.info("Cleared entitlement cache from keychain.")
+            Diagnostics.info("Cleared \(name) from keychain.")
         default:
-            let message = errorMessage("Failed to delete entitlement cache", status: status)
-            Diagnostics.error(message)
+            let error = keychainError("Failed to delete \(name)", status: status)
+            if throwing {
+                throw error
+            } else {
+                Diagnostics.error(error.localizedDescription)
+            }
         }
     }
 
-    private static func entitlementQuery() -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: entitlementAccount
-        ]
+    private static func keychainError(_ prefix: String, status: OSStatus) -> VoxError {
+        let message = errorMessage(prefix, status: status)
+        Diagnostics.error(message)
+        return VoxError.internalError(message)
+    }
+
+    private static func errorMessage(_ prefix: String, status: OSStatus) -> String {
+        let description = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+        return "\(prefix): \(description)"
     }
 }

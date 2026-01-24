@@ -41,15 +41,13 @@ final class PaywallWindowController: NSWindowController {
     }
 
     private func handleSignIn() {
-        // Open web auth page
-        guard let gatewayURL = gatewayURL() else {
+        guard let baseURL = GatewayURL.current else {
             Diagnostics.error("No gateway URL configured for sign-in")
             return
         }
 
-        // The auth page is on the web app, not gateway
-        // Derive web URL from gateway URL (same origin, /auth/desktop path)
-        var components = URLComponents(url: gatewayURL, resolvingAgainstBaseURL: false)
+        // Auth page is on the web app (same origin, /auth/desktop path)
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         components?.path = "/auth/desktop"
 
         guard let url = components?.url else {
@@ -59,23 +57,18 @@ final class PaywallWindowController: NSWindowController {
 
         Diagnostics.info("Opening sign-in page: \(url.absoluteString)")
         NSWorkspace.shared.open(url)
-
-        // Start polling for auth completion
         startAuthPolling()
     }
 
     private func handleUpgrade() {
-        // Open checkout page
-        guard let gatewayURL = gatewayURL() else {
+        guard let baseURL = GatewayURL.current else {
             Diagnostics.error("No gateway URL configured for upgrade")
             return
         }
 
-        let checkoutURL = gatewayURL.appendingPathComponent("api/stripe/checkout")
+        let checkoutURL = baseURL.appendingPathComponent("api/stripe/checkout")
         Diagnostics.info("Opening checkout: \(checkoutURL.absoluteString)")
         NSWorkspace.shared.open(checkoutURL)
-
-        // Start polling for payment completion
         startPaymentPolling()
     }
 
@@ -134,15 +127,6 @@ final class PaywallWindowController: NSWindowController {
         window?.close()
         onDismiss?()
         Self.shared = nil
-    }
-
-    private func gatewayURL() -> URL? {
-        guard let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
-              !raw.isEmpty,
-              let url = URL(string: raw) else {
-            return nil
-        }
-        return url
     }
 
     // MARK: - Static API

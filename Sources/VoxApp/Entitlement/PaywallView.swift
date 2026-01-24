@@ -39,45 +39,30 @@ struct PaywallView: View {
         }
     }
 
-    @ViewBuilder
     private var title: some View {
-        switch state {
-        case .unauthenticated:
-            Text("Sign In Required")
-                .font(.title2)
-                .fontWeight(.semibold)
-        case .expired:
-            Text("Subscription Expired")
-                .font(.title2)
-                .fontWeight(.semibold)
-        case .error(let message):
-            Text("Connection Error")
-                .font(.title2)
-                .fontWeight(.semibold)
-        default:
-            Text("Vox")
-                .font(.title2)
-                .fontWeight(.semibold)
+        let text: String = switch state {
+        case .unauthenticated: "Sign In Required"
+        case .expired: "Subscription Expired"
+        case .error: "Connection Error"
+        default: "Vox"
         }
+        return Text(text)
+            .font(.title2)
+            .fontWeight(.semibold)
     }
 
     @ViewBuilder
     private var subtitle: some View {
-        switch state {
-        case .unauthenticated:
-            Text("Sign in to your account to use Vox dictation.")
+        let text: String? = switch state {
+        case .unauthenticated: "Sign in to your account to use Vox dictation."
+        case .expired: "Your trial or subscription has ended. Upgrade to continue using Vox."
+        case .error: "Unable to verify your subscription. Check your internet connection and try again."
+        default: nil
+        }
+        if let text {
+            Text(text)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
-        case .expired:
-            Text("Your trial or subscription has ended. Upgrade to continue using Vox.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-        case .error(let message):
-            Text("Unable to verify your subscription. Check your internet connection and try again.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-        default:
-            EmptyView()
         }
     }
 

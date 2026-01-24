@@ -120,13 +120,12 @@ final class EntitlementManager: ObservableObject {
             return
         }
 
-        guard let gatewayURL = gatewayURL() else {
+        guard let url = GatewayURL.current else {
             Diagnostics.warning("No gateway URL configured, cannot refresh entitlements.")
-            // Keep current state if we can't reach gateway
             return
         }
 
-        let client = GatewayClient(baseURL: gatewayURL, token: token)
+        let client = GatewayClient(baseURL: url, token: token)
 
         do {
             let response = try await client.getEntitlements()
@@ -177,19 +176,6 @@ final class EntitlementManager: ObservableObject {
     /// Invalidate cache (e.g., after gateway 403)
     func invalidate() {
         KeychainHelper.deleteEntitlement()
-        if AuthManager.shared.token != nil {
-            state = .expired
-        } else {
-            state = .unauthenticated
-        }
-    }
-
-    private func gatewayURL() -> URL? {
-        guard let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
-              !raw.isEmpty,
-              let url = URL(string: raw) else {
-            return nil
-        }
-        return url
+        state = AuthManager.shared.token != nil ? .expired : .unauthenticated
     }
 }
