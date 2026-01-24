@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/misty-step/vox/compare/v1.3.0...v1.4.0) (2026-01-24)
+
+
+### Features
+
+* **entitlement:** client paywall + entitlement enforcement ([#50](https://github.com/misty-step/vox/issues/50)) ([c044cf8](https://github.com/misty-step/vox/commit/c044cf8a088794dd48366d3371604f2d4f9f8272))
+
 ## [1.3.0](https://github.com/misty-step/vox/compare/v1.2.0...v1.3.0) (2026-01-24)
 
 
