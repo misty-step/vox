@@ -15,9 +15,10 @@ export async function requireAuth(request: Request): Promise<AuthResult> {
 
   const token = header.slice("Bearer ".length).trim();
 
-  // Dev mode: allow test token
+  // Dev mode only: allow test token bypass
+  const isDev = process.env.NODE_ENV !== "production";
   const testToken = process.env.VOX_TEST_TOKEN;
-  if (testToken && token === testToken) {
+  if (isDev && testToken && token === testToken) {
     return { ok: true, subject: "test-user" };
   }
 
@@ -51,7 +52,16 @@ export async function requireAuth(request: Request): Promise<AuthResult> {
 }
 
 // Keep legacy function for backwards compatibility during migration
+// Only works in non-production environments
 export function requireTestToken(request: Request): AuthResult {
+  const isDev = process.env.NODE_ENV !== "production";
+  if (!isDev) {
+    return {
+      ok: false,
+      response: Response.json({ error: "test_auth_disabled" }, { status: 403 }),
+    };
+  }
+
   const expected = process.env.VOX_TEST_TOKEN;
   if (!expected) {
     return {
