@@ -173,10 +173,7 @@ export default function Page() {
                 text at your cursor. Fast.
               </p>
               <div className="cta-row">
-                <a
-                  href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
-                  className="cta primary"
-                >
+                <a href="/download" className="cta primary">
                   Download for macOS
                 </a>
                 <a href="#features" className="cta secondary">
