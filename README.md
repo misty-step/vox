@@ -25,7 +25,7 @@ Preferred: `.env.local`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
 - Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
   - `VOX_PROCESSING_LEVEL` overrides menu selection; UI changes won’t persist until removed
-- Optional: `VOX_HISTORY=1` enable local history artifacts (default: off)
+- Optional: `VOX_HISTORY=1` to enable local history artifacts (default: off)
 - Optional: `VOX_HISTORY_DIR=/path/to/dir` override history location
 - Optional: `VOX_HISTORY_REDACT=1` store redacted history text
 - Optional: `VOX_HISTORY_DAYS=30` history retention window in days

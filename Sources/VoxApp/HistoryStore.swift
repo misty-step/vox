@@ -124,7 +124,9 @@ final class HistoryStore {
             self.baseURL = Self.defaultBaseURL()
         }
         if isEnabled {
-            cleanupOldHistory()
+            Task.detached(priority: .utility) { [self] in
+                self.cleanupOldHistory()
+            }
         }
     }
 
@@ -154,7 +156,7 @@ final class HistoryStore {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
@@ -166,15 +168,21 @@ final class HistoryStore {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
 
         let directoryURL = baseURL
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
+        let entries: [URL]
+        do {
+            entries = try FileManager.default.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            Diagnostics.error("History cleanup failed to list directory: \(String(describing: error))")
+            return
+        }
 
         for entry in entries {
             guard

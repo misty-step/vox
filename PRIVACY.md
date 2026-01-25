@@ -11,13 +11,13 @@
 - No Vox cloud storage of transcripts or audio
 
 ## Controls
-- History on/off: `VOX_HISTORY=1` or `VOX_HISTORY=0`
+- History: Disabled by default. Enable with `VOX_HISTORY=1`.
 - Redact history text: `VOX_HISTORY_REDACT=1`
 - Retention: `VOX_HISTORY_DAYS` (default: 30)
 
 ## Third-party services
-- Audio sent to ElevenLabs for STT
-- Transcript text sent to Gemini or OpenRouter for rewrite
+- Audio sent to [ElevenLabs](https://elevenlabs.io/privacy) for STT
+- Transcript text sent to [Gemini](https://policies.google.com/privacy) or [OpenRouter](https://openrouter.ai/privacy) for rewrite
 
 ## Clear statements
 - Audio temp files deleted after processing

@@ -39,7 +39,7 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNil(store.startSession(metadata: metadata))
     }
 
-    func testCleanupOldHistoryRemovesExpiredFolders() throws {
+    func testCleanupOldHistoryRemovesExpiredFolders() async throws {
         let baseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
 
@@ -56,6 +56,9 @@ final class HistoryStoreTests: XCTestCase {
             baseURL: baseURL
         )
 
+        // Wait for async cleanup task to complete
+        try await Task.sleep(for: .milliseconds(100))
+
         XCTAssertFalse(FileManager.default.fileExists(atPath: oldDir.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: keepDir.path))
     }
@@ -64,7 +67,7 @@ final class HistoryStoreTests: XCTestCase {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
