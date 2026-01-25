@@ -28,6 +28,55 @@ public final class GatewayClient: Sendable {
         try await request("POST", path: "v1/rewrite", body: body)
     }
 
+    /// Transcribe audio via gateway proxy
+    public func transcribe(
+        audioData: Data,
+        filename: String,
+        mimeType: String,
+        modelId: String?,
+        languageCode: String?,
+        sessionId: String?
+    ) async throws -> TranscriptResponse {
+        var form = MultipartFormData()
+
+        form.addField(name: "model_id", value: modelId ?? "")
+
+        if let languageCode {
+            form.addField(name: "language_code", value: languageCode)
+        }
+
+        if let sessionId {
+            form.addField(name: "session_id", value: sessionId)
+        }
+
+        form.addFile(
+            name: "file",
+            filename: filename,
+            mimeType: mimeType,
+            data: audioData
+        )
+
+        let body = form.finalize()
+        let url = baseURL.appendingPathComponent("v1/stt/transcribe")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        req.setValue(
+            "multipart/form-data; boundary=\(form.boundary)",
+            forHTTPHeaderField: "Content-Type"
+        )
+        req.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw GatewayError.network("Missing HTTP response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw GatewayError.httpError(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(TranscriptResponse.self, from: data)
+    }
+
     // MARK: - Private HTTP Helper
 
     private func request<T: Decodable>(
@@ -60,6 +109,19 @@ public struct STTTokenResponse: Codable, Sendable {
     public let token: String
     public let provider: String
     public let expiresAt: String
+}
+
+/// Response from /v1/stt/transcribe
+public struct TranscriptResponse: Codable, Sendable {
+    public let text: String
+    public let languageCode: String?
+    public let sessionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case languageCode = "language_code"
+        case sessionId = "session_id"
+    }
 }
 
 /// Response from /v1/entitlements
