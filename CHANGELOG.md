@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/misty-step/vox/compare/v1.4.0...v1.5.0) (2026-01-25)
+
+
+### Features
+
+* add pricing section to marketing site ([#56](https://github.com/misty-step/vox/issues/56)) ([#60](https://github.com/misty-step/vox/issues/60)) ([c7ea18b](https://github.com/misty-step/vox/commit/c7ea18b46173d642b5289496c3d24aa4397e06a6))
+
+
+### Bug Fixes
+
+* **entitlement:** enforce 14-day trial expiration ([#53](https://github.com/misty-step/vox/issues/53)) ([#57](https://github.com/misty-step/vox/issues/57)) ([75dd084](https://github.com/misty-step/vox/commit/75dd084a2fcfe927da5661abfe60976b656492cb))
+* payment flow via web checkout bridge ([#52](https://github.com/misty-step/vox/issues/52)) ([#59](https://github.com/misty-step/vox/issues/59)) ([68dd49f](https://github.com/misty-step/vox/commit/68dd49ffac8a3c808e7bde6977a5398a764a0797))
+
 ## [1.4.0](https://github.com/misty-step/vox/compare/v1.3.0...v1.4.0) (2026-01-24)
 
 
