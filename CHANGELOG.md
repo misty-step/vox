@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/misty-step/vox/compare/v1.6.1...v1.6.2) (2026-01-25)
+
+
+### Bug Fixes
+
+* **security:** gate test token bypass on non-production environment ([#85](https://github.com/misty-step/vox/issues/85)) ([fbbc03a](https://github.com/misty-step/vox/commit/fbbc03a1ee7c61f964c428ce1a779dcc32097f38))
+
 ## [1.6.1](https://github.com/misty-step/vox/compare/v1.6.0...v1.6.1) (2026-01-25)
 
 
