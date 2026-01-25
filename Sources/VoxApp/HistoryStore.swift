@@ -104,17 +104,27 @@ final class HistoryStore {
     let baseURL: URL
     let isEnabled: Bool
     let redactText: Bool
+    let retentionDays: Int
 
     init(env: [String: String] = ProcessInfo.processInfo.environment, baseURL: URL? = nil) {
         let enabledValue = env["VOX_HISTORY"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        self.isEnabled = enabledValue != "0" && enabledValue != "false"
+        self.isEnabled = enabledValue == "1" || enabledValue == "true"
         self.redactText = env["VOX_HISTORY_REDACT"] == "1"
+        let retentionValue = env["VOX_HISTORY_DAYS"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let retentionValue, let parsed = Int(retentionValue), parsed >= 0 {
+            self.retentionDays = parsed
+        } else {
+            self.retentionDays = 30
+        }
         if let override = env["VOX_HISTORY_DIR"], !override.isEmpty {
             self.baseURL = URL(fileURLWithPath: override)
         } else if let baseURL {
             self.baseURL = baseURL
         } else {
             self.baseURL = Self.defaultBaseURL()
+        }
+        if isEnabled {
+            cleanupOldHistory()
         }
     }
 
@@ -147,5 +157,37 @@ final class HistoryStore {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private func cleanupOldHistory() {
+        let calendar = Calendar(identifier: .gregorian)
+        let cutoffBase = calendar.startOfDay(for: Date())
+        guard let cutoff = calendar.date(byAdding: .day, value: -retentionDays, to: cutoffBase) else { return }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        let directoryURL = baseURL
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for entry in entries {
+            guard
+                let values = try? entry.resourceValues(forKeys: [.isDirectoryKey]),
+                values.isDirectory == true
+            else { continue }
+            guard let dayDate = formatter.date(from: entry.lastPathComponent) else { continue }
+            guard dayDate < cutoff else { continue }
+            do {
+                try FileManager.default.removeItem(at: entry)
+            } catch {
+                Diagnostics.error("History cleanup failed: \(String(describing: error))")
+            }
+        }
     }
 }
