@@ -17,6 +17,31 @@ export type GetEntitlementResult =
   | { ok: false; error: string; statusCode: number };
 
 /**
+ * Check if a trial has expired based on currentPeriodEnd.
+ * Only applies to trial plans — pro subscriptions managed by Stripe.
+ */
+function isTrialExpired(entitlement: {
+  plan: string;
+  currentPeriodEnd?: number;
+}): boolean {
+  if (entitlement.plan !== "trial") return false;
+  if (!entitlement.currentPeriodEnd) return false;
+  return entitlement.currentPeriodEnd < Date.now();
+}
+
+/**
+ * Derive effective status accounting for trial expiration.
+ */
+function getEffectiveStatus(entitlement: {
+  plan: string;
+  status: string;
+  currentPeriodEnd?: number;
+}): string {
+  if (isTrialExpired(entitlement)) return "expired";
+  return entitlement.status;
+}
+
+/**
  * Fetch user's entitlement info. Always returns the entitlement state,
  * even if inactive. Use this for the /v1/entitlements endpoint.
  */
@@ -40,12 +65,13 @@ export async function getEntitlement(
     return { ok: false, error: "entitlement_creation_failed", statusCode: 500 };
   }
 
-  const features = getFeatures(entitlement.plan, entitlement.status);
+  const effectiveStatus = getEffectiveStatus(entitlement);
+  const features = getFeatures(entitlement.plan, effectiveStatus);
 
   return {
     ok: true,
     plan: entitlement.plan,
-    status: entitlement.status,
+    status: effectiveStatus,
     features,
     currentPeriodEnd: entitlement.currentPeriodEnd,
     stripeCustomerId: entitlement.stripeCustomerId,

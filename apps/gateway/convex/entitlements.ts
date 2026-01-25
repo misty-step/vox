@@ -31,6 +31,9 @@ export const getByStripeSubscription = query({
   },
 });
 
+/** Trial duration: 14 days in milliseconds */
+const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+
 export const getOrCreateTrial = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -48,6 +51,7 @@ export const getOrCreateTrial = mutation({
       userId: args.userId,
       plan: "trial",
       status: "active",
+      currentPeriodEnd: now + TRIAL_DURATION_MS,
       createdAt: now,
       updatedAt: now,
     });
@@ -145,5 +149,33 @@ export const cancelSubscription = mutation({
     });
 
     return entitlement._id;
+  },
+});
+
+/**
+ * One-time migration: backfill currentPeriodEnd for existing trials.
+ * Sets expiration to createdAt + 14 days.
+ * Run via: npx convex run entitlements:migrateTrialExpirations
+ */
+export const migrateTrialExpirations = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const trials = await ctx.db
+      .query("entitlements")
+      .filter((q) => q.eq(q.field("plan"), "trial"))
+      .collect();
+
+    let migrated = 0;
+    for (const trial of trials) {
+      if (trial.currentPeriodEnd === undefined) {
+        await ctx.db.patch(trial._id, {
+          currentPeriodEnd: trial.createdAt + TRIAL_DURATION_MS,
+          updatedAt: Date.now(),
+        });
+        migrated++;
+      }
+    }
+
+    return { total: trials.length, migrated };
   },
 });
