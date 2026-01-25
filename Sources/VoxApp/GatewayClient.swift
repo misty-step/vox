@@ -4,11 +4,16 @@ import VoxCore
 /// Client for communicating with the Vox gateway API
 public final class GatewayClient: Sendable {
     private let baseURL: URL
-    private let authToken: String
+    private let tokenProvider: @Sendable () -> String?
 
     public init(baseURL: URL, token: String) {
         self.baseURL = baseURL
-        self.authToken = token
+        self.tokenProvider = { token }
+    }
+
+    init(baseURL: URL, tokenProvider: @escaping @Sendable () -> String?) {
+        self.baseURL = baseURL
+        self.tokenProvider = tokenProvider
     }
 
     // MARK: - Public API
@@ -65,7 +70,8 @@ public final class GatewayClient: Sendable {
         let url = baseURL.appendingPathComponent("v1/stt/transcribe")
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        let token = try resolveToken()
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue(
             "multipart/form-data; boundary=\(form.boundary)",
             forHTTPHeaderField: "Content-Type"
@@ -92,7 +98,8 @@ public final class GatewayClient: Sendable {
         let url = baseURL.appendingPathComponent(path)
         var req = URLRequest(url: url)
         req.httpMethod = method
-        req.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        let token = try resolveToken()
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let body { req.httpBody = try JSONEncoder().encode(body) }
 
@@ -104,6 +111,14 @@ public final class GatewayClient: Sendable {
             throw GatewayError.httpError(http.statusCode, String(data: data, encoding: .utf8) ?? "")
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private func resolveToken() throws -> String {
+        guard let raw = tokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            throw GatewayError.network("Missing auth token")
+        }
+        return raw
     }
 }
 
@@ -155,13 +170,16 @@ public enum GatewayError: Error, LocalizedError {
 
 /// Gateway URL from environment
 enum GatewayURL {
+    private static let productionAPI = URL(string: "https://gateway-theta-beige.vercel.app")!
+    private static let productionWeb = URL(string: "https://web-nine-gamma-73.vercel.app")!
+
     /// API gateway base URL (for programmatic requests)
     static var api: URL? {
-        guard let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
-              !raw.isEmpty else {
-            return nil
+        if let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
+           !raw.isEmpty {
+            return URL(string: raw)
         }
-        return URL(string: raw)
+        return productionAPI
     }
 
     /// Web app base URL (for browser-opened pages)
@@ -174,7 +192,11 @@ enum GatewayURL {
             return url
         }
         // Fall back to gateway URL (works if gateway and web share origin)
-        return api
+        if let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
+           !raw.isEmpty {
+            return URL(string: raw)
+        }
+        return productionWeb
     }
 
     /// Alias for api (backward compatibility)
