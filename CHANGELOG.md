@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/misty-step/vox/compare/v1.6.0...v1.6.1) (2026-01-25)
+
+
+### Bug Fixes
+
+* **web:** use Vercel Blob URL as default download link ([#63](https://github.com/misty-step/vox/issues/63)) ([e394ccc](https://github.com/misty-step/vox/commit/e394ccc7c9cd961318105d5b06556d75caecd0eb))
+
 ## [1.6.0](https://github.com/misty-step/vox/compare/v1.5.0...v1.6.0) (2026-01-25)
 
 
