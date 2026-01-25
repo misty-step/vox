@@ -88,7 +88,8 @@ public enum GatewayError: Error, LocalizedError {
 
 /// Gateway URL from environment
 enum GatewayURL {
-    static var current: URL? {
+    /// API gateway base URL (for programmatic requests)
+    static var api: URL? {
         guard let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
               !raw.isEmpty else {
             return nil
@@ -96,9 +97,25 @@ enum GatewayURL {
         return URL(string: raw)
     }
 
-    /// Auth page for desktop sign-in flow
+    /// Web app base URL (for browser-opened pages)
+    /// Uses VOX_WEB_URL if set, otherwise derives from gateway URL
+    static var web: URL? {
+        // Prefer explicit web URL
+        if let raw = ProcessInfo.processInfo.environment["VOX_WEB_URL"],
+           !raw.isEmpty,
+           let url = URL(string: raw) {
+            return url
+        }
+        // Fall back to gateway URL (works if gateway and web share origin)
+        return api
+    }
+
+    /// Alias for api (backward compatibility)
+    static var current: URL? { api }
+
+    /// Auth page for desktop sign-in flow (opens in browser)
     static var authDesktop: URL? {
-        guard let base = current,
+        guard let base = web,
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             return nil
         }
@@ -106,8 +123,14 @@ enum GatewayURL {
         return components.url
     }
 
-    /// Stripe checkout page
-    static var checkout: URL? {
-        current?.appendingPathComponent("api/stripe/checkout")
+    /// Checkout page URL builder (opens in browser with token)
+    static func checkoutPage(token: String) -> URL? {
+        guard let base = web,
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = "/checkout"
+        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        return components.url
     }
 }

@@ -51,7 +51,13 @@ final class PaywallWindowController: NSWindowController {
     }
 
     private func handleUpgrade() {
-        guard let url = GatewayURL.checkout else {
+        guard let token = AuthManager.shared.token else {
+            Diagnostics.error("No auth token for checkout")
+            // Fall back to sign-in flow
+            handleSignIn()
+            return
+        }
+        guard let url = GatewayURL.checkoutPage(token: token) else {
             Diagnostics.error("No gateway URL configured for upgrade")
             return
         }
