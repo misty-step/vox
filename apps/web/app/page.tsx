@@ -174,7 +174,10 @@ export default function Page() {
               </p>
               <div className="cta-row">
                 <a
-                  href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
+                  href={
+                    process.env.NEXT_PUBLIC_DOWNLOAD_URL ||
+                    "https://fxdbconfwe9gnaws.public.blob.vercel-storage.com/releases/Vox-latest.dmg"
+                  }
                   className="cta primary"
                 >
                   Download for macOS
