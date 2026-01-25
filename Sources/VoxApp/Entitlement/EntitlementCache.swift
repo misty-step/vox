@@ -17,9 +17,15 @@ struct EntitlementCache: Codable, Equatable, Sendable {
     var isStale: Bool { Date().timeIntervalSince(lastVerified) > Self.staleTTL }
     var isValid: Bool { Date().timeIntervalSince(lastVerified) < Self.validTTL }
 
-    /// Whether the subscription itself is active
+    /// Whether the subscription itself is active.
+    /// For trials, also checks if currentPeriodEnd has passed.
     var isActive: Bool {
-        status == "active"
+        guard status == "active" else { return false }
+        // Trial expiration check (client-side defense in depth)
+        if plan == "trial", let end = currentPeriodEnd, Date() > end {
+            return false
+        }
+        return true
     }
 
     /// Create from gateway response

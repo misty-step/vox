@@ -86,4 +86,53 @@ final class EntitlementCacheTests: XCTestCase {
         XCTAssertNotNil(cache.currentPeriodEnd)
         XCTAssertTrue(cache.lastVerified.timeIntervalSinceNow < 1, "lastVerified should be now")
     }
+
+    // MARK: - Trial Expiration Tests
+
+    func testTrialIsNotActiveWhenExpired() {
+        let cache = EntitlementCache(
+            plan: "trial",
+            status: "active",
+            features: ["stt", "rewrite"],
+            currentPeriodEnd: Date().addingTimeInterval(-3600), // 1 hour ago
+            lastVerified: Date()
+        )
+        XCTAssertFalse(cache.isActive, "Trial should not be active when currentPeriodEnd has passed")
+    }
+
+    func testTrialIsActiveWhenNotExpired() {
+        let cache = EntitlementCache(
+            plan: "trial",
+            status: "active",
+            features: ["stt", "rewrite"],
+            currentPeriodEnd: Date().addingTimeInterval(3600), // 1 hour from now
+            lastVerified: Date()
+        )
+        XCTAssertTrue(cache.isActive, "Trial should be active when currentPeriodEnd is in the future")
+    }
+
+    func testProPlanIgnoresCurrentPeriodEndForActive() {
+        // Pro plans have currentPeriodEnd for billing cycles, but it shouldn't affect isActive
+        // (Stripe manages pro subscription lifecycle, not client-side expiration)
+        let cache = EntitlementCache(
+            plan: "pro",
+            status: "active",
+            features: ["stt", "rewrite", "unlimited"],
+            currentPeriodEnd: Date().addingTimeInterval(-3600), // Past date
+            lastVerified: Date()
+        )
+        XCTAssertTrue(cache.isActive, "Pro plan should remain active regardless of currentPeriodEnd")
+    }
+
+    func testTrialWithoutExpirationIsActive() {
+        // Legacy trials without currentPeriodEnd (pre-migration)
+        let cache = EntitlementCache(
+            plan: "trial",
+            status: "active",
+            features: ["stt", "rewrite"],
+            currentPeriodEnd: nil,
+            lastVerified: Date()
+        )
+        XCTAssertTrue(cache.isActive, "Trial without expiration date should be active (legacy)")
+    }
 }
