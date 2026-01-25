@@ -1,5 +1,7 @@
 import { verifyToken } from "@clerk/backend";
 
+const IS_DEV = process.env.NODE_ENV !== "production";
+
 type AuthResult =
   | { ok: true; subject: string; email?: string }
   | { ok: false; response: Response };
@@ -16,9 +18,8 @@ export async function requireAuth(request: Request): Promise<AuthResult> {
   const token = header.slice("Bearer ".length).trim();
 
   // Dev mode only: allow test token bypass
-  const isDev = process.env.NODE_ENV !== "production";
   const testToken = process.env.VOX_TEST_TOKEN;
-  if (isDev && testToken && token === testToken) {
+  if (IS_DEV && testToken && token === testToken) {
     return { ok: true, subject: "test-user" };
   }
 
@@ -54,8 +55,7 @@ export async function requireAuth(request: Request): Promise<AuthResult> {
 // Keep legacy function for backwards compatibility during migration
 // Only works in non-production environments
 export function requireTestToken(request: Request): AuthResult {
-  const isDev = process.env.NODE_ENV !== "production";
-  if (!isDev) {
+  if (!IS_DEV) {
     return {
       ok: false,
       response: Response.json({ error: "test_auth_disabled" }, { status: 403 }),

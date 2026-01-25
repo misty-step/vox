@@ -36,5 +36,5 @@ Power users who write a lot and want to talk instead of type. Initially: the dev
 - Model research for speed/quality balance
 
 ---
-*Last updated: 2025-01-25*
+*Last updated: 2026-01-25*
 *Updated during: /groom session*
