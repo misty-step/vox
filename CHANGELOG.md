@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/misty-step/vox/compare/v1.5.0...v1.6.0) (2026-01-25)
+
+
+### Features
+
+* **privacy:** add data retention policy and documentation ([#61](https://github.com/misty-step/vox/issues/61)) ([e647b85](https://github.com/misty-step/vox/commit/e647b850329f36f8648c38dccd29e3e3b176327b))
+
 ## [1.5.0](https://github.com/misty-step/vox/compare/v1.4.0...v1.5.0) (2026-01-25)
 
 
