@@ -25,9 +25,10 @@ Preferred: `.env.local`
 - Optional: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_LANGUAGE`
 - Optional: `VOX_CONTEXT_PATH`, `VOX_PROCESSING_LEVEL` (fallback: `VOX_REWRITE_LEVEL`, default: `light`)
   - `VOX_PROCESSING_LEVEL` overrides menu selection; UI changes won’t persist until removed
-- Optional: `VOX_HISTORY=0` disable local history artifacts (default: on)
+- Optional: `VOX_HISTORY=1` to enable local history artifacts (default: off)
 - Optional: `VOX_HISTORY_DIR=/path/to/dir` override history location
 - Optional: `VOX_HISTORY_REDACT=1` store redacted history text
+- Optional: `VOX_HISTORY_DAYS=30` history retention window in days
 - Optional: `VOX_LOG_LEVEL` (debug | info | error | off; default: info)
 
 Fallback: `~/Documents/Vox/config.json`
@@ -40,7 +41,7 @@ Fallback: `~/Documents/Vox/config.json`
 - Hotkey: Option+Space (default)
 - HUD states: recording → processing → copied
 - If paste is blocked, Vox keeps text on clipboard
-- History artifacts: `~/Documents/Vox/history/YYYY-MM-DD/<sessionId>` (raw/rewrite/final + metadata)
+- History artifacts (when enabled): `~/Documents/Vox/history/YYYY-MM-DD/<sessionId>` (raw/rewrite/final + metadata)
 
 ## Auth (gateway mode)
 When using `VOX_GATEWAY_URL`, authentication is required:
@@ -75,6 +76,9 @@ Status bar badges:
 ## Monorepo apps
 - `apps/web` — marketing + download + checkout UI (Next.js)
 - `apps/gateway` — API gateway + webhooks (Next.js, Node runtime)
+
+## Privacy
+Local-first. History off by default. See [PRIVACY.md](PRIVACY.md).
 
 ## Quality gates
 - Hooks: `git config core.hooksPath .githooks`

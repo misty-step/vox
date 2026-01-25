@@ -138,3 +138,28 @@ Releases: Release Please on master, conventional commits drive SemVer.
 - Prefer typed errors (`VoxError`, `RewriteError`, `STTError`)
 - Test naming: `testWhatItDoes`
 - Commit prefixes: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `tune:`
+
+### Swift Error Handling
+
+**Avoid silent `try?` for observable failures.** When an operation fails, log before returning so failures are debuggable.
+
+```swift
+// BAD: Silent failure - impossible to debug
+guard let result = try? riskyOperation() else { return }
+
+// GOOD: Log error before early return
+do {
+    let result = try riskyOperation()
+    // use result...
+} catch {
+    Diagnostics.error("Operation failed: \(String(describing: error))")
+    return
+}
+```
+
+**When `try?` is acceptable:**
+- Truly optional operations (e.g., cache reads where fallback is fine)
+- Cleanup code in defer blocks
+- When you immediately handle the nil case with equivalent fallback
+
+**Rule:** If a `try?` failure would make production debugging harder, use do-catch with `Diagnostics.error()` instead.
