@@ -146,12 +146,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func application(_ application: NSApplication, open urls: [URL]) {
-        let authURLs = urls.filter { url in
-            url.scheme == "vox" && (url.host == "auth" || url.path == "/auth")
-        }
-        guard !authURLs.isEmpty else { return }
-        for url in authURLs {
-            authManager.handleDeepLink(url: url)
+        for url in urls {
+            guard url.scheme == "vox" else { continue }
+
+            // Handle auth deep links: vox://auth?token=...
+            if url.host == "auth" || url.path == "/auth" {
+                authManager.handleDeepLink(url: url)
+            }
+
+            // Handle payment success deep links: vox://payment-success
+            if url.host == "payment-success" || url.path == "/payment-success" {
+                Diagnostics.info("Payment success deep link received")
+                Task {
+                    await entitlementManager.refresh()
+                    if entitlementManager.isAllowed {
+                        PaywallWindowController.hide()
+                    }
+                }
+            }
         }
     }
 
