@@ -35,7 +35,8 @@ public final class GatewayClient: Sendable {
         mimeType: String,
         modelId: String?,
         languageCode: String?,
-        sessionId: String?
+        sessionId: String?,
+        fileFormat: String?
     ) async throws -> TranscriptResponse {
         var form = MultipartFormData()
 
@@ -47,6 +48,10 @@ public final class GatewayClient: Sendable {
 
         if let sessionId {
             form.addField(name: "session_id", value: sessionId)
+        }
+
+        if let fileFormat {
+            form.addField(name: "file_format", value: fileFormat)
         }
 
         form.addFile(

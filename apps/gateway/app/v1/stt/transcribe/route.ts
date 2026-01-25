@@ -4,6 +4,7 @@ import { requireEntitlement } from "../../../../lib/entitlements";
 export const runtime = "nodejs";
 
 const ELEVENLABS_ENDPOINT = "https://api.elevenlabs.io/v1/speech-to-text";
+const MAX_STT_BYTES = 25 * 1024 * 1024; // 25MB
 
 export async function POST(request: Request) {
   const auth = await requireAuth(request);
@@ -24,6 +25,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "stt_provider_not_configured" }, { status: 501 });
   }
 
+  // Reject oversized uploads before parsing
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const size = Number(contentLength);
+    if (!Number.isNaN(size) && size > MAX_STT_BYTES) {
+      return Response.json({ error: "payload_too_large" }, { status: 413 });
+    }
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -34,6 +44,9 @@ export async function POST(request: Request) {
   const file = formData.get("file");
   if (!(file instanceof File)) {
     return Response.json({ error: "missing_file" }, { status: 400 });
+  }
+  if (file.size > MAX_STT_BYTES) {
+    return Response.json({ error: "payload_too_large" }, { status: 413 });
   }
 
   const modelIdValue = formData.get("model_id");
@@ -54,11 +67,20 @@ export async function POST(request: Request) {
       ? sessionIdValue.trim()
       : null;
 
+  const fileFormatValue = formData.get("file_format");
+  const fileFormat =
+    typeof fileFormatValue === "string" && fileFormatValue.trim()
+      ? fileFormatValue.trim()
+      : null;
+
   const proxyBody = new FormData();
   proxyBody.append("file", file, file.name || "audio");
   proxyBody.append("model_id", modelId);
   if (languageCode) {
     proxyBody.append("language_code", languageCode);
+  }
+  if (fileFormat) {
+    proxyBody.append("file_format", fileFormat);
   }
   proxyBody.append("enable_logging", "false");
 
@@ -89,9 +111,6 @@ export async function POST(request: Request) {
     }
 
     const text = typeof payload.text === "string" ? payload.text : "";
-    if (!text) {
-      return Response.json({ error: "stt_empty_response" }, { status: 502 });
-    }
 
     const responseLanguageCode =
       typeof payload.language_code === "string" ? payload.language_code : null;

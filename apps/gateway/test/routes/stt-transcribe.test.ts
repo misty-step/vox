@@ -63,6 +63,26 @@ describe("/v1/stt/transcribe", () => {
     expect(data.error).toBe("stt_provider_not_configured");
   });
 
+  it("returns 413 when file exceeds size limit", async () => {
+    // Create a file larger than 25MB
+    const largeContent = new Uint8Array(26 * 1024 * 1024); // 26MB
+    const form = new FormData();
+    form.append(
+      "file",
+      new File([largeContent], "audio.wav", { type: "audio/wav" })
+    );
+
+    const request = new Request("http://localhost/v1/stt/transcribe", {
+      method: "POST",
+      body: form,
+    });
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(data.error).toBe("payload_too_large");
+  });
+
   it("returns 400 when no file provided", async () => {
     const form = new FormData();
     form.append("model_id", "scribe_v1");

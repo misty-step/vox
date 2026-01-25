@@ -27,7 +27,8 @@ final class GatewaySTTProvider: STTProvider, @unchecked Sendable {
             mimeType: mimeType,
             modelId: modelId,
             languageCode: languageCode,
-            sessionId: request.sessionId.uuidString
+            sessionId: request.sessionId.uuidString,
+            fileFormat: config.fileFormat
         )
 
         return Transcript(
@@ -44,7 +45,7 @@ private func normalizeLanguageCode(_ value: String?) -> String? {
     }
 
     let lowered = raw.lowercased()
-    let primary = lowered.split(separator: "-").first?.split(separator: "_").first.map(String.init) ?? lowered
+    let primary = lowered.components(separatedBy: CharacterSet(charactersIn: "-_")).first ?? lowered
 
     if primary.count == 3 {
         return primary
