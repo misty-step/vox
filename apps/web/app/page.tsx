@@ -152,6 +152,7 @@ export default function Page() {
           <div className="header-right">
             <ThemeToggle />
             <nav>
+              <a href="#pricing">Pricing</a>
               <a href="mailto:hello@mistystep.io">Contact</a>
             </nav>
           </div>
@@ -235,6 +236,72 @@ export default function Page() {
               Text appears at your cursor in under a second. No plugins, no app
               switching.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="pricing" id="pricing">
+        <div className="container">
+          <h2>Simple, transparent pricing</h2>
+          <p className="pricing-subtitle">
+            Start with a free trial. Upgrade when you&apos;re ready.
+          </p>
+          <div className="pricing-cards">
+            <div className="pricing-card">
+              <h3>Trial</h3>
+              <div className="price">
+                <span className="price-amount">Free</span>
+                <span className="price-period">for 14 days</span>
+              </div>
+              <ul className="pricing-features">
+                <li>
+                  <CheckIcon />
+                  Unlimited dictation
+                </li>
+                <li>
+                  <CheckIcon />
+                  AI text cleanup
+                </li>
+                <li>
+                  <CheckIcon />
+                  Instant paste
+                </li>
+              </ul>
+              <a
+                href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
+                className="cta primary"
+              >
+                Start free trial
+              </a>
+            </div>
+            <div className="pricing-card featured">
+              <div className="pricing-badge">Most Popular</div>
+              <h3>Pro</h3>
+              <div className="price">
+                <span className="price-amount">$9</span>
+                <span className="price-period">/month</span>
+              </div>
+              <ul className="pricing-features">
+                <li>
+                  <CheckIcon />
+                  Everything in Trial
+                </li>
+                <li>
+                  <CheckIcon />
+                  Unlimited usage
+                </li>
+                <li>
+                  <CheckIcon />
+                  Priority support
+                </li>
+              </ul>
+              <a
+                href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
+                className="cta primary"
+              >
+                Get Vox Pro
+              </a>
+            </div>
           </div>
         </div>
       </section>

@@ -11,13 +11,16 @@ function CheckoutContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = searchParams.get("token");
+    const tokenParam = searchParams.get("token");
 
-    if (!token) {
+    if (!tokenParam) {
       setStatus("error");
       setErrorMessage("Missing authentication token. Please try again from the Vox app.");
       return;
     }
+
+    // Capture non-null token for use in async function
+    const token = tokenParam;
 
     async function initiateCheckout() {
       try {
