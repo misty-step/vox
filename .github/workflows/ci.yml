@@ -46,6 +46,10 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      - name: Build distribution app
+        run: ./scripts/build-dmg.sh
+      - name: Verify Info.plist
+        run: ./scripts/verify-plist.sh
 
   gateway:
     runs-on: ubuntu-latest

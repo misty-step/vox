@@ -18,5 +18,8 @@ out
 
 # Build artifacts
 dist/
+dist/Vox.app/
+dist/*.dmg
 thinktank_*/
 thinktank.log
+.env*.local
