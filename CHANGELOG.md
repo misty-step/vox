@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.3](https://github.com/misty-step/vox/compare/v1.6.2...v1.6.3) (2026-01-26)
+
+
+### Bug Fixes
+
+* **security:** proxy STT requests through gateway to protect API key ([#87](https://github.com/misty-step/vox/issues/87)) ([88bc17d](https://github.com/misty-step/vox/commit/88bc17de8f35713b48563c037c306b45b09b5519))
+
 ## [1.6.2](https://github.com/misty-step/vox/compare/v1.6.1...v1.6.2) (2026-01-25)
 
 
