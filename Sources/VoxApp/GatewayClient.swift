@@ -175,28 +175,12 @@ enum GatewayURL {
 
     /// API gateway base URL (for programmatic requests)
     static var api: URL? {
-        if let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
-           !raw.isEmpty {
-            return URL(string: raw)
-        }
-        return productionAPI
+        envURL("VOX_GATEWAY_URL") ?? productionAPI
     }
 
     /// Web app base URL (for browser-opened pages)
-    /// Uses VOX_WEB_URL if set, otherwise derives from gateway URL
     static var web: URL? {
-        // Prefer explicit web URL
-        if let raw = ProcessInfo.processInfo.environment["VOX_WEB_URL"],
-           !raw.isEmpty,
-           let url = URL(string: raw) {
-            return url
-        }
-        // Fall back to gateway URL (works if gateway and web share origin)
-        if let raw = ProcessInfo.processInfo.environment["VOX_GATEWAY_URL"],
-           !raw.isEmpty {
-            return URL(string: raw)
-        }
-        return productionWeb
+        envURL("VOX_WEB_URL") ?? envURL("VOX_GATEWAY_URL") ?? productionWeb
     }
 
     /// Alias for api (backward compatibility)
@@ -204,22 +188,30 @@ enum GatewayURL {
 
     /// Auth page for desktop sign-in flow (opens in browser)
     static var authDesktop: URL? {
-        guard let base = web,
-              var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        components.path = "/auth/desktop"
-        return components.url
+        webURL(path: "/auth/desktop")
     }
 
     /// Checkout page URL builder (opens in browser with token)
     static func checkoutPage(token: String) -> URL? {
+        webURL(path: "/checkout", queryItems: [URLQueryItem(name: "token", value: token)])
+    }
+
+    // MARK: - Private Helpers
+
+    private static func envURL(_ key: String) -> URL? {
+        guard let raw = ProcessInfo.processInfo.environment[key], !raw.isEmpty else {
+            return nil
+        }
+        return URL(string: raw)
+    }
+
+    private static func webURL(path: String, queryItems: [URLQueryItem]? = nil) -> URL? {
         guard let base = web,
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             return nil
         }
-        components.path = "/checkout"
-        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        components.path = path
+        components.queryItems = queryItems
         return components.url
     }
 }

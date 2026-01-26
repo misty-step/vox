@@ -26,16 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let config = loaded.config
             configSource = loaded.source
             processingLevelOverride = loaded.processingLevelOverride
-            let sourceDescription: String
-            switch loaded.source {
-            case .envLocal:
-                sourceDescription = ".env.local"
-            case .file:
-                sourceDescription = "config.json"
-            case .defaults:
-                sourceDescription = "defaults"
-            }
-            Diagnostics.info("Config source: \(sourceDescription)")
+            Diagnostics.info("Config source: \(loaded.source)")
             appConfig = config
             let preferGateway = loaded.source == .defaults
             let sttProvider = try ProviderFactory.makeSTT(config: config.stt, preferGateway: preferGateway)

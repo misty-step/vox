@@ -120,10 +120,18 @@ struct ProcessingLevelOverride: Equatable {
 }
 
 enum ConfigLoader {
-    enum Source {
+    enum Source: CustomStringConvertible {
         case envLocal
         case file
         case defaults
+
+        var description: String {
+            switch self {
+            case .envLocal: ".env.local"
+            case .file: "config.json"
+            case .defaults: "defaults"
+            }
+        }
     }
 
     struct LoadedConfig {

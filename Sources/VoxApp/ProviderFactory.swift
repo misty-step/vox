@@ -75,17 +75,22 @@ enum ProviderFactory {
     }
 
     private static func tokenProvider(env: [String: String]) -> @Sendable () -> String? {
-        let envToken = env["VOX_GATEWAY_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let envToken = trimmed(env["VOX_GATEWAY_TOKEN"])
         return {
-            let keychainToken: String? = {
-                if Thread.isMainThread {
-                    return MainActor.assumeIsolated { AuthManager.shared.token }?
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                return KeychainHelper.load()?.trimmingCharacters(in: .whitespacesAndNewlines)
-            }()
-            let rawToken = (keychainToken?.isEmpty == false) ? keychainToken : envToken
-            return rawToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let keychainToken: String? = if Thread.isMainThread {
+                trimmed(MainActor.assumeIsolated { AuthManager.shared.token })
+            } else {
+                trimmed(KeychainHelper.load())
+            }
+            return keychainToken ?? envToken
         }
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }
