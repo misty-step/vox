@@ -1,9 +1,11 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// AppKit window controller hosting the SwiftUI PaywallView
 final class PaywallWindowController: NSWindowController {
     private static var shared: PaywallWindowController?
+    private var cancellables = Set<AnyCancellable>()
     private var pollingTask: Task<Void, Never>?
     private var onDismiss: (() -> Void)?
 
@@ -123,12 +125,33 @@ final class PaywallWindowController: NSWindowController {
         Self.shared = nil
     }
 
+    override func close() {
+        dismiss()
+    }
+
+    private func startEntitlementObservation() {
+        guard cancellables.isEmpty else { return }
+
+        EntitlementManager.shared.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newState in
+                if case .entitled = newState {
+                    self?.close()
+                }
+                if case .gracePeriod = newState {
+                    self?.close()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
     // MARK: - Static API
 
     @MainActor
     static func show(for state: EntitlementState, onDismiss: @escaping () -> Void = {}) {
         if let existing = shared {
             existing.updateContent(state: state)
+            existing.startEntitlementObservation()
             existing.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -136,6 +159,7 @@ final class PaywallWindowController: NSWindowController {
 
         let controller = PaywallWindowController(state: state, onDismiss: onDismiss)
         shared = controller
+        controller.startEntitlementObservation()
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

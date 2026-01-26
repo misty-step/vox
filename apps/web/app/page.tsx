@@ -265,7 +265,7 @@ export default function Page() {
                 </li>
               </ul>
               <a
-                href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
+                href="/checkout"
                 className="cta primary"
               >
                 Start free trial
@@ -293,7 +293,7 @@ export default function Page() {
                 </li>
               </ul>
               <a
-                href={process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#"}
+                href="/checkout"
                 className="cta primary"
               >
                 Get Vox Pro

@@ -54,6 +54,10 @@ final class AuthManager: ObservableObject {
             try KeychainHelper.save(token: token)
             state = .authenticated(token: token)
             Diagnostics.info("Stored auth token from deep link.")
+            // Force entitlement refresh
+            Task { @MainActor in
+                await EntitlementManager.shared.refresh()
+            }
         } catch {
             Diagnostics.warning("Failed to save auth token: \(error.localizedDescription)")
         }
