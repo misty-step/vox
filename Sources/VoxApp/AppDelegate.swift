@@ -28,12 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             processingLevelOverride = loaded.processingLevelOverride
             Diagnostics.info("Config source: \(loaded.source)")
             appConfig = config
-            let preferGateway = loaded.source == .defaults
-            let sttProvider = try ProviderFactory.makeSTT(config: config.stt, preferGateway: preferGateway)
+            let useDefaultGateway = loaded.source == .defaults
+            let sttProvider = try ProviderFactory.makeSTT(config: config.stt, useDefaultGateway: useDefaultGateway)
             let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
             let rewriteProvider = try ProviderFactory.makeRewrite(
                 selection: rewriteSelection,
-                preferGateway: preferGateway
+                useDefaultGateway: useDefaultGateway
             )
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)

@@ -3,8 +3,8 @@ import VoxCore
 import VoxProviders
 
 enum ProviderFactory {
-    static func makeSTT(config: AppConfig.STTConfig, preferGateway: Bool = false) throws -> STTProvider {
-        if let gateway = try gatewayClient(preferGateway: preferGateway) {
+    static func makeSTT(config: AppConfig.STTConfig, useDefaultGateway: Bool = false) throws -> STTProvider {
+        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
             return GatewaySTTProvider(gateway: gateway, config: config)
         }
         switch config.provider {
@@ -23,8 +23,8 @@ enum ProviderFactory {
         }
     }
 
-    static func makeRewrite(selection: RewriteProviderSelection, preferGateway: Bool = false) throws -> RewriteProvider {
-        if let gateway = try gatewayClient(preferGateway: preferGateway) {
+    static func makeRewrite(selection: RewriteProviderSelection, useDefaultGateway: Bool = false) throws -> RewriteProvider {
+        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
             return GatewayRewriteProvider(gateway: gateway)
         }
         switch selection.id {
@@ -59,7 +59,7 @@ enum ProviderFactory {
 
     private static func gatewayClient(
         env: [String: String] = ProcessInfo.processInfo.environment,
-        preferGateway: Bool = false
+        useDefaultGateway: Bool = false
     ) throws -> GatewayClient? {
         if let rawURL = env["VOX_GATEWAY_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !rawURL.isEmpty {
@@ -68,7 +68,7 @@ enum ProviderFactory {
             }
             return GatewayClient(baseURL: url, tokenProvider: tokenProvider(env: env))
         }
-        guard preferGateway, let url = GatewayURL.api, url.scheme != nil else {
+        guard useDefaultGateway, let url = GatewayURL.api, url.scheme != nil else {
             return nil
         }
         return GatewayClient(baseURL: url, tokenProvider: tokenProvider(env: env))
