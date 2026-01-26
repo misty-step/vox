@@ -26,11 +26,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let config = loaded.config
             configSource = loaded.source
             processingLevelOverride = loaded.processingLevelOverride
-            Diagnostics.info("Config source: \(loaded.source == .envLocal ? ".env.local" : "config.json")")
+            Diagnostics.info("Config source: \(loaded.source)")
             appConfig = config
-            let sttProvider = try ProviderFactory.makeSTT(config: config.stt)
+            let useDefaultGateway = loaded.source == .defaults
+            let sttProvider = try ProviderFactory.makeSTT(config: config.stt, useDefaultGateway: useDefaultGateway)
             let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
-            let rewriteProvider = try ProviderFactory.makeRewrite(selection: rewriteSelection)
+            let rewriteProvider = try ProviderFactory.makeRewrite(
+                selection: rewriteSelection,
+                useDefaultGateway: useDefaultGateway
+            )
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)
             let locale = config.stt.languageCode ?? Locale.current.identifier
@@ -183,6 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 statusBarController?.showMessage("Failed to save processing level")
                 hudController?.showMessage("Failed to save processing level")
             }
+        case .defaults:
+            ProcessingLevelStore.save(level)
+            Diagnostics.info("Saved processing level to preferences.")
         case .none:
             break
         }

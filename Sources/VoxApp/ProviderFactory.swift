@@ -3,8 +3,8 @@ import VoxCore
 import VoxProviders
 
 enum ProviderFactory {
-    static func makeSTT(config: AppConfig.STTConfig) throws -> STTProvider {
-        if let gateway = try gatewayClient() {
+    static func makeSTT(config: AppConfig.STTConfig, useDefaultGateway: Bool = false) throws -> STTProvider {
+        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
             return GatewaySTTProvider(gateway: gateway, config: config)
         }
         switch config.provider {
@@ -23,8 +23,8 @@ enum ProviderFactory {
         }
     }
 
-    static func makeRewrite(selection: RewriteProviderSelection) throws -> RewriteProvider {
-        if let gateway = try gatewayClient() {
+    static func makeRewrite(selection: RewriteProviderSelection, useDefaultGateway: Bool = false) throws -> RewriteProvider {
+        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
             return GatewayRewriteProvider(gateway: gateway)
         }
         switch selection.id {
@@ -58,27 +58,39 @@ enum ProviderFactory {
     }
 
     private static func gatewayClient(
-        env: [String: String] = ProcessInfo.processInfo.environment
+        env: [String: String] = ProcessInfo.processInfo.environment,
+        useDefaultGateway: Bool = false
     ) throws -> GatewayClient? {
-        guard let rawURL = env["VOX_GATEWAY_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawURL.isEmpty else {
+        if let rawURL = env["VOX_GATEWAY_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawURL.isEmpty {
+            guard let url = URL(string: rawURL), url.scheme != nil else {
+                throw VoxError.internalError("Invalid VOX_GATEWAY_URL: \(rawURL)")
+            }
+            return GatewayClient(baseURL: url, tokenProvider: tokenProvider(env: env))
+        }
+        guard useDefaultGateway, let url = GatewayURL.api, url.scheme != nil else {
             return nil
         }
-        guard let url = URL(string: rawURL), url.scheme != nil else {
-            throw VoxError.internalError("Invalid VOX_GATEWAY_URL: \(rawURL)")
-        }
-        let keychainToken: String? = {
-            if Thread.isMainThread {
-                return MainActor.assumeIsolated { AuthManager.shared.token }?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+        return GatewayClient(baseURL: url, tokenProvider: tokenProvider(env: env))
+    }
+
+    private static func tokenProvider(env: [String: String]) -> @Sendable () -> String? {
+        let envToken = trimmed(env["VOX_GATEWAY_TOKEN"])
+        return {
+            let keychainToken: String? = if Thread.isMainThread {
+                trimmed(MainActor.assumeIsolated { AuthManager.shared.token })
+            } else {
+                trimmed(KeychainHelper.load())
             }
-            return KeychainHelper.load()?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }()
-        let envToken = env["VOX_GATEWAY_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rawToken = (keychainToken?.isEmpty == false) ? keychainToken : envToken
-        guard let token = rawToken, !token.isEmpty else {
-            throw VoxError.internalError("Missing gateway auth token (Keychain or VOX_GATEWAY_TOKEN).")
+            return keychainToken ?? envToken
         }
-        return GatewayClient(baseURL: url, token: token)
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

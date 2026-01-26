@@ -120,9 +120,18 @@ struct ProcessingLevelOverride: Equatable {
 }
 
 enum ConfigLoader {
-    enum Source {
+    enum Source: CustomStringConvertible {
         case envLocal
         case file
+        case defaults
+
+        var description: String {
+            switch self {
+            case .envLocal: ".env.local"
+            case .file: "config.json"
+            case .defaults: "defaults"
+            }
+        }
     }
 
     struct LoadedConfig {
@@ -144,8 +153,22 @@ enum ConfigLoader {
 
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: configURL.path) {
-            try createSampleConfig(at: configURL)
-            throw VoxError.internalError("Missing config. Sample created at \(configURL.path).")
+            do {
+                try createSampleConfig(at: configURL)
+            } catch {
+                Diagnostics.warning("Failed to create sample config: \(String(describing: error))")
+            }
+            var config = sampleConfig()
+            let storedProcessingLevel = ProcessingLevelStore.load()
+            if config.processingLevel == nil {
+                config.processingLevel = storedProcessingLevel ?? .light
+            } else if let storedProcessingLevel {
+                config.processingLevel = storedProcessingLevel
+            }
+            _ = try RewriteConfigResolver.resolve(config.rewrite)
+            config.normalized()
+            Diagnostics.info("No config file found. Using defaults.")
+            return LoadedConfig(config: config, source: .defaults, processingLevelOverride: nil)
         }
 
         let data = try Data(contentsOf: configURL)
@@ -174,7 +197,16 @@ enum ConfigLoader {
         let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let sample = AppConfig(
+        let sample = sampleConfig()
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(sample)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private static func sampleConfig() -> AppConfig {
+        AppConfig(
             stt: AppConfig.STTConfig(
                 provider: "elevenlabs",
                 apiKey: "YOUR_ELEVENLABS_API_KEY",
@@ -212,11 +244,6 @@ enum ConfigLoader {
             hotkey: .default,
             contextPath: AppConfig.defaultContextPath
         )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(sample)
-        try data.write(to: url, options: .atomic)
     }
 
     private static func loadFromDotEnv() throws -> LoadedConfig? {
