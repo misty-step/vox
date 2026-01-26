@@ -150,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func application(_ application: NSApplication, open urls: [URL]) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
         for url in urls {
             guard url.scheme == "vox" else { continue }
 

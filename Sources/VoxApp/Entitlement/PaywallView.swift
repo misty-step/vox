@@ -61,6 +61,8 @@ struct PaywallView: View {
         }
         if let text {
             Text(text)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
         }
