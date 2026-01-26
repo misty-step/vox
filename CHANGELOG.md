@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.4](https://github.com/misty-step/vox/compare/v1.6.3...v1.6.4) (2026-01-26)
+
+
+### Bug Fixes
+
+* **auth:** complete overhaul of auth & checkout flow ([#99](https://github.com/misty-step/vox/issues/99)) ([0a745c2](https://github.com/misty-step/vox/commit/0a745c20af5ad640ac5fdd5bf0a2057875d7406d))
+
 ## [1.6.3](https://github.com/misty-step/vox/compare/v1.6.2...v1.6.3) (2026-01-26)
 
 
