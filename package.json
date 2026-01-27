@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "preinstall": "node ./scripts/ensure-pnpm.js",
+    "dev": "./scripts/dev.sh",
     "dev:web": "pnpm --filter @vox/web dev",
     "dev:gateway": "pnpm --filter @vox/gateway dev",
     "build": "pnpm -r run build",
@@ -14,7 +15,9 @@
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
     "smoke": "./scripts/smoke-test.sh",
-    "upload-release": "node scripts/upload-release.mjs"
+    "upload-release": "node scripts/upload-release.mjs",
+    "build:dmg": "./scripts/build-dmg.sh",
+    "build:dmg:dev": "./scripts/build-dev-dmg.sh"
   },
   "devDependencies": {
     "@vercel/blob": "^0.27.0"
