@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import VoxCore
 
@@ -110,7 +111,7 @@ struct AppConfig: Codable {
 
     static var defaultContextPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appendingPathComponent("Documents/Vox/context.md").path
+        return home.appendingPathComponent("Library/Application Support/Vox/context.md").path
     }
 }
 
@@ -142,41 +143,14 @@ enum ConfigLoader {
 
     static let configURL: URL = {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appendingPathComponent("Documents/Vox/config.json")
+        return home.appendingPathComponent("Library/Application Support/Vox/config.json")
     }()
 
     static func load() throws -> LoadedConfig {
         if let loaded = try loadFromDotEnv() {
-            Diagnostics.info("Loaded config from .env.local")
             return loaded
         }
-
-        let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: configURL.path) {
-            do {
-                try createSampleConfig(at: configURL)
-            } catch {
-                Diagnostics.warning("Failed to create sample config: \(String(describing: error))")
-            }
-            var config = sampleConfig()
-            let storedProcessingLevel = ProcessingLevelStore.load()
-            if config.processingLevel == nil {
-                config.processingLevel = storedProcessingLevel ?? .light
-            } else if let storedProcessingLevel {
-                config.processingLevel = storedProcessingLevel
-            }
-            _ = try RewriteConfigResolver.resolve(config.rewrite)
-            config.normalized()
-            Diagnostics.info("No config file found. Using defaults.")
-            return LoadedConfig(config: config, source: .defaults, processingLevelOverride: nil)
-        }
-
-        let data = try Data(contentsOf: configURL)
-        var config = try JSONDecoder().decode(AppConfig.self, from: data)
-        _ = try RewriteConfigResolver.resolve(config.rewrite)
-        config.normalized()
-        Diagnostics.info("Loaded config from \(configURL.path)")
-        return LoadedConfig(config: config, source: .file, processingLevelOverride: nil)
+        return try loadFromFileOrDefaults()
     }
 
     static func save(_ config: AppConfig) throws {
@@ -254,92 +228,75 @@ enum ConfigLoader {
         }
 
         let env = try DotEnvLoader.load(from: url)
-
-        guard let elevenKey = env["ELEVENLABS_API_KEY"] else {
-            throw VoxError.internalError("Missing ELEVENLABS_API_KEY in .env.local")
-        }
-
-        let sttModel = env["ELEVENLABS_MODEL_ID"] ?? "scribe_v2"
-        let sttLanguage = env["ELEVENLABS_LANGUAGE"]
-
-        let rewriteProvider = env["VOX_REWRITE_PROVIDER"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "gemini"
-        var rewriteProviders: [RewriteProviderConfig] = []
-
-        if let geminiKey = env["GEMINI_API_KEY"] {
-            let rewriteModel = env["GEMINI_MODEL_ID"] ?? "gemini-3-flash-preview"
-            let temperature = Double(env["GEMINI_TEMPERATURE"] ?? "") ?? 0.2
-            let requestedMaxTokens = Int(env["GEMINI_MAX_TOKENS"] ?? "")
-            let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
-                requested: requestedMaxTokens,
-                modelId: rewriteModel
-            )
-            let thinking = env["GEMINI_THINKING_LEVEL"]
-            rewriteProviders.append(
-                RewriteProviderConfig(
-                    id: "gemini",
-                    apiKey: geminiKey,
-                    modelId: rewriteModel,
-                    temperature: temperature,
-                    maxOutputTokens: maxTokens,
-                    thinkingLevel: thinking
-                )
-            )
-        }
-
-        if let openRouterKey = env["OPENROUTER_API_KEY"] {
-            let modelId = env["OPENROUTER_MODEL_ID"] ?? "xiaomi/mimo-v2-flash"
-            let temperature = Double(env["OPENROUTER_TEMPERATURE"] ?? "")
-            let maxTokens = Int(env["OPENROUTER_MAX_TOKENS"] ?? "")
-            rewriteProviders.append(
-                RewriteProviderConfig(
-                    id: "openrouter",
-                    apiKey: openRouterKey,
-                    modelId: modelId,
-                    temperature: temperature,
-                    maxOutputTokens: maxTokens,
-                    thinkingLevel: nil
-                )
-            )
-        }
-
-        if rewriteProviders.isEmpty {
-            throw VoxError.internalError("Missing rewrite provider config in .env.local")
-        }
-
-        let contextPath = env["VOX_CONTEXT_PATH"] ?? AppConfig.defaultContextPath
+        applyGatewayEnvOverrides(from: env)
         let processingLevelOverride = processingLevelOverride(from: env)
         let envProcessingLevel = processingLevelOverride?.level
         let storedProcessingLevel = ProcessingLevelStore.load() ?? loadProcessingLevelFromConfigFile()
-        let processingLevel = envProcessingLevel ?? storedProcessingLevel ?? .light
 
-        var config = AppConfig(
-            stt: AppConfig.STTConfig(
-                provider: "elevenlabs",
-                apiKey: elevenKey,
-                modelId: sttModel,
-                languageCode: sttLanguage,
-                fileFormat: nil
-            ),
-            rewrite: AppConfig.RewriteConfig(
-                provider: rewriteProvider,
-                providers: rewriteProviders,
-                apiKey: nil,
-                modelId: nil,
-                temperature: nil,
-                maxOutputTokens: nil,
-                thinkingLevel: nil
-            ),
-            processingLevel: processingLevel,
-            hotkey: .default,
-            contextPath: contextPath
-        )
-        _ = try RewriteConfigResolver.resolve(config.rewrite)
+        var loaded = try loadFromFileOrDefaults()
+        var config = loaded.config
+        let processingLevel = envProcessingLevel ?? storedProcessingLevel ?? config.processingLevel ?? .light
+        if let contextPath = trimmed(env["VOX_CONTEXT_PATH"]) {
+            config.contextPath = contextPath
+        }
+        config.processingLevel = processingLevel
         config.normalized()
+        Diagnostics.info("Loaded env overrides from .env.local")
         return LoadedConfig(
             config: config,
-            source: .envLocal,
+            source: loaded.source,
             processingLevelOverride: processingLevelOverride
         )
+    }
+
+    private static func loadFromFileOrDefaults() throws -> LoadedConfig {
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: configURL.path) {
+            do {
+                try createSampleConfig(at: configURL)
+            } catch {
+                Diagnostics.warning("Failed to create sample config: \(String(describing: error))")
+            }
+            var config = sampleConfig()
+            let storedProcessingLevel = ProcessingLevelStore.load()
+            if config.processingLevel == nil {
+                config.processingLevel = storedProcessingLevel ?? .light
+            } else if let storedProcessingLevel {
+                config.processingLevel = storedProcessingLevel
+            }
+            _ = try RewriteConfigResolver.resolve(config.rewrite)
+            config.normalized()
+            Diagnostics.info("No config file found. Using defaults.")
+            return LoadedConfig(config: config, source: .defaults, processingLevelOverride: nil)
+        }
+
+        let data = try Data(contentsOf: configURL)
+        var config = try JSONDecoder().decode(AppConfig.self, from: data)
+        _ = try RewriteConfigResolver.resolve(config.rewrite)
+        config.normalized()
+        Diagnostics.info("Loaded config from \(configURL.path)")
+        return LoadedConfig(config: config, source: .file, processingLevelOverride: nil)
+    }
+
+    private static func applyGatewayEnvOverrides(from env: [String: String]) {
+        setEnvIfMissing("VOX_GATEWAY_URL", env: env)
+        setEnvIfMissing("VOX_WEB_URL", env: env)
+    }
+
+    private static func setEnvIfMissing(_ key: String, env: [String: String]) {
+        guard let value = trimmed(env[key]) else { return }
+        if let existing = trimmed(ProcessInfo.processInfo.environment[key]), !existing.isEmpty {
+            return
+        }
+        setenv(key, value, 0)
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     private static func loadProcessingLevelFromConfigFile() -> ProcessingLevel? {

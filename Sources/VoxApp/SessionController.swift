@@ -194,17 +194,22 @@ final class SessionController {
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                defer { self.state = .idle }
 
                 switch result {
                 case .success(let finalText):
                     do {
                         try self.paste(finalText: finalText)
                         Task { await history?.recordPaste(success: true) }
+                        // Delay idle transition for message visibility.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(2))
+                            self.state = .idle
+                        }
                     } catch {
                         self.logger.error("Paste failed: \(String(describing: error))")
                         Diagnostics.error("Paste failed: \(String(describing: error))")
                         Task { await history?.recordPaste(success: false, error: String(describing: error)) }
+                        self.state = .idle
                     }
                 case .failure(let error):
                     if case VoxError.noTranscript = error {
@@ -214,6 +219,7 @@ final class SessionController {
                         self.logger.error("Processing failed: \(String(describing: error))")
                         Diagnostics.error("Processing failed: \(String(describing: error))")
                     }
+                    self.state = .idle
                 }
             }
         }

@@ -8,8 +8,13 @@ import VoxMac
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var hotkeyMonitor: HotkeyMonitor?
-    private var sessionController: SessionController?
+    private var sessionOrchestrator: SessionOrchestrator?
+    private var pipelineAdapter: DictationPipelineAdapter?
+    private var entitlementCache: FileEntitlementCache?
     private var hudController: HUDController?
+    private var audioRecorder: AudioRecorder?
+    private var levelTimer: DispatchSourceTimer?
+    private var lastSessionState: SessionState = .idle
     private var appConfig: AppConfig?
     private var configSource: ConfigLoader.Source?
     private var processingLevelOverride: ProcessingLevelOverride?
@@ -67,24 +72,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 locale: locale,
                 modelId: config.stt.modelId
             )
-            let session = SessionController(
+
+            let env = ProcessInfo.processInfo.environment
+            seedGatewayTokenIfNeeded(env: env)
+            let gatewayClient = try makeGatewayClient(env: env, useDefaultGateway: useDefaultGateway)
+
+            // Deep module graph.
+            let tokenStorage = KeychainTokenStorage()
+            let tokenRefresher = GatewayTokenRefresher(client: gatewayClient)
+            let tokenService = TokenServiceImpl(storage: tokenStorage, refresher: tokenRefresher)
+
+            let entitlementChecker = GatewayEntitlementChecker(client: gatewayClient)
+            let entitlementCache = FileEntitlementCache()
+            let accessGate = AccessGateImpl(
+                tokenService: tokenService,
+                entitlementChecker: entitlementChecker,
+                cache: entitlementCache
+            )
+
+            let permissionCoordinator = PermissionCoordinatorImpl(checker: SystemPermissionChecker())
+
+            let audioRecorder = AudioRecorder()
+            let recorder = AudioRecorderAdapter(recorder: audioRecorder)
+            let pipelineAdapter = DictationPipelineAdapter(
                 pipeline: pipeline,
-                processingLevel: processingLevel,
                 historyStore: historyStore,
-                metadataConfig: metadataConfig
+                metadataConfig: metadataConfig,
+                processingLevel: processingLevel
+            )
+            let paster = ClipboardPasterAdapter(
+                paster: ClipboardPaster(
+                    restoreDelay: PasteOptions.restoreDelay,
+                    shouldRestore: PasteOptions.shouldRestore
+                )
+            )
+
+            let orchestrator = SessionOrchestratorImpl(
+                accessGate: accessGate,
+                permissionCoordinator: permissionCoordinator,
+                recorder: recorder,
+                pipeline: pipelineAdapter,
+                paster: paster
             )
 
             let statusBar = StatusBarController(
                 onToggle: {
-                    Task { @MainActor in
-                        session.toggle()
-                    }
+                    Task { await orchestrator.toggle() }
                 },
-                onProcessingLevelChange: { [weak self, weak session] level in
-                    Task { @MainActor in
-                        guard let session else { return }
-                        session.updateProcessingLevel(level)
-                        self?.persistProcessingLevel(level)
+                onProcessingLevelChange: { [weak self] level in
+                    Task {
+                        await pipelineAdapter.updateProcessingLevel(level)
+                        await MainActor.run { self?.persistProcessingLevel(level) }
                     }
                 },
                 onProcessingLevelOverrideAttempt: { [weak self] in
@@ -96,26 +134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             let hud = HUDController()
 
-            session.stateDidChange = { [weak statusBar, weak hud] state in
-                statusBar?.update(state: state)
-                switch state {
-                case .idle:
-                    hud?.show(state: .hidden)
-                case .recording:
-                    hud?.show(state: .recording)
-                case .processing:
-                    hud?.show(state: .processing)
+            Task { [weak self, weak statusBar, weak hud] in
+                await orchestrator.setStateObserver { state in
+                    Task { @MainActor [weak self, weak statusBar, weak hud] in
+                        self?.handleSessionState(state, statusBar: statusBar, hud: hud)
+                    }
                 }
-            }
-            session.statusDidChange = { [weak statusBar, weak hud] message in
-                statusBar?.showMessage(message)
-                hud?.showMessage(message)
-            }
-            session.inputLevelDidChange = { [weak hud] average, peak in
-                hud?.updateInputLevels(average: average, peak: peak)
-            }
-            session.entitlementBlocked = { state in
-                PaywallWindowController.show(for: state)
             }
 
             // Observe entitlement state changes for status bar badge
@@ -128,17 +152,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let hotkey = config.hotkey ?? .default
             let modifiers = HotkeyParser.modifiers(from: hotkey.modifiers)
             hotkeyMonitor = try HotkeyMonitor(keyCode: hotkey.keyCode, modifiers: modifiers) {
-                Task { @MainActor in
-                    session.toggle()
-                }
+                Task { await orchestrator.toggle() }
             }
 
             statusBarController = statusBar
-            sessionController = session
+            sessionOrchestrator = orchestrator
+            self.pipelineAdapter = pipelineAdapter
+            self.entitlementCache = entitlementCache
+            self.audioRecorder = audioRecorder
             hudController = hud
 
             PermissionManager.promptForAccessibilityIfNeeded()
-            Task { _ = await PermissionManager.requestMicrophoneAccess() }
 
             // Initial entitlement check (background)
             Task { await entitlementManager.refresh() }
@@ -157,12 +181,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Handle auth deep links: vox://auth?token=...
             if url.host == "auth" || url.path == "/auth" {
                 authManager.handleDeepLink(url: url)
+                Task { await entitlementCache?.clear() }
             }
 
             // Handle payment success deep links: vox://payment-success
             if url.host == "payment-success" || url.path == "/payment-success" {
                 Diagnostics.info("Payment success deep link received")
                 Task {
+                    await entitlementCache?.clear()
                     await entitlementManager.refresh()
                     if entitlementManager.isAllowed {
                         PaywallWindowController.hide()
@@ -211,5 +237,136 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let message = "Processing locked by \(override.sourceKey). Edit .env.local to change."
         statusBarController?.showMessage(message)
         hudController?.showMessage(message)
+    }
+
+    @MainActor
+    private func handleSessionState(
+        _ state: SessionState,
+        statusBar: StatusBarController?,
+        hud: HUDController?
+    ) {
+        let previous = lastSessionState
+        defer { lastSessionState = state }
+
+        if case .recording = state {
+            if case .recording = previous {
+                // no-op
+            } else {
+                startLevelMetering()
+                let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                Task { await pipelineAdapter?.captureTargetApplication(bundleId: bundleId) }
+            }
+        } else if case .recording = previous {
+            stopLevelMetering()
+        }
+
+        statusBar?.update(state: legacyState(for: state))
+
+        switch state {
+        case .idle:
+            hud?.show(state: .hidden)
+        case .requestingPermissions:
+            hud?.show(state: .processing)
+        case .recording:
+            hud?.show(state: .recording)
+        case .processing:
+            hud?.show(state: .processing)
+        case .blocked(let reason):
+            hud?.show(state: .hidden)
+            handleBlocked(reason: reason, statusBar: statusBar, hud: hud)
+        }
+    }
+
+    private func legacyState(for state: SessionState) -> SessionController.State {
+        switch state {
+        case .idle, .blocked:
+            return .idle
+        case .requestingPermissions:
+            return .processing
+        case .recording:
+            return .recording
+        case .processing:
+            return .processing
+        }
+    }
+
+    @MainActor
+    private func handleBlocked(reason: BlockReason, statusBar: StatusBarController?, hud: HUDController?) {
+        switch reason {
+        case .notAuthenticated:
+            statusBar?.showMessage("Sign in required")
+            hud?.showMessage("Sign in required")
+            PaywallWindowController.show(for: .unauthenticated)
+        case .notEntitled:
+            statusBar?.showMessage("Subscription required")
+            hud?.showMessage("Subscription required")
+            PaywallWindowController.show(for: .expired)
+        case .permissionDenied:
+            statusBar?.showMessage("Permissions required")
+            hud?.showMessage("Permissions required")
+        case .networkError(let message):
+            statusBar?.showMessage("Network error")
+            hud?.showMessage("Network error")
+            PaywallWindowController.show(for: .error(message))
+        }
+    }
+
+    private static let levelMeterInterval: TimeInterval = 0.05
+
+    @MainActor
+    private func startLevelMetering() {
+        guard levelTimer == nil, audioRecorder != nil else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: Self.levelMeterInterval)
+        timer.setEventHandler { [weak self] in
+            guard let self, let recorder = self.audioRecorder else { return }
+            let levels = recorder.currentLevel()
+            self.hudController?.updateInputLevels(average: levels.average, peak: levels.peak)
+        }
+        timer.resume()
+        levelTimer = timer
+    }
+
+    @MainActor
+    private func stopLevelMetering() {
+        levelTimer?.cancel()
+        levelTimer = nil
+    }
+
+    private func makeGatewayClient(env: [String: String], useDefaultGateway: Bool) throws -> GatewayClient {
+        let baseURL: URL
+        if let rawURL = trimmed(env["VOX_GATEWAY_URL"]) {
+            guard let url = URL(string: rawURL), url.scheme != nil else {
+                throw VoxError.internalError("Invalid VOX_GATEWAY_URL: \(rawURL)")
+            }
+            baseURL = url
+        } else if useDefaultGateway, let url = GatewayURL.api, url.scheme != nil {
+            baseURL = url
+        } else if let url = GatewayURL.api, url.scheme != nil {
+            baseURL = url
+        } else {
+            throw VoxError.internalError("Gateway URL not configured.")
+        }
+
+        let envToken = trimmed(env["VOX_GATEWAY_TOKEN"])
+        let tokenProvider: @Sendable () -> String? = {
+            KeychainHelper.sessionToken ?? envToken
+        }
+        return GatewayClient(baseURL: baseURL, tokenProvider: tokenProvider)
+    }
+
+    private func seedGatewayTokenIfNeeded(env: [String: String]) {
+        guard let envToken = trimmed(env["VOX_GATEWAY_TOKEN"]) else { return }
+        guard KeychainHelper.sessionToken == nil else { return }
+        KeychainHelper.saveSessionToken(envToken)
+    }
+
+    private func trimmed(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

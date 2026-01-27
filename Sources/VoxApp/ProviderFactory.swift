@@ -1,60 +1,19 @@
 import Foundation
 import VoxCore
-import VoxProviders
 
 enum ProviderFactory {
     static func makeSTT(config: AppConfig.STTConfig, useDefaultGateway: Bool = false) throws -> STTProvider {
-        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
-            return GatewaySTTProvider(gateway: gateway, config: config)
+        guard let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) else {
+            throw VoxError.internalError("VOX_GATEWAY_URL not configured. Gateway is required.")
         }
-        switch config.provider {
-        case "elevenlabs":
-            return ElevenLabsSTTProvider(
-                config: ElevenLabsSTTConfig(
-                    apiKey: config.apiKey,
-                    modelId: config.modelId,
-                    languageCode: config.languageCode,
-                    fileFormat: config.fileFormat,
-                    enableLogging: true
-                )
-            )
-        default:
-            throw VoxError.internalError("Unsupported STT provider: \(config.provider)")
-        }
+        return GatewaySTTProvider(gateway: gateway, config: config)
     }
 
     static func makeRewrite(selection: RewriteProviderSelection, useDefaultGateway: Bool = false) throws -> RewriteProvider {
-        if let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) {
-            return GatewayRewriteProvider(gateway: gateway)
+        guard let gateway = try gatewayClient(useDefaultGateway: useDefaultGateway) else {
+            throw VoxError.internalError("VOX_GATEWAY_URL not configured. Gateway is required.")
         }
-        switch selection.id {
-        case "gemini":
-            let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
-                requested: selection.maxOutputTokens,
-                modelId: selection.modelId
-            )
-            return GeminiRewriteProvider(
-                config: GeminiConfig(
-                    apiKey: selection.apiKey,
-                    modelId: selection.modelId,
-                    temperature: selection.temperature ?? 0.2,
-                    maxOutputTokens: maxTokens,
-                    thinkingLevel: selection.thinkingLevel
-                )
-            )
-        case "openrouter":
-            let maxTokens = selection.maxOutputTokens.flatMap { $0 > 0 ? $0 : nil }
-            return OpenRouterRewriteProvider(
-                config: OpenRouterConfig(
-                    apiKey: selection.apiKey,
-                    modelId: selection.modelId,
-                    temperature: selection.temperature ?? 0.2,
-                    maxOutputTokens: maxTokens
-                )
-            )
-        default:
-            throw VoxError.internalError("Unsupported rewrite provider: \(selection.id)")
-        }
+        return GatewayRewriteProvider(gateway: gateway)
     }
 
     private static func gatewayClient(

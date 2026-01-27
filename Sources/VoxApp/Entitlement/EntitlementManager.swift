@@ -37,12 +37,14 @@ final class EntitlementManager: ObservableObject {
 
     /// O(1) check for hotkey - never blocks
     var isAllowed: Bool {
+        // Local mode: allow (dev/testing)
+        if GatewayURL.current == nil { return true }
+
         switch state {
         case .entitled, .gracePeriod:
             return true
         case .unknown:
-            // Optimistic: allow if authenticated but haven't fetched yet
-            return AuthManager.shared.isAuthenticated
+            return false
         default:
             return false
         }

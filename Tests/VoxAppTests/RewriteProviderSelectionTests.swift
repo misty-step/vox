@@ -87,7 +87,8 @@ final class RewriteProviderSelectionTests: XCTestCase {
         XCTAssertEqual(selection.maxOutputTokens, 900)
     }
 
-    func testProviderFactorySelectsOpenRouter() throws {
+    func testProviderFactoryRequiresGateway() throws {
+        // Since local mode was removed, ProviderFactory now requires gateway
         let config = AppConfig.RewriteConfig(
             provider: "openrouter",
             providers: [
@@ -108,9 +109,8 @@ final class RewriteProviderSelectionTests: XCTestCase {
         )
 
         let selection = try RewriteConfigResolver.resolve(config)
-        let provider = try ProviderFactory.makeRewrite(selection: selection)
-
-        XCTAssertEqual(provider.id, "openrouter")
+        // Without VOX_GATEWAY_URL set, this should throw
+        XCTAssertThrowsError(try ProviderFactory.makeRewrite(selection: selection))
     }
 
     func testNormalizesGeminiModelIdToPreview() throws {

@@ -149,7 +149,7 @@ final class HistoryStore {
 
     static func defaultBaseURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/Vox/history")
+            .appendingPathComponent("Library/Application Support/Vox/history")
     }
 
     private static func dayFolder(from date: Date) -> String {
