@@ -7,6 +7,7 @@ enum KeychainHelper {
 
     private enum Account: String {
         case token = "gateway_token"
+        case tokenExpiry = "gateway_token_expiry"
         case entitlement = "entitlement_cache"
     }
 
@@ -17,6 +18,26 @@ enum KeychainHelper {
     }
 
     static func load() -> String? {
+        sessionToken
+    }
+
+    static func delete() throws {
+        try deleteData(account: .token, name: "auth token", throwing: true)
+        // Best-effort cleanup of related expiry metadata
+        try? deleteData(account: .tokenExpiry, name: "auth token expiry", throwing: false)
+    }
+
+    // MARK: - Session Token (non-throwing)
+
+    static func saveSessionToken(_ token: String) {
+        do {
+            try save(token: token)
+        } catch {
+            Diagnostics.error("Failed to save session token: \(error.localizedDescription)")
+        }
+    }
+
+    static var sessionToken: String? {
         guard let data = loadData(account: .token, name: "auth token"),
               let token = String(data: data, encoding: .utf8),
               !token.isEmpty else {
@@ -25,8 +46,39 @@ enum KeychainHelper {
         return token
     }
 
-    static func delete() throws {
-        try deleteData(account: .token, name: "auth token", throwing: true)
+    static func clearSessionToken() {
+        do {
+            try delete()
+        } catch {
+            Diagnostics.error("Failed to clear session token: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Token Expiry
+
+    static func saveTokenExpiry(_ date: Date) {
+        do {
+            let data = try JSONEncoder().encode(date)
+            try saveData(data, account: .tokenExpiry, name: "auth token expiry")
+        } catch {
+            Diagnostics.error("Failed to save auth token expiry: \(error.localizedDescription)")
+        }
+    }
+
+    static var tokenExpiry: Date? {
+        guard let data = loadData(account: .tokenExpiry, name: "auth token expiry") else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(Date.self, from: data)
+        } catch {
+            Diagnostics.error("Failed to decode auth token expiry: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    static func clearTokenExpiry() {
+        try? deleteData(account: .tokenExpiry, name: "auth token expiry", throwing: false)
     }
 
     // MARK: - Entitlement Cache
