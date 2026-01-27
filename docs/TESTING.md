@@ -111,14 +111,14 @@ curl http://localhost:3000/v1/config | jq
 
 **Entitlements (requires auth):**
 ```bash
-curl -H "Authorization: Bearer $VOX_TEST_TOKEN" \
+curl -H "Authorization: Bearer $VOX_GATEWAY_TOKEN" \
   http://localhost:3000/v1/entitlements | jq
 # Expected: {subject, plan, status, features, currentPeriodEnd}
 ```
 
 **STT Token:**
 ```bash
-curl -X POST -H "Authorization: Bearer $VOX_TEST_TOKEN" \
+curl -X POST -H "Authorization: Bearer $VOX_GATEWAY_TOKEN" \
   http://localhost:3000/v1/stt/token | jq
 # Expected: {token: "...", provider: "elevenlabs", expiresAt: "..."}
 ```
@@ -126,7 +126,7 @@ curl -X POST -H "Authorization: Bearer $VOX_TEST_TOKEN" \
 **Rewrite (light mode):**
 ```bash
 curl -X POST http://localhost:3000/v1/rewrite \
-  -H "Authorization: Bearer $VOX_TEST_TOKEN" \
+  -H "Authorization: Bearer $VOX_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "manual-test",
@@ -141,7 +141,7 @@ curl -X POST http://localhost:3000/v1/rewrite \
 **Rewrite (aggressive mode):**
 ```bash
 curl -X POST http://localhost:3000/v1/rewrite \
-  -H "Authorization: Bearer $VOX_TEST_TOKEN" \
+  -H "Authorization: Bearer $VOX_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "manual-test-2",
@@ -162,7 +162,7 @@ pnpm dev
 
 # In project root, set env vars
 export VOX_GATEWAY_URL=http://localhost:3000
-export VOX_GATEWAY_TOKEN=$VOX_TEST_TOKEN
+export VOX_GATEWAY_TOKEN=<CLERK_JWT>
 
 # Build and run the app
 swift build
@@ -200,7 +200,6 @@ swift build
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VOX_TEST_TOKEN` | Dev only | Static token for local testing |
 | `CLERK_SECRET_KEY` | Yes | Clerk backend secret |
 | `CLERK_PUBLISHABLE_KEY` | Yes | Clerk frontend key |
 | `CONVEX_URL` | Yes | Convex deployment URL |
@@ -223,7 +222,7 @@ swift build
 
 ### Gateway returns 401 Unauthorized
 - Check `Authorization: Bearer <token>` header is present
-- Verify `VOX_TEST_TOKEN` is set in gateway .env.local
+- Verify `VOX_GATEWAY_TOKEN` is a valid Clerk JWT
 - For production: Ensure Clerk JWT is valid
 
 ### Gateway returns 502 Bad Gateway

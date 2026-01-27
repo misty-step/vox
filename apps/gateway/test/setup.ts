@@ -1,5 +1,4 @@
 // Test setup - set required env vars for tests
-process.env.VOX_TEST_TOKEN = "test-token-for-testing";
 process.env.CLERK_SECRET_KEY = "sk_test_fake_clerk_key";
 process.env.ELEVENLABS_API_KEY = "test-elevenlabs-key";
 process.env.GEMINI_API_KEY = "test-gemini-key";

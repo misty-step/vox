@@ -25,7 +25,6 @@ API gateway for Vox: auth, entitlements, STT proxy, billing.
 - `STRIPE_WEBHOOK_SECRET` — Stripe webhook signature verification
 - `CONVEX_URL` — Convex database URL
 - `VOX_STT_PROVIDER_TOKEN` — ElevenLabs API key for STT proxy
-- `VOX_TEST_TOKEN` — dev-only test token (bypasses Clerk in dev)
 
 ## Auth Flow
 1. Desktop app opens `/auth/desktop` on web app
