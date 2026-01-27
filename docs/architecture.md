@@ -8,7 +8,7 @@
 - `VoxApp`: app wiring + orchestration
   - `SessionController`: hotkey toggle, state, UI signals
   - `DictationPipeline`: STT → rewrite, returns final text
-  - `GatewayClient`: HTTP client for gateway API
+  - `VoxGateway`: deep module for gateway API calls + auth header injection
   - `Auth/`
     - `AuthManager`: token state, deep link handling, sign-out
     - `KeychainHelper`: secure storage for tokens and cache

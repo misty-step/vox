@@ -4,168 +4,130 @@ import Foundation
 import os
 import VoxCore
 import VoxMac
+import VoxProviders
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusBarController: StatusBarController?
+    // Deep modules
+    private var auth: VoxAuth!
+    private var gateway: VoxGateway?
+    private var session: VoxSession!
+
+    // UI
+    private var statusBar: StatusBarController!
+    private var hudController: HUDController!
+
+    // Infra
     private var hotkeyMonitor: HotkeyMonitor?
-    private var sessionOrchestrator: SessionOrchestrator?
-    private var pipelineAdapter: DictationPipelineAdapter?
-    private var entitlementCache: FileEntitlementCache?
-    private var hudController: HUDController?
     private var audioRecorder: AudioRecorder?
+    private var processor: DictationProcessor?
     private var levelTimer: DispatchSourceTimer?
-    private var lastSessionState: SessionState = .idle
+    private var lastSessionState: VoxSession.State = .idle
+    private var cancellables = Set<AnyCancellable>()
     private var appConfig: AppConfig?
     private var configSource: ConfigLoader.Source?
     private var processingLevelOverride: ProcessingLevelOverride?
-    private let authManager = AuthManager.shared
-    private let entitlementManager = EntitlementManager.shared
-    private var entitlementCancellable: AnyCancellable?
     private let logger = Logger(subsystem: "vox", category: "app")
 
     @MainActor
+    static func currentAuth() -> VoxAuth? {
+        (NSApp.delegate as? AppDelegate)?.auth
+    }
+
+    @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.accessory)
+        SingleInstanceGuard.acquireOrExit()
         Diagnostics.info("Vox starting.")
+
         do {
             let loaded = try ConfigLoader.load()
             let config = loaded.config
+            appConfig = config
             configSource = loaded.source
             processingLevelOverride = loaded.processingLevelOverride
             Diagnostics.info("Config source: \(loaded.source)")
-            appConfig = config
+
             let useDefaultGateway = loaded.source == .defaults
-            let sttProvider = try ProviderFactory.makeSTT(config: config.stt, useDefaultGateway: useDefaultGateway)
-            let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
-            let rewriteProvider = try ProviderFactory.makeRewrite(
-                selection: rewriteSelection,
-                useDefaultGateway: useDefaultGateway
-            )
+            let gatewayBaseURL = try gatewayBaseURL(useDefaultGateway: useDefaultGateway)
+
+            auth = VoxAuth(gateway: gatewayBaseURL.map(AppAuthGateway.init))
+            if let token = trimmed(ProcessInfo.processInfo.environment["VOX_GATEWAY_TOKEN"]) {
+                Task { await auth.seedTokenIfNeeded(token) }
+            }
+
+            if let gatewayBaseURL {
+                gateway = VoxGateway(baseURL: gatewayBaseURL, auth: auth)
+            } else {
+                gateway = nil
+                Diagnostics.info("Gateway disabled. Running in local mode.")
+            }
 
             let contextURL = URL(fileURLWithPath: config.contextPath ?? AppConfig.defaultContextPath)
             let locale = config.stt.languageCode ?? Locale.current.identifier
-            let processingLevel = config.processingLevel ?? .light
-            Diagnostics.info("Processing level: \(processingLevel.rawValue)")
-            let historyStore = HistoryStore()
-            let rewriteTemperature = rewriteSelection.temperature ?? 0.2
-            let rewriteMaxTokens: Int? = {
-                if rewriteSelection.id == "gemini" {
-                    return GeminiModelPolicy.effectiveMaxOutputTokens(
-                        requested: rewriteSelection.maxOutputTokens,
-                        modelId: rewriteSelection.modelId
-                    )
-                }
-                return rewriteSelection.maxOutputTokens
-            }()
-            let metadataConfig = SessionMetadataConfig(
-                locale: locale,
-                sttModelId: config.stt.modelId,
-                rewriteModelId: rewriteSelection.modelId,
-                maxOutputTokens: rewriteMaxTokens,
-                temperature: rewriteTemperature,
-                thinkingLevel: rewriteSelection.thinkingLevel,
-                contextPath: contextURL.path
-            )
-            let pipeline = DictationPipeline(
-                sttProvider: sttProvider,
-                rewriteProvider: rewriteProvider,
+            let initialLevel = config.processingLevel ?? .light
+            Diagnostics.info("Processing level: \(initialLevel.rawValue)")
+
+            let providers = try makeProviders(config: config, gateway: gateway)
+            let processor = DictationProcessor(
+                stt: providers.stt,
+                rewrite: providers.rewrite,
                 contextURL: contextURL,
                 locale: locale,
-                modelId: config.stt.modelId
+                sttModelId: config.stt.modelId,
+                level: initialLevel
             )
-
-            let env = ProcessInfo.processInfo.environment
-            seedGatewayTokenIfNeeded(env: env)
-            let gatewayClient = try makeGatewayClient(env: env, useDefaultGateway: useDefaultGateway)
-
-            // Deep module graph.
-            let tokenStorage = KeychainTokenStorage()
-            let tokenRefresher = GatewayTokenRefresher(client: gatewayClient)
-            let tokenService = TokenServiceImpl(storage: tokenStorage, refresher: tokenRefresher)
-
-            let entitlementChecker = GatewayEntitlementChecker(client: gatewayClient)
-            let entitlementCache = FileEntitlementCache()
-            let accessGate = AccessGateImpl(
-                tokenService: tokenService,
-                entitlementChecker: entitlementChecker,
-                cache: entitlementCache
-            )
+            self.processor = processor
 
             let permissionCoordinator = PermissionCoordinatorImpl(checker: SystemPermissionChecker())
-
             let audioRecorder = AudioRecorder()
-            let recorder = AudioRecorderAdapter(recorder: audioRecorder)
-            let pipelineAdapter = DictationPipelineAdapter(
-                pipeline: pipeline,
-                historyStore: historyStore,
-                metadataConfig: metadataConfig,
-                processingLevel: processingLevel
-            )
-            let paster = ClipboardPasterAdapter(
+            let recorder = AudioRecorderSessionAdapter(recorder: audioRecorder)
+            let paster = ClipboardPasterSessionAdapter(
                 paster: ClipboardPaster(
                     restoreDelay: PasteOptions.restoreDelay,
                     shouldRestore: PasteOptions.shouldRestore
                 )
             )
 
-            let orchestrator = SessionOrchestratorImpl(
-                accessGate: accessGate,
+            session = VoxSession(
+                auth: auth,
                 permissionCoordinator: permissionCoordinator,
                 recorder: recorder,
-                pipeline: pipelineAdapter,
+                processor: processor,
                 paster: paster
             )
 
-            let statusBar = StatusBarController(
-                onToggle: {
-                    Task { await orchestrator.toggle() }
+            statusBar = StatusBarController(
+                onToggle: { [weak self] in
+                    self?.session.toggle()
                 },
                 onProcessingLevelChange: { [weak self] level in
+                    guard let self else { return }
                     Task {
-                        await pipelineAdapter.updateProcessingLevel(level)
-                        await MainActor.run { self?.persistProcessingLevel(level) }
+                        await processor.updateProcessingLevel(level)
+                        await MainActor.run { self.persistProcessingLevel(level) }
                     }
                 },
                 onProcessingLevelOverrideAttempt: { [weak self] in
                     self?.showProcessingLevelOverrideMessage()
                 },
                 onQuit: { NSApplication.shared.terminate(nil) },
-                processingLevel: processingLevel,
+                processingLevel: initialLevel,
                 processingLevelOverride: processingLevelOverride
             )
-            let hud = HUDController()
+            hudController = HUDController()
+            self.audioRecorder = audioRecorder
 
-            Task { [weak self, weak statusBar, weak hud] in
-                await orchestrator.setStateObserver { state in
-                    Task { @MainActor [weak self, weak statusBar, weak hud] in
-                        self?.handleSessionState(state, statusBar: statusBar, hud: hud)
-                    }
-                }
-            }
-
-            // Observe entitlement state changes for status bar badge
-            entitlementCancellable = entitlementManager.$state
-                .receive(on: DispatchQueue.main)
-                .sink { [weak statusBar] state in
-                    statusBar?.updateEntitlementState(state)
-                }
+            observeSessionState()
+            observeAuthState()
 
             let hotkey = config.hotkey ?? .default
             let modifiers = HotkeyParser.modifiers(from: hotkey.modifiers)
-            hotkeyMonitor = try HotkeyMonitor(keyCode: hotkey.keyCode, modifiers: modifiers) {
-                Task { await orchestrator.toggle() }
+            hotkeyMonitor = try HotkeyMonitor(keyCode: hotkey.keyCode, modifiers: modifiers) { [weak self] in
+                self?.session.toggle()
             }
 
-            statusBarController = statusBar
-            sessionOrchestrator = orchestrator
-            self.pipelineAdapter = pipelineAdapter
-            self.entitlementCache = entitlementCache
-            self.audioRecorder = audioRecorder
-            hudController = hud
-
             PermissionManager.promptForAccessibilityIfNeeded()
-
-            // Initial entitlement check (background)
-            Task { await entitlementManager.refresh() }
+            Task { await auth.check() }
         } catch {
             logger.error("Startup failed: \(String(describing: error))")
             showStartupError(String(describing: error))
@@ -177,21 +139,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
         for url in urls {
             guard url.scheme == "vox" else { continue }
-
-            // Handle auth deep links: vox://auth?token=...
             if url.host == "auth" || url.path == "/auth" {
-                authManager.handleDeepLink(url: url)
-                Task { await entitlementCache?.clear() }
+                auth.handleDeepLink(url)
+                continue
             }
-
-            // Handle payment success deep links: vox://payment-success
             if url.host == "payment-success" || url.path == "/payment-success" {
-                Diagnostics.info("Payment success deep link received")
+                Diagnostics.info("Payment success deep link received.")
                 Task {
-                    await entitlementCache?.clear()
-                    await entitlementManager.refresh()
-                    if entitlementManager.isAllowed {
-                        PaywallWindowController.hide()
+                    await auth.refresh(force: true)
+                    if auth.isAllowed {
+                        await MainActor.run { PaywallWindowController.hide() }
                     }
                 }
             }
@@ -211,8 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try ConfigLoader.save(config)
             } catch {
                 Diagnostics.error("Failed to save processing level: \(String(describing: error))")
-                statusBarController?.showMessage("Failed to save processing level")
-                hudController?.showMessage("Failed to save processing level")
+                statusBar.showMessage("Failed to save processing level")
+                hudController.showMessage("Failed to save processing level")
             }
         case .defaults:
             ProcessingLevelStore.save(level)
@@ -235,54 +192,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showProcessingLevelOverrideMessage() {
         guard let override = processingLevelOverride else { return }
         let message = "Processing locked by \(override.sourceKey). Edit .env.local to change."
-        statusBarController?.showMessage(message)
+        statusBar?.showMessage(message)
         hudController?.showMessage(message)
     }
 
     @MainActor
-    private func handleSessionState(
-        _ state: SessionState,
-        statusBar: StatusBarController?,
-        hud: HUDController?
-    ) {
+    private func handleSessionState(_ state: VoxSession.State) {
         let previous = lastSessionState
         defer { lastSessionState = state }
 
-        if case .recording = state {
-            if case .recording = previous {
-                // no-op
-            } else {
-                startLevelMetering()
-                let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                Task { await pipelineAdapter?.captureTargetApplication(bundleId: bundleId) }
-            }
+        if case .recording = state, previous != .recording {
+            startLevelMetering()
         } else if case .recording = previous {
             stopLevelMetering()
         }
 
-        statusBar?.update(state: legacyState(for: state))
+        statusBar.update(state: sessionState(for: state))
 
         switch state {
         case .idle:
-            hud?.show(state: .hidden)
-        case .requestingPermissions:
-            hud?.show(state: .processing)
+            hudController.show(state: .hidden)
         case .recording:
-            hud?.show(state: .recording)
+            hudController.show(state: .recording)
         case .processing:
-            hud?.show(state: .processing)
+            hudController.show(state: .processing)
         case .blocked(let reason):
-            hud?.show(state: .hidden)
-            handleBlocked(reason: reason, statusBar: statusBar, hud: hud)
+            hudController.show(state: .hidden)
+            handleBlocked(reason: reason)
         }
     }
 
-    private func legacyState(for state: SessionState) -> SessionController.State {
+    private func sessionState(for state: VoxSession.State) -> SessionController.State {
         switch state {
         case .idle, .blocked:
             return .idle
-        case .requestingPermissions:
-            return .processing
         case .recording:
             return .recording
         case .processing:
@@ -291,23 +234,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
-    private func handleBlocked(reason: BlockReason, statusBar: StatusBarController?, hud: HUDController?) {
-        switch reason {
-        case .notAuthenticated:
-            statusBar?.showMessage("Sign in required")
-            hud?.showMessage("Sign in required")
-            PaywallWindowController.show(for: .unauthenticated)
-        case .notEntitled:
-            statusBar?.showMessage("Subscription required")
-            hud?.showMessage("Subscription required")
-            PaywallWindowController.show(for: .expired)
-        case .permissionDenied:
-            statusBar?.showMessage("Permissions required")
-            hud?.showMessage("Permissions required")
-        case .networkError(let message):
-            statusBar?.showMessage("Network error")
-            hud?.showMessage("Network error")
-            PaywallWindowController.show(for: .error(message))
+    private func handleBlocked(reason: String) {
+        let message = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
+        statusBar.showMessage(message)
+        hudController.showMessage(message)
+
+        let paywallState: EntitlementState?
+        switch auth.state {
+        case .needsAuth:
+            paywallState = .unauthenticated
+        case .needsSubscription:
+            paywallState = .expired
+        case .error(let errorMessage):
+            paywallState = .error(errorMessage)
+        default:
+            paywallState = nil
+        }
+
+        if let paywallState {
+            PaywallWindowController.show(for: paywallState)
         }
     }
 
@@ -334,32 +280,116 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         levelTimer = nil
     }
 
-    private func makeGatewayClient(env: [String: String], useDefaultGateway: Bool) throws -> GatewayClient {
-        let baseURL: URL
+    @MainActor
+    private func observeSessionState() {
+        session.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                Task { @MainActor [weak self] in
+                    self?.handleSessionState(state)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    @MainActor
+    private func observeAuthState() {
+        auth.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let entitlementState = self.entitlementState(for: state)
+                    self.statusBar.updateEntitlementState(entitlementState)
+                    if entitlementState == .entitled {
+                        PaywallWindowController.hide()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func entitlementState(for state: VoxAuth.State) -> EntitlementState {
+        switch state {
+        case .allowed:
+            return .entitled
+        case .needsAuth:
+            return .unauthenticated
+        case .needsSubscription:
+            return .expired
+        case .error(let message):
+            return .error(message)
+        case .unknown, .checking:
+            return .unknown
+        }
+    }
+
+    private func gatewayBaseURL(useDefaultGateway: Bool) throws -> URL? {
+        let env = ProcessInfo.processInfo.environment
         if let rawURL = trimmed(env["VOX_GATEWAY_URL"]) {
             guard let url = URL(string: rawURL), url.scheme != nil else {
                 throw VoxError.internalError("Invalid VOX_GATEWAY_URL: \(rawURL)")
             }
-            baseURL = url
-        } else if useDefaultGateway, let url = GatewayURL.api, url.scheme != nil {
-            baseURL = url
-        } else if let url = GatewayURL.api, url.scheme != nil {
-            baseURL = url
-        } else {
-            throw VoxError.internalError("Gateway URL not configured.")
+            return url
         }
-
-        let envToken = trimmed(env["VOX_GATEWAY_TOKEN"])
-        let tokenProvider: @Sendable () -> String? = {
-            KeychainHelper.sessionToken ?? envToken
-        }
-        return GatewayClient(baseURL: baseURL, tokenProvider: tokenProvider)
+        guard useDefaultGateway else { return nil }
+        return GatewayURL.api
     }
 
-    private func seedGatewayTokenIfNeeded(env: [String: String]) {
-        guard let envToken = trimmed(env["VOX_GATEWAY_TOKEN"]) else { return }
-        guard KeychainHelper.sessionToken == nil else { return }
-        KeychainHelper.saveSessionToken(envToken)
+    private func makeProviders(
+        config: AppConfig,
+        gateway: VoxGateway?
+    ) throws -> (stt: STTProvider, rewrite: RewriteProvider?) {
+        if let gateway {
+            Diagnostics.info("Gateway enabled.")
+            return (
+                stt: VoxGatewaySTTProvider(gateway: gateway),
+                rewrite: VoxGatewayRewriteProvider(gateway: gateway)
+            )
+        }
+
+        let sttProvider = ElevenLabsSTTProvider(
+            config: ElevenLabsSTTConfig(
+                apiKey: config.stt.apiKey,
+                modelId: config.stt.modelId,
+                languageCode: config.stt.languageCode,
+                fileFormat: config.stt.fileFormat,
+                enableLogging: nil
+            )
+        )
+
+        let rewriteSelection = try RewriteConfigResolver.resolve(config.rewrite)
+        let temperature = rewriteSelection.temperature ?? 0.2
+        let rewriteProvider: RewriteProvider?
+        switch rewriteSelection.id {
+        case "gemini":
+            let maxTokens = GeminiModelPolicy.effectiveMaxOutputTokens(
+                requested: rewriteSelection.maxOutputTokens,
+                modelId: rewriteSelection.modelId
+            )
+            rewriteProvider = GeminiRewriteProvider(
+                config: GeminiConfig(
+                    apiKey: rewriteSelection.apiKey,
+                    modelId: rewriteSelection.modelId,
+                    temperature: temperature,
+                    maxOutputTokens: maxTokens,
+                    thinkingLevel: rewriteSelection.thinkingLevel
+                )
+            )
+        case "openrouter":
+            rewriteProvider = OpenRouterRewriteProvider(
+                config: OpenRouterConfig(
+                    apiKey: rewriteSelection.apiKey,
+                    modelId: rewriteSelection.modelId,
+                    temperature: temperature,
+                    maxOutputTokens: rewriteSelection.maxOutputTokens
+                )
+            )
+        default:
+            rewriteProvider = nil
+        }
+
+        return (sttProvider, rewriteProvider)
     }
 
     private func trimmed(_ value: String?) -> String? {
@@ -369,4 +399,192 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return trimmed
     }
+}
+
+// MARK: - Deep Module Adapters
+
+private struct AppAuthGateway: VoxAuthGateway {
+    let baseURL: URL
+
+    func getEntitlements(token: String) async throws -> EntitlementResponse {
+        let client = GatewayClient(baseURL: baseURL, token: token)
+        return try await client.getEntitlements()
+    }
+}
+
+private struct VoxGatewaySTTProvider: STTProvider, @unchecked Sendable {
+    let id = "vox-gateway-stt"
+    private let gateway: VoxGateway
+
+    init(gateway: VoxGateway) {
+        self.gateway = gateway
+    }
+
+    func transcribe(_ request: TranscriptionRequest) async throws -> Transcript {
+        let audio = try Data(contentsOf: request.audioFileURL)
+        let text = try await gateway.transcribe(audio)
+        return Transcript(sessionId: request.sessionId, text: text, language: request.locale)
+    }
+}
+
+private struct VoxGatewayRewriteProvider: RewriteProvider, @unchecked Sendable {
+    let id = "vox-gateway-rewrite"
+    private let gateway: VoxGateway
+
+    init(gateway: VoxGateway) {
+        self.gateway = gateway
+    }
+
+    func rewrite(_ request: RewriteRequest) async throws -> RewriteResponse {
+        let text = try await gateway.rewrite(request.transcript.text, level: request.processingLevel)
+        return RewriteResponse(finalText: text)
+    }
+}
+
+/// Adapter wrapping `AudioRecorder` for `SessionRecorder`.
+private final class AudioRecorderSessionAdapter: SessionRecorder, @unchecked Sendable {
+    private let recorder: AudioRecorder
+
+    init(recorder: AudioRecorder) {
+        self.recorder = recorder
+    }
+
+    func start() async throws {
+        try recorder.start()
+    }
+
+    func stop() async throws -> Data {
+        let url = try recorder.stop()
+        defer {
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                Diagnostics.warning("Failed to remove temp audio: \(String(describing: error))")
+            }
+        }
+
+        do {
+            return try Data(contentsOf: url)
+        } catch {
+            Diagnostics.error("Failed to read recorded audio: \(String(describing: error))")
+            throw error
+        }
+    }
+}
+
+/// Adapter wrapping `ClipboardPaster` for `SessionPaster`.
+private final class ClipboardPasterSessionAdapter: SessionPaster, @unchecked Sendable {
+    private let paster: ClipboardPaster
+
+    init(paster: ClipboardPaster) {
+        self.paster = paster
+    }
+
+    func paste(_ text: String) async throws {
+        try paster.paste(text: text)
+    }
+}
+
+/// Session processor that hides provider details and quality gates.
+private actor DictationProcessor: VoxSessionProcessing {
+    private let stt: STTProvider
+    private let rewrite: RewriteProvider?
+    private let contextURL: URL
+    private let locale: String
+    private let sttModelId: String?
+    private var level: ProcessingLevel
+
+    init(
+        stt: STTProvider,
+        rewrite: RewriteProvider?,
+        contextURL: URL,
+        locale: String,
+        sttModelId: String?,
+        level: ProcessingLevel
+    ) {
+        self.stt = stt
+        self.rewrite = rewrite
+        self.contextURL = contextURL
+        self.locale = locale
+        self.sttModelId = sttModelId
+        self.level = level
+    }
+
+    var processingLevel: ProcessingLevel { level }
+
+    func updateProcessingLevel(_ newLevel: ProcessingLevel) {
+        level = newLevel
+    }
+
+    func transcribe(audio: Data) async throws -> String {
+        let sessionId = UUID()
+        let audioURL = try writeTemporaryAudio(audio, sessionId: sessionId)
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let request = TranscriptionRequest(
+            sessionId: sessionId,
+            audioFileURL: audioURL,
+            locale: locale,
+            modelId: sttModelId
+        )
+        let transcript = try await stt.transcribe(request)
+        return transcript.text
+    }
+
+    func rewrite(_ transcript: String) async throws -> String {
+        guard level != .off else { return transcript }
+        guard let rewrite else { return transcript }
+
+        let context = (try? String(contentsOf: contextURL)) ?? ""
+        let sessionId = UUID()
+        let request = RewriteRequest(
+            sessionId: sessionId,
+            locale: locale,
+            transcript: TranscriptPayload(text: transcript),
+            context: context,
+            processingLevel: level
+        )
+
+        let response = try await rewrite.rewrite(request)
+        let candidate = response.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty else { return transcript }
+
+        let evaluation = RewriteQualityGate.evaluate(
+            raw: transcript,
+            candidate: candidate,
+            level: level
+        )
+        return evaluation.isAcceptable ? candidate : transcript
+    }
+
+    private func writeTemporaryAudio(_ audio: Data, sessionId: UUID) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-\(sessionId.uuidString).caf")
+        do {
+            try audio.write(to: url, options: .atomic)
+            return url
+        } catch {
+            Diagnostics.error("Failed to write temp audio: \(String(describing: error))")
+            throw error
+        }
+    }
+}
+
+// MARK: - Legacy UI Types
+
+enum SessionController {
+    enum State {
+        case idle
+        case recording
+        case processing
+    }
+}
+
+enum EntitlementState: Equatable {
+    case unknown
+    case entitled
+    case gracePeriod
+    case expired
+    case unauthenticated
+    case error(String)
 }

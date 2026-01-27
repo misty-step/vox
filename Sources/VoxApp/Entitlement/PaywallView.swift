@@ -90,7 +90,9 @@ struct PaywallView: View {
 
             case .error:
                 Button(action: {
-                    Task { await EntitlementManager.shared.refresh() }
+                    Task { @MainActor in
+                        await AppDelegate.currentAuth()?.refresh(force: true)
+                    }
                 }) {
                     Text("Retry")
                         .frame(maxWidth: .infinity)

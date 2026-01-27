@@ -87,32 +87,6 @@ final class RewriteProviderSelectionTests: XCTestCase {
         XCTAssertEqual(selection.maxOutputTokens, 900)
     }
 
-    func testProviderFactoryRequiresGateway() throws {
-        // Since local mode was removed, ProviderFactory now requires gateway
-        let config = AppConfig.RewriteConfig(
-            provider: "openrouter",
-            providers: [
-                RewriteProviderConfig(
-                    id: "openrouter",
-                    apiKey: "openrouter-key",
-                    modelId: "openai/gpt-4o-mini",
-                    temperature: 0.2,
-                    maxOutputTokens: 300,
-                    thinkingLevel: nil
-                )
-            ],
-            apiKey: nil,
-            modelId: nil,
-            temperature: nil,
-            maxOutputTokens: nil,
-            thinkingLevel: nil
-        )
-
-        let selection = try RewriteConfigResolver.resolve(config)
-        // Without VOX_GATEWAY_URL set, this should throw
-        XCTAssertThrowsError(try ProviderFactory.makeRewrite(selection: selection))
-    }
-
     func testNormalizesGeminiModelIdToPreview() throws {
         let config = AppConfig.RewriteConfig(
             provider: "gemini",

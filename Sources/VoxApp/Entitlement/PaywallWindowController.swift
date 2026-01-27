@@ -44,7 +44,7 @@ final class PaywallWindowController: NSWindowController {
 
     private func handleSignIn() {
         guard let url = GatewayURL.authDesktop else {
-            Diagnostics.error("No gateway URL configured for sign-in")
+            Diagnostics.error("No gateway URL configured for sign-in.")
             return
         }
         Diagnostics.info("Opening sign-in page: \(url.absoluteString)")
@@ -53,37 +53,38 @@ final class PaywallWindowController: NSWindowController {
     }
 
     private func handleUpgrade() {
-        guard let token = AuthManager.shared.token else {
-            Diagnostics.error("No auth token for checkout")
-            // Fall back to sign-in flow
-            handleSignIn()
-            return
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let auth = currentAuth() else { return }
+            guard let token = await auth.currentToken() else {
+                Diagnostics.error("No auth token for checkout.")
+                handleSignIn()
+                return
+            }
+            guard let url = GatewayURL.checkoutPage(token: token) else {
+                Diagnostics.error("No gateway URL configured for upgrade.")
+                return
+            }
+            Diagnostics.info("Opening checkout: \(url.absoluteString)")
+            NSWorkspace.shared.open(url)
+            startPaymentPolling()
         }
-        guard let url = GatewayURL.checkoutPage(token: token) else {
-            Diagnostics.error("No gateway URL configured for upgrade")
-            return
-        }
-        Diagnostics.info("Opening checkout: \(url.absoluteString)")
-        NSWorkspace.shared.open(url)
-        startPaymentPolling()
     }
 
     private func startAuthPolling() {
         pollingTask?.cancel()
         pollingTask = Task { @MainActor in
-            // Poll for up to 5 minutes with exponential backoff
             let intervals: [UInt64] = [2, 2, 5, 5, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
 
             for interval in intervals {
                 if Task.isCancelled { return }
 
-                // Check if auth completed via deep link
-                if AuthManager.shared.token != nil {
-                    Diagnostics.info("Auth detected, refreshing entitlements")
-                    await EntitlementManager.shared.refresh()
-
-                    if EntitlementManager.shared.isAllowed {
-                        Diagnostics.info("Entitlement confirmed, closing paywall")
+                guard let auth = currentAuth() else { return }
+                if await auth.currentToken() != nil {
+                    Diagnostics.info("Auth detected, refreshing entitlements.")
+                    await auth.refresh(force: true)
+                    if auth.isAllowed {
+                        Diagnostics.info("Entitlement confirmed, closing paywall.")
                         dismiss()
                         return
                     }
@@ -92,29 +93,28 @@ final class PaywallWindowController: NSWindowController {
                 try? await Task.sleep(nanoseconds: interval * 1_000_000_000)
             }
 
-            Diagnostics.info("Auth polling timed out")
+            Diagnostics.info("Auth polling timed out.")
         }
     }
 
     private func startPaymentPolling() {
         pollingTask?.cancel()
         pollingTask = Task { @MainActor in
-            // Poll for up to 60 seconds
             for _ in 0..<12 {
                 if Task.isCancelled { return }
 
-                await EntitlementManager.shared.refresh()
-
-                if EntitlementManager.shared.isAllowed {
-                    Diagnostics.info("Payment confirmed, closing paywall")
+                guard let auth = currentAuth() else { return }
+                await auth.refresh(force: true)
+                if auth.isAllowed {
+                    Diagnostics.info("Payment confirmed, closing paywall.")
                     dismiss()
                     return
                 }
 
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
 
-            Diagnostics.info("Payment polling timed out")
+            Diagnostics.info("Payment polling timed out.")
         }
     }
 
@@ -132,17 +132,46 @@ final class PaywallWindowController: NSWindowController {
     private func startEntitlementObservation() {
         guard cancellables.isEmpty else { return }
 
-        EntitlementManager.shared.$state
+        guard let auth = AppDelegate.currentAuth() else {
+            Diagnostics.error("Missing VoxAuth for paywall.")
+            return
+        }
+
+        auth.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newState in
-                if case .entitled = newState {
-                    self?.close()
-                }
-                if case .gracePeriod = newState {
-                    self?.close()
+                guard let self else { return }
+                let entitlement = entitlementState(from: newState)
+                updateContent(state: entitlement)
+                if entitlement == .entitled || entitlement == .gracePeriod {
+                    close()
                 }
             }
             .store(in: &cancellables)
+    }
+
+    @MainActor
+    private func currentAuth() -> VoxAuth? {
+        guard let auth = AppDelegate.currentAuth() else {
+            Diagnostics.error("Missing VoxAuth.")
+            return nil
+        }
+        return auth
+    }
+
+    private func entitlementState(from state: VoxAuth.State) -> EntitlementState {
+        switch state {
+        case .allowed:
+            return .entitled
+        case .needsAuth:
+            return .unauthenticated
+        case .needsSubscription:
+            return .expired
+        case .error(let message):
+            return .error(message)
+        case .unknown, .checking:
+            return .unknown
+        }
     }
 
     // MARK: - Static API
