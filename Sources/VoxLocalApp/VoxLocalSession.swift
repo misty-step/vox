@@ -10,7 +10,13 @@ public final class VoxLocalSession: ObservableObject {
         case processing
     }
 
-    @Published public private(set) var state: State = .idle
+    public var onStateChange: ((State) -> Void)?
+
+    @Published public private(set) var state: State = .idle {
+        didSet {
+            onStateChange?(state)
+        }
+    }
 
     private let recorder = AudioRecorder()
     private let pipeline = DictationPipeline()

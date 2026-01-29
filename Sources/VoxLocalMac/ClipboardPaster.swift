@@ -73,7 +73,29 @@ public final class ClipboardPaster {
             print("[Paster] WARNING: No frontmost application!")
         }
 
-        print("[Paster] Sending Cmd+V keystroke...")
+        print("[Paster] Attempting AppleScript Cmd+V...")
+        let script = NSAppleScript(source: """
+            tell application "System Events"
+                keystroke "v" using command down
+            end tell
+        """)
+        if let script {
+            var error: NSDictionary?
+            _ = script.executeAndReturnError(&error)
+            if let error {
+                print("[Paster] AppleScript paste failed: \(error)")
+                sendCGEventPaste()
+            } else {
+                print("[Paster] AppleScript paste succeeded")
+            }
+        } else {
+            print("[Paster] AppleScript init failed, falling back to CGEvent")
+            sendCGEventPaste()
+        }
+    }
+
+    private func sendCGEventPaste() {
+        print("[Paster] Sending CGEvent Cmd+V keystroke...")
         let source = CGEventSource(stateID: .combinedSessionState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true)
         keyDown?.flags = .maskCommand

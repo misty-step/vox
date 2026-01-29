@@ -28,11 +28,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.session = session
 
         settingsWindowController = SettingsWindowController()
-        statusBarController = StatusBarController(
+        let statusBarController = StatusBarController(
             onToggle: { Task { await session.toggleRecording() } },
             onSettings: { [weak self] in self?.showSettings() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )
+        self.statusBarController = statusBarController
+        session.onStateChange = { [weak statusBarController] state in
+            let statusState: StatusBarState
+            switch state {
+            case .idle:
+                statusState = .idle
+            case .recording:
+                statusState = .recording
+            case .processing:
+                statusState = .processing
+            }
+            statusBarController?.updateState(statusState)
+        }
 
         do {
             hotkeyMonitor = try HotkeyMonitor(

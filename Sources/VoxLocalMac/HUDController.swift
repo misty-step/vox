@@ -22,13 +22,14 @@ public final class HUDController {
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = hosting
-        panel.ignoresMouseEvents = true
+        panel.isMovableByWindowBackground = true
+        panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         positionPanel()
     }
 
     public func showRecording(average: Float, peak: Float) {
-        state.mode = .recording
+        state.startRecording()
         state.average = average
         state.peak = peak
         show()
@@ -41,7 +42,7 @@ public final class HUDController {
     }
 
     public func showProcessing() {
-        state.mode = .processing
+        state.startProcessing()
         show()
     }
 
