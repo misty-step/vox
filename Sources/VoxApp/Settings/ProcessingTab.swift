@@ -1,6 +1,6 @@
 import SwiftUI
-import VoxLocalCore
-import VoxLocalMac
+import VoxCore
+import VoxMac
 
 public struct ProcessingTab: View {
     @ObservedObject private var prefs = PreferencesStore.shared

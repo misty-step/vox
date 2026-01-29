@@ -3,8 +3,8 @@ import Security
 
 public enum KeychainHelper {
     public enum Key: String {
-        case elevenLabsAPIKey = "com.voxlocal.elevenlabs.apikey"
-        case openRouterAPIKey = "com.voxlocal.openrouter.apikey"
+        case elevenLabsAPIKey = "com.vox.elevenlabs.apikey"
+        case openRouterAPIKey = "com.vox.openrouter.apikey"
     }
 
     public static func save(_ value: String, for key: Key) -> Bool {

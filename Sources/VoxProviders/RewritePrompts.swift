@@ -1,4 +1,4 @@
-import VoxLocalCore
+import VoxCore
 
 public enum RewritePrompts {
     public static func prompt(for level: ProcessingLevel) -> String {

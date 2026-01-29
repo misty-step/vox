@@ -1,5 +1,5 @@
 import Foundation
-import VoxLocalCore
+import VoxCore
 
 public final class ElevenLabsClient {
     private let apiKey: String

@@ -1,5 +1,5 @@
 import Foundation
-import VoxLocalCore
+import VoxCore
 
 public final class OpenRouterClient {
     private let apiKey: String
@@ -28,8 +28,8 @@ public final class OpenRouterClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("https://voxlocal.app", forHTTPHeaderField: "HTTP-Referer")
-        request.setValue("VoxLocal", forHTTPHeaderField: "X-Title")
+        request.setValue("https://vox.app", forHTTPHeaderField: "HTTP-Referer")
+        request.setValue("Vox", forHTTPHeaderField: "X-Title")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

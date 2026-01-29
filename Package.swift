@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "VoxLocal",
+    name: "Vox",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "VoxLocal", targets: ["VoxLocalApp"]),
+        .executable(name: "Vox", targets: ["VoxApp"]),
     ],
     targets: [
-        .target(name: "VoxLocalCore"),
-        .target(name: "VoxLocalProviders", dependencies: ["VoxLocalCore"]),
-        .target(name: "VoxLocalMac", dependencies: ["VoxLocalCore"]),
+        .target(name: "VoxCore"),
+        .target(name: "VoxProviders", dependencies: ["VoxCore"]),
+        .target(name: "VoxMac", dependencies: ["VoxCore"]),
         .executableTarget(
-            name: "VoxLocalApp",
-            dependencies: ["VoxLocalCore", "VoxLocalProviders", "VoxLocalMac"]
+            name: "VoxApp",
+            dependencies: ["VoxCore", "VoxProviders", "VoxMac"]
         ),
     ]
 )

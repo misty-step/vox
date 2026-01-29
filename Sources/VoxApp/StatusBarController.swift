@@ -40,7 +40,7 @@ public final class StatusBarController: NSObject {
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
 
-        let quitItem = NSMenuItem(title: "Quit VoxLocal", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit Vox", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
 
         menu.addItem(toggleItem)
@@ -60,11 +60,11 @@ public final class StatusBarController: NSObject {
 
         switch state {
         case .idle:
-            button.toolTip = "VoxLocal – Ready (⌥Space to record)"
+            button.toolTip = "Vox – Ready (⌥Space to record)"
         case .recording:
-            button.toolTip = "VoxLocal – Recording..."
+            button.toolTip = "Vox – Recording..."
         case .processing:
-            button.toolTip = "VoxLocal – Processing..."
+            button.toolTip = "Vox – Processing..."
         }
     }
 

@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>VoxLocal needs microphone access to capture dictation.</string>
+    <string>Vox needs microphone access to capture dictation.</string>
 </dict>
 </plist>

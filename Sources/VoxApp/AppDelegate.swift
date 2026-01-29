@@ -1,30 +1,30 @@
 import AppKit
 import Carbon
-import VoxLocalMac
+import VoxMac
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var settingsWindowController: SettingsWindowController?
-    private var session: VoxLocalSession?
+    private var session: VoxSession?
     private var hotkeyMonitor: HotkeyMonitor?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         let prefs = PreferencesStore.shared
         let hasElevenLabs = !prefs.elevenLabsAPIKey.isEmpty
         let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
-        print("[VoxLocal] ElevenLabs API key: \(hasElevenLabs ? "✓" : "✗ MISSING")")
-        print("[VoxLocal] OpenRouter API key: \(hasOpenRouter ? "✓" : "✗ MISSING")")
-        print("[VoxLocal] Model: \(prefs.selectedModel)")
-        print("[VoxLocal] Processing level: \(prefs.processingLevel.rawValue)")
+        print("[Vox] ElevenLabs API key: \(hasElevenLabs ? "✓" : "✗ MISSING")")
+        print("[Vox] OpenRouter API key: \(hasOpenRouter ? "✓" : "✗ MISSING")")
+        print("[Vox] Model: \(prefs.selectedModel)")
+        print("[Vox] Processing level: \(prefs.processingLevel.rawValue)")
 
         if !hasElevenLabs || !hasOpenRouter {
-            print("[VoxLocal] Tip: Set ELEVENLABS_API_KEY and OPENROUTER_API_KEY env vars, or use Settings to configure.")
+            print("[Vox] Tip: Set ELEVENLABS_API_KEY and OPENROUTER_API_KEY env vars, or use Settings to configure.")
         }
 
         PermissionManager.promptForAccessibilityIfNeeded()
 
-        let session = VoxLocalSession()
+        let session = VoxSession()
         self.session = session
 
         settingsWindowController = SettingsWindowController()

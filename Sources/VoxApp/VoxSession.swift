@@ -1,9 +1,9 @@
 import AppKit
 import Foundation
-import VoxLocalMac
+import VoxMac
 
 @MainActor
-public final class VoxLocalSession: ObservableObject {
+public final class VoxSession: ObservableObject {
     public enum State {
         case idle
         case recording
@@ -92,7 +92,7 @@ public final class VoxLocalSession: ObservableObject {
 
     private func presentError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "VoxLocal"
+        alert.messageText = "Vox"
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()

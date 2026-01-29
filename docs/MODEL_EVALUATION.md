@@ -1,4 +1,4 @@
-# OpenRouter Model Evaluation for VoxLocal
+# OpenRouter Model Evaluation for Vox
 
 Last updated: January 2026
 

@@ -1,6 +1,6 @@
 import Foundation
-import VoxLocalCore
-import VoxLocalMac
+import VoxCore
+import VoxMac
 
 public final class PreferencesStore: ObservableObject {
     public static let shared = PreferencesStore()

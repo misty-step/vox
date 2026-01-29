@@ -1,7 +1,7 @@
 import AVFoundation
 import CoreAudio
 import Foundation
-import VoxLocalCore
+import VoxCore
 
 public final class AudioRecorder {
     public static func currentInputDeviceName() -> String? {
@@ -42,7 +42,7 @@ public final class AudioRecorder {
         if recorder != nil { return }
 
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("voxlocal-\(UUID().uuidString).caf")
+            .appendingPathComponent("vox-\(UUID().uuidString).caf")
 
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -57,7 +57,7 @@ public final class AudioRecorder {
         recorder.isMeteringEnabled = true
         recorder.prepareToRecord()
         guard recorder.record() else {
-            throw VoxLocalError.internalError("Failed to start recording.")
+            throw VoxError.internalError("Failed to start recording.")
         }
         self.recorder = recorder
         self.currentURL = url
@@ -76,7 +76,7 @@ public final class AudioRecorder {
 
     public func stop() throws -> URL {
         guard let recorder, let url = currentURL else {
-            throw VoxLocalError.internalError("No active recording.")
+            throw VoxError.internalError("No active recording.")
         }
         recorder.stop()
         self.recorder = nil

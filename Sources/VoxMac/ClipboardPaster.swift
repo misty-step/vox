@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 import Foundation
-import VoxLocalCore
+import VoxCore
 
 public final class ClipboardPaster {
     private let restoreDelay: TimeInterval
@@ -14,14 +14,14 @@ public final class ClipboardPaster {
 
     public func paste(text: String) throws {
         guard PermissionManager.isAccessibilityTrusted() else {
-            throw VoxLocalError.permissionDenied("Accessibility permission required.")
+            throw VoxError.permissionDenied("Accessibility permission required.")
         }
         try paste(text: text, restoreAfter: shouldRestore ? restoreDelay : nil)
     }
 
     public func paste(text: String, restoreAfter delay: TimeInterval?) throws {
         guard PermissionManager.isAccessibilityTrusted() else {
-            throw VoxLocalError.permissionDenied("Accessibility permission required.")
+            throw VoxError.permissionDenied("Accessibility permission required.")
         }
         copy(text: text, restoreAfter: delay)
         // Small delay to let clipboard update propagate before sending keystroke

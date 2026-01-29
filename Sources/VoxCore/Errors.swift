@@ -58,7 +58,7 @@ public enum RewriteError: Error, Sendable, Equatable, LocalizedError {
     }
 }
 
-public enum VoxLocalError: Error, Sendable, Equatable, LocalizedError {
+public enum VoxError: Error, Sendable, Equatable, LocalizedError {
     case permissionDenied(String)
     case noFocusedElement
     case noTranscript

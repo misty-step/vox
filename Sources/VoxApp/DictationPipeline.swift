@@ -1,7 +1,7 @@
 import Foundation
-import VoxLocalCore
-import VoxLocalMac
-import VoxLocalProviders
+import VoxCore
+import VoxMac
+import VoxProviders
 
 public final class DictationPipeline {
     private let prefs: PreferencesStore
@@ -16,7 +16,7 @@ public final class DictationPipeline {
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !elevenKey.isEmpty else {
-            throw VoxLocalError.provider("ElevenLabs API key is missing.")
+            throw VoxError.provider("ElevenLabs API key is missing.")
         }
 
         print("[Pipeline] Calling ElevenLabs STT...")
@@ -24,14 +24,14 @@ public final class DictationPipeline {
         let rawTranscript = try await stt.transcribe(audioURL: audioURL)
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Pipeline] Transcript: \(transcript)")
-        guard !transcript.isEmpty else { throw VoxLocalError.noTranscript }
+        guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         var output = transcript
         let level = prefs.processingLevel
         if level != .off {
             let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !openRouterKey.isEmpty else {
-                throw VoxLocalError.provider("OpenRouter API key is missing.")
+                throw VoxError.provider("OpenRouter API key is missing.")
             }
             let prompt = buildPrompt(level: level, customContext: prefs.customContext)
             let rewriter = OpenRouterClient(apiKey: openRouterKey)
@@ -45,7 +45,7 @@ public final class DictationPipeline {
         }
 
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !finalText.isEmpty else { throw VoxLocalError.noTranscript }
+        guard !finalText.isEmpty else { throw VoxError.noTranscript }
 
         print("[Pipeline] Final text to paste: \(finalText)")
         print("[Pipeline] Accessibility trusted: \(PermissionManager.isAccessibilityTrusted())")
