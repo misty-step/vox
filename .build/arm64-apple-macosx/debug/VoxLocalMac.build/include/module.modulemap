@@ -1,0 +1,3 @@
+module VoxLocalMac {
+    header "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalMac.build/include/VoxLocalMac-Swift.h"
+}

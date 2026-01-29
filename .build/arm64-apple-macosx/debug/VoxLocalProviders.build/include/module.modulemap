@@ -1,0 +1,3 @@
+module VoxLocalProviders {
+    header "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalProviders.build/include/VoxLocalProviders-Swift.h"
+}

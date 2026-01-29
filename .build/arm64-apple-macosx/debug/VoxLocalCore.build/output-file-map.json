@@ -1,0 +1,33 @@
+{
+  "": {
+    "swift-dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/master.swiftdeps"
+  },
+  "/Users/phaedrus/Development/vox-local/Sources/VoxLocalCore/Errors.swift": {
+    "dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/Errors.d",
+    "object": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/Errors.swift.o",
+    "swiftmodule": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/Errors~partial.swiftmodule",
+    "swift-dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/Errors.swiftdeps",
+    "diagnostics": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/Errors.dia"
+  },
+  "/Users/phaedrus/Development/vox-local/Sources/VoxLocalCore/MultipartFormData.swift": {
+    "dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/MultipartFormData.d",
+    "object": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/MultipartFormData.swift.o",
+    "swiftmodule": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/MultipartFormData~partial.swiftmodule",
+    "swift-dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/MultipartFormData.swiftdeps",
+    "diagnostics": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/MultipartFormData.dia"
+  },
+  "/Users/phaedrus/Development/vox-local/Sources/VoxLocalCore/ProcessingLevel.swift": {
+    "dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/ProcessingLevel.d",
+    "object": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/ProcessingLevel.swift.o",
+    "swiftmodule": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/ProcessingLevel~partial.swiftmodule",
+    "swift-dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/ProcessingLevel.swiftdeps",
+    "diagnostics": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/ProcessingLevel.dia"
+  },
+  "/Users/phaedrus/Development/vox-local/Sources/VoxLocalCore/RewriteQualityGate.swift": {
+    "dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/RewriteQualityGate.d",
+    "object": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/RewriteQualityGate.swift.o",
+    "swiftmodule": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/RewriteQualityGate~partial.swiftmodule",
+    "swift-dependencies": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/RewriteQualityGate.swiftdeps",
+    "diagnostics": "/Users/phaedrus/Development/vox-local/.build/arm64-apple-macosx/debug/VoxLocalCore.build/RewriteQualityGate.dia"
+  }
+}
