@@ -4,23 +4,26 @@ import VoxMac
 import VoxProviders
 
 public final class DictationPipeline {
+    private let stt: STTProvider
+    private let rewriter: RewriteProvider
+    private let paster: TextPaster
     private let prefs: PreferencesStore
-    private let paster: ClipboardPaster
 
-    public init(prefs: PreferencesStore = .shared, paster: ClipboardPaster = ClipboardPaster()) {
-        self.prefs = prefs
+    public init(
+        stt: STTProvider,
+        rewriter: RewriteProvider,
+        paster: TextPaster,
+        prefs: PreferencesStore = .shared
+    ) {
+        self.stt = stt
+        self.rewriter = rewriter
         self.paster = paster
+        self.prefs = prefs
     }
 
     public func process(audioURL: URL) async throws -> String {
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
-        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !elevenKey.isEmpty else {
-            throw VoxError.provider("ElevenLabs API key is missing.")
-        }
-
-        print("[Pipeline] Calling ElevenLabs STT...")
-        let stt = ElevenLabsClient(apiKey: elevenKey)
+        print("[Pipeline] Calling STT...")
         let rawTranscript = try await stt.transcribe(audioURL: audioURL)
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Pipeline] Transcript: \(transcript)")
@@ -29,12 +32,7 @@ public final class DictationPipeline {
         var output = transcript
         let level = prefs.processingLevel
         if level != .off {
-            let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !openRouterKey.isEmpty else {
-                throw VoxError.provider("OpenRouter API key is missing.")
-            }
             let prompt = buildPrompt(level: level, customContext: prefs.customContext)
-            let rewriter = OpenRouterClient(apiKey: openRouterKey)
             let candidate = try await rewriter.rewrite(
                 transcript: transcript,
                 systemPrompt: prompt,
@@ -49,11 +47,9 @@ public final class DictationPipeline {
 
         print("[Pipeline] Final text to paste: \(finalText)")
         print("[Pipeline] Accessibility trusted: \(PermissionManager.isAccessibilityTrusted())")
-        try await MainActor.run {
-            print("[Pipeline] Calling paster.paste()...")
-            try paster.paste(text: finalText)
-            print("[Pipeline] Paste completed successfully")
-        }
+        print("[Pipeline] Calling paster.paste()...")
+        try await paster.paste(text: finalText)
+        print("[Pipeline] Paste completed successfully")
         return finalText
     }
 

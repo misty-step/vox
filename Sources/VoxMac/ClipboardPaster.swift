@@ -3,7 +3,7 @@ import Carbon
 import Foundation
 import VoxCore
 
-public final class ClipboardPaster {
+public final class ClipboardPaster: TextPaster {
     private let restoreDelay: TimeInterval
     private let shouldRestore: Bool
 
@@ -12,7 +12,7 @@ public final class ClipboardPaster {
         self.shouldRestore = shouldRestore
     }
 
-    public func paste(text: String) throws {
+    @MainActor public func paste(text: String) throws {
         guard PermissionManager.isAccessibilityTrusted() else {
             throw VoxError.permissionDenied("Accessibility permission required.")
         }

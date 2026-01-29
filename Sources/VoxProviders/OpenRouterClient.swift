@@ -1,7 +1,7 @@
 import Foundation
 import VoxCore
 
-public final class OpenRouterClient {
+public final class OpenRouterClient: RewriteProvider {
     private let apiKey: String
     private let session: URLSession
 

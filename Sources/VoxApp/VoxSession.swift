@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
+import VoxCore
 import VoxMac
+import VoxProviders
 
 @MainActor
 public final class VoxSession: ObservableObject {
@@ -19,11 +21,21 @@ public final class VoxSession: ObservableObject {
     }
 
     private let recorder = AudioRecorder()
-    private let pipeline = DictationPipeline()
+    private let prefs = PreferencesStore.shared
     private let hud = HUDController()
     private var levelTimer: Timer?
 
     public init() {}
+
+    /// Creates pipeline with current API keys from preferences
+    private func makePipeline() -> DictationPipeline {
+        DictationPipeline(
+            stt: ElevenLabsClient(apiKey: prefs.elevenLabsAPIKey),
+            rewriter: OpenRouterClient(apiKey: prefs.openRouterAPIKey),
+            paster: ClipboardPaster(),
+            prefs: prefs
+        )
+    }
 
     public func toggleRecording() async {
         switch state {
@@ -68,6 +80,12 @@ public final class VoxSession: ObservableObject {
         }
 
         do {
+            let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !elevenKey.isEmpty else {
+                throw VoxError.provider("ElevenLabs API key is missing.")
+            }
+
+            let pipeline = makePipeline()
             _ = try await pipeline.process(audioURL: url)
         } catch {
             presentError(error.localizedDescription)

@@ -1,7 +1,7 @@
 import Foundation
 import VoxCore
 
-public final class ElevenLabsClient {
+public final class ElevenLabsClient: STTProvider {
     private let apiKey: String
     private let session: URLSession
 
