@@ -27,11 +27,13 @@ public final class VoxSession: ObservableObject {
 
     public init() {}
 
-    /// Creates pipeline with current API keys from preferences
+    /// Creates pipeline with current API keys from preferences (trimmed)
     private func makePipeline() -> DictationPipeline {
-        DictationPipeline(
-            stt: ElevenLabsClient(apiKey: prefs.elevenLabsAPIKey),
-            rewriter: OpenRouterClient(apiKey: prefs.openRouterAPIKey),
+        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return DictationPipeline(
+            stt: ElevenLabsClient(apiKey: elevenKey),
+            rewriter: OpenRouterClient(apiKey: openRouterKey),
             paster: ClipboardPaster(),
             prefs: prefs
         )
@@ -80,9 +82,17 @@ public final class VoxSession: ObservableObject {
         }
 
         do {
+            // Validate required API keys before processing
             let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !elevenKey.isEmpty else {
                 throw VoxError.provider("ElevenLabs API key is missing.")
+            }
+
+            if prefs.processingLevel != .off {
+                let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !openRouterKey.isEmpty else {
+                    throw VoxError.provider("OpenRouter API key is missing.")
+                }
             }
 
             let pipeline = makePipeline()
