@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
+import VoxCore
 import VoxMac
+import VoxProviders
 
 @MainActor
 public final class VoxSession: ObservableObject {
@@ -19,11 +21,23 @@ public final class VoxSession: ObservableObject {
     }
 
     private let recorder = AudioRecorder()
-    private let pipeline = DictationPipeline()
+    private let prefs = PreferencesStore.shared
     private let hud = HUDController()
     private var levelTimer: Timer?
 
     public init() {}
+
+    /// Creates pipeline with current API keys from preferences (trimmed)
+    private func makePipeline() -> DictationPipeline {
+        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return DictationPipeline(
+            stt: ElevenLabsClient(apiKey: elevenKey),
+            rewriter: OpenRouterClient(apiKey: openRouterKey),
+            paster: ClipboardPaster(),
+            prefs: prefs
+        )
+    }
 
     public func toggleRecording() async {
         switch state {
@@ -68,6 +82,20 @@ public final class VoxSession: ObservableObject {
         }
 
         do {
+            // Validate required API keys before processing
+            let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !elevenKey.isEmpty else {
+                throw VoxError.provider("ElevenLabs API key is missing.")
+            }
+
+            if prefs.processingLevel != .off {
+                let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !openRouterKey.isEmpty else {
+                    throw VoxError.provider("OpenRouter API key is missing.")
+                }
+            }
+
+            let pipeline = makePipeline()
             _ = try await pipeline.process(audioURL: url)
         } catch {
             presentError(error.localizedDescription)
