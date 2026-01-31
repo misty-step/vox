@@ -21,7 +21,7 @@ SuperWhisper alternative that's simpler and smarter.
 
 ```bash
 # Clone and build
-git clone https://github.com/yourusername/vox.git
+git clone https://github.com/misty-step/vox.git
 cd vox
 swift build
 
@@ -48,7 +48,7 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/vox.git
+   git clone https://github.com/misty-step/vox.git
    cd vox
    ```
 
