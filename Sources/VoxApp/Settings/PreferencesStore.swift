@@ -52,4 +52,14 @@ public final class PreferencesStore: ObservableObject {
         }
         set { KeychainHelper.save(newValue, for: .openRouterAPIKey); objectWillChange.send() }
     }
+
+    public var deepgramAPIKey: String {
+        get {
+            if let envKey = ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"], !envKey.isEmpty {
+                return envKey
+            }
+            return KeychainHelper.load(.deepgramAPIKey) ?? ""
+        }
+        set { KeychainHelper.save(newValue, for: .deepgramAPIKey); objectWillChange.send() }
+    }
 }

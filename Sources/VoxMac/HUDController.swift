@@ -41,8 +41,8 @@ public final class HUDController {
         state.peak = peak
     }
 
-    public func showProcessing() {
-        state.startProcessing()
+    public func showProcessing(message: String = "Transcribing") {
+        state.startProcessing(message: message)
         show()
     }
 

@@ -10,6 +10,9 @@ public struct APIKeysTab: View {
             Section("Speech-to-Text (ElevenLabs)") {
                 SecureField("ElevenLabs API Key", text: binding(for: \.elevenLabsAPIKey))
                     .textContentType(.password)
+                SecureField("Deepgram API Key (optional fallback)", text: binding(for: \.deepgramAPIKey))
+                    .textContentType(.password)
+                Link("Deepgram Console", destination: URL(string: "https://console.deepgram.com/")!)
             }
 
             Section("Rewrite (OpenRouter)") {
