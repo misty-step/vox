@@ -20,7 +20,7 @@ public struct FallbackSTTProvider: STTProvider {
             return try await primary.transcribe(audioURL: audioURL)
         } catch let error as STTError {
             switch error {
-            case .throttled, .quotaExceeded:
+            case .throttled, .quotaExceeded, .auth:
                 await MainActor.run { onFallback?() }
                 return try await fallback.transcribe(audioURL: audioURL)
             default:
