@@ -14,6 +14,8 @@ public enum KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key.rawValue,
+            kSecAttrService as String: "com.vox.app",
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
             kSecValueData as String: data
         ]
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
@@ -23,6 +25,7 @@ public enum KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key.rawValue,
+            kSecAttrService as String: "com.vox.app",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -39,7 +42,8 @@ public enum KeychainHelper {
     public static func delete(_ key: Key) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: key.rawValue
+            kSecAttrAccount as String: key.rawValue,
+            kSecAttrService as String: "com.vox.app"
         ]
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
