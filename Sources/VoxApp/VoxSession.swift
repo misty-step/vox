@@ -41,10 +41,10 @@ public final class VoxSession: ObservableObject {
 
     private func makeSTTProvider(elevenKey: String) -> STTProvider {
         let elevenLabs = ElevenLabsClient(apiKey: elevenKey)
-        let retrying = RetryingSTTProvider(provider: elevenLabs) { [weak self] attempt, delay in
+        let retrying = RetryingSTTProvider(provider: elevenLabs) { [weak self] attempt, maxRetries, delay in
             let delayStr = String(format: "%.1fs", delay)
             Task { @MainActor in
-                self?.hud.showProcessing(message: "Retrying \(attempt)/3 (\(delayStr))")
+                self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
             }
         }
 

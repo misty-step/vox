@@ -13,15 +13,19 @@ public final class DeepgramClient: STTProvider {
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.deepgram.com/v1/listen?model=nova-3")!
-        let payload = try audioPayload(for: audioURL)
+        let payload = try prepareAudioFile(for: audioURL)
+        defer {
+            if let tempURL = payload.tempURL {
+                try? FileManager.default.removeItem(at: tempURL)
+            }
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(payload.mimeType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = payload.data
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.upload(for: request, fromFile: payload.fileURL)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
         }
@@ -39,31 +43,29 @@ public final class DeepgramClient: STTProvider {
         }
     }
 
-    private func mimeType(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "wav":
-            return "audio/wav"
-        case "m4a":
-            return "audio/mp4"
-        case "mp3":
-            return "audio/mpeg"
-        default:
-            return "application/octet-stream"
-        }
-    }
-
-    private func audioPayload(for url: URL) throws -> (data: Data, mimeType: String) {
+    private func prepareAudioFile(for url: URL) throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
         if url.pathExtension.lowercased() == "caf" {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
-            defer { try? FileManager.default.removeItem(at: tempURL) }
 
             try convertCAFToWAV(from: url, to: tempURL)
-            return (try Data(contentsOf: tempURL), "audio/wav")
+            return (tempURL, "audio/wav", tempURL)
         }
 
-        return (try Data(contentsOf: url), mimeType(for: url))
+        let mimeType: String
+        switch url.pathExtension.lowercased() {
+        case "wav":
+            mimeType = "audio/wav"
+        case "m4a":
+            mimeType = "audio/mp4"
+        case "mp3":
+            mimeType = "audio/mpeg"
+        default:
+            mimeType = "application/octet-stream"
+        }
+
+        return (url, mimeType, nil)
     }
 
     private func convertCAFToWAV(from inputURL: URL, to outputURL: URL) throws {
