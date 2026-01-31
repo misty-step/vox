@@ -32,11 +32,31 @@ public final class VoxSession: ObservableObject {
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return DictationPipeline(
-            stt: ElevenLabsClient(apiKey: elevenKey),
+            stt: makeSTTProvider(elevenKey: elevenKey),
             rewriter: OpenRouterClient(apiKey: openRouterKey),
             paster: ClipboardPaster(),
             prefs: prefs
         )
+    }
+
+    private func makeSTTProvider(elevenKey: String) -> STTProvider {
+        let elevenLabs = ElevenLabsClient(apiKey: elevenKey)
+        let retrying = RetryingSTTProvider(provider: elevenLabs) { [weak self] attempt, maxRetries, delay in
+            let delayStr = String(format: "%.1fs", delay)
+            Task { @MainActor in
+                self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
+            }
+        }
+
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deepgramKey.isEmpty else { return retrying }
+
+        let deepgram = DeepgramClient(apiKey: deepgramKey)
+        return FallbackSTTProvider(primary: retrying, fallback: deepgram) { [weak self] in
+            Task { @MainActor in
+                self?.hud.showProcessing(message: "Switching to Deepgram")
+            }
+        }
     }
 
     public func toggleRecording() async {

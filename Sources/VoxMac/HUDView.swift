@@ -13,6 +13,7 @@ public final class HUDState: ObservableObject {
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
+    @Published public var processingMessage: String = "Transcribing"
     
     private var timer: Timer?
     
@@ -28,8 +29,9 @@ public final class HUDState: ObservableObject {
         RunLoop.main.add(timer!, forMode: .common)
     }
     
-    public func startProcessing() {
+    public func startProcessing(message: String = "Transcribing") {
         mode = .processing
+        processingMessage = message
         timer?.invalidate()
         timer = nil
     }
@@ -41,6 +43,7 @@ public final class HUDState: ObservableObject {
         recordingDuration = 0
         average = 0
         peak = 0
+        processingMessage = "Transcribing"
     }
 }
 
@@ -304,7 +307,7 @@ public struct HUDView: View {
             ProcessingSpinner()
             
             // Specific action, not generic "Processing"
-            Text("Transcribing")
+            Text(state.processingMessage)
                 .font(Design.fontLabel)
                 .foregroundStyle(Design.textPrimary)
         }
