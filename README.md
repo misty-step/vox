@@ -43,6 +43,7 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 - Swift 5.9+
 - [ElevenLabs API key](https://elevenlabs.io) for transcription
 - [OpenRouter API key](https://openrouter.ai) for AI rewriting
+- [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription
 
 ### Installation
 
@@ -70,6 +71,7 @@ API keys can be provided two ways:
 ```bash
 export ELEVENLABS_API_KEY=your-key
 export OPENROUTER_API_KEY=your-key
+export DEEPGRAM_API_KEY=your-key  # optional fallback
 ```
 
 **Settings window** (persisted in Keychain):
