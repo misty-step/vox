@@ -92,11 +92,16 @@ final class FallbackSTTProviderTests: XCTestCase {
 
 private final class CallbackCounter: @unchecked Sendable {
     private let lock = NSLock()
-    private(set) var count = 0
+    private var _count = 0
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _count
+    }
 
     func increment() {
         lock.lock()
-        count += 1
+        _count += 1
         lock.unlock()
     }
 }

@@ -19,12 +19,14 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
         lock.lock()
         let index = _callCount
         _callCount += 1
-        lock.unlock()
-
         guard index < results.count else {
+            lock.unlock()
             throw STTError.unknown("No more mock results")
         }
-        switch results[index] {
+        let result = results[index]
+        lock.unlock()
+
+        switch result {
         case .success(let text):
             return text
         case .failure(let error):

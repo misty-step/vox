@@ -116,11 +116,16 @@ final class RetryingSTTProviderTests: XCTestCase {
 
 private final class RetryRecorder: @unchecked Sendable {
     private let lock = NSLock()
-    private(set) var events: [(Int, Int, TimeInterval)] = []
+    private var _events: [(Int, Int, TimeInterval)] = []
+    var events: [(Int, Int, TimeInterval)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _events
+    }
 
     func record(attempt: Int, maxRetries: Int, delay: TimeInterval) {
         lock.lock()
-        events.append((attempt, maxRetries, delay))
+        _events.append((attempt, maxRetries, delay))
         lock.unlock()
     }
 }
