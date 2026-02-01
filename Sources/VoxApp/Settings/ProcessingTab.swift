@@ -14,6 +14,7 @@ public struct ProcessingTab: View {
                     Text("Off").tag(ProcessingLevel.off)
                     Text("Light").tag(ProcessingLevel.light)
                     Text("Aggressive").tag(ProcessingLevel.aggressive)
+                    Text("Enhance").tag(ProcessingLevel.enhance)
                 }
 
                 Picker("Model", selection: $prefs.selectedModel) {
