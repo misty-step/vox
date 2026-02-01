@@ -3,7 +3,7 @@ import Foundation
 
 final class MockSTTProvider: STTProvider, @unchecked Sendable {
     private let lock = NSLock()
-    var results: [Result<String, Error>]
+    let results: [Result<String, Error>]
     private var _callCount = 0
     var callCount: Int {
         lock.lock()
