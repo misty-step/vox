@@ -2,6 +2,8 @@ import Foundation
 import Security
 
 public enum KeychainHelper {
+    private static let serviceIdentifier = Bundle.main.bundleIdentifier ?? "com.misty-step.Vox"
+
     public enum Key: String {
         case elevenLabsAPIKey = "com.vox.elevenlabs.apikey"
         case openRouterAPIKey = "com.vox.openrouter.apikey"
@@ -14,7 +16,7 @@ public enum KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key.rawValue,
-            kSecAttrService as String: "com.vox.app",
+            kSecAttrService as String: serviceIdentifier,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
             kSecValueData as String: data
         ]
@@ -25,7 +27,7 @@ public enum KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key.rawValue,
-            kSecAttrService as String: "com.vox.app",
+            kSecAttrService as String: serviceIdentifier,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -43,7 +45,7 @@ public enum KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key.rawValue,
-            kSecAttrService as String: "com.vox.app"
+            kSecAttrService as String: serviceIdentifier
         ]
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
