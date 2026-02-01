@@ -23,58 +23,26 @@ final class FallbackSTTProviderTests: XCTestCase {
         XCTAssertEqual(counter.count, 0)
     }
 
-    func test_transcribe_fallbackOnThrottled() async throws {
-        let primary = MockSTTProvider(results: [.failure(STTError.throttled)])
-        let fallback = MockSTTProvider(results: [.success("fallback")])
-        let counter = CallbackCounter()
-        let provider = FallbackSTTProvider(
-            primary: primary,
-            fallback: fallback,
-            onFallback: { counter.increment() }
-        )
+    func test_transcribe_fallsBackOnSpecificErrors() async throws {
+        let fallbackErrors: [STTError] = [.throttled, .quotaExceeded, .auth]
 
-        let result = try await provider.transcribe(audioURL: audioURL)
+        for error in fallbackErrors {
+            let primary = MockSTTProvider(results: [.failure(error)])
+            let fallback = MockSTTProvider(results: [.success("fallback")])
+            let counter = CallbackCounter()
+            let provider = FallbackSTTProvider(
+                primary: primary,
+                fallback: fallback,
+                onFallback: { counter.increment() }
+            )
 
-        XCTAssertEqual(result, "fallback")
-        XCTAssertEqual(primary.callCount, 1)
-        XCTAssertEqual(fallback.callCount, 1)
-        XCTAssertEqual(counter.count, 1)
-    }
+            let result = try await provider.transcribe(audioURL: audioURL)
 
-    func test_transcribe_fallbackOnQuotaExceeded() async throws {
-        let primary = MockSTTProvider(results: [.failure(STTError.quotaExceeded)])
-        let fallback = MockSTTProvider(results: [.success("fallback")])
-        let counter = CallbackCounter()
-        let provider = FallbackSTTProvider(
-            primary: primary,
-            fallback: fallback,
-            onFallback: { counter.increment() }
-        )
-
-        let result = try await provider.transcribe(audioURL: audioURL)
-
-        XCTAssertEqual(result, "fallback")
-        XCTAssertEqual(primary.callCount, 1)
-        XCTAssertEqual(fallback.callCount, 1)
-        XCTAssertEqual(counter.count, 1)
-    }
-
-    func test_transcribe_fallbackOnAuth() async throws {
-        let primary = MockSTTProvider(results: [.failure(STTError.auth)])
-        let fallback = MockSTTProvider(results: [.success("fallback")])
-        let counter = CallbackCounter()
-        let provider = FallbackSTTProvider(
-            primary: primary,
-            fallback: fallback,
-            onFallback: { counter.increment() }
-        )
-
-        let result = try await provider.transcribe(audioURL: audioURL)
-
-        XCTAssertEqual(result, "fallback")
-        XCTAssertEqual(primary.callCount, 1)
-        XCTAssertEqual(fallback.callCount, 1)
-        XCTAssertEqual(counter.count, 1)
+            XCTAssertEqual(result, "fallback", "Failed for error: \(error)")
+            XCTAssertEqual(primary.callCount, 1, "Failed for error: \(error)")
+            XCTAssertEqual(fallback.callCount, 1, "Failed for error: \(error)")
+            XCTAssertEqual(counter.count, 1, "Failed for error: \(error)")
+        }
     }
 
     func test_transcribe_noFallbackOnNonFallbackErrors() async {
