@@ -34,15 +34,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onQuit: { NSApplication.shared.terminate(nil) }
         )
         self.statusBarController = statusBarController
+        statusBarController.updateState(.idle(processingLevel: prefs.processingLevel))
         session.onStateChange = { [weak statusBarController] state in
+            let level = PreferencesStore.shared.processingLevel
             let statusState: StatusBarState
             switch state {
             case .idle:
-                statusState = .idle
+                statusState = .idle(processingLevel: level)
             case .recording:
-                statusState = .recording
+                statusState = .recording(processingLevel: level)
             case .processing:
-                statusState = .processing
+                statusState = .processing(processingLevel: level)
             }
             statusBarController?.updateState(statusState)
         }
