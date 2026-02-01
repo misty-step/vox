@@ -19,5 +19,9 @@ let package = Package(
             name: "VoxProvidersTests",
             dependencies: ["VoxProviders"]
         ),
+        .testTarget(
+            name: "VoxCoreTests",
+            dependencies: ["VoxCore"]
+        ),
     ]
 )
