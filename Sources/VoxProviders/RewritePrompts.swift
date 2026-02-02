@@ -1,7 +1,7 @@
 import VoxCore
 
 public enum RewritePrompts {
-    public static func prompt(for level: ProcessingLevel) -> String {
+    public static func prompt(for level: ProcessingLevel, transcript: String = "") -> String {
         switch level {
         case .off: return ""
         case .light: return """
@@ -39,7 +39,30 @@ STYLE:
 
 Output only the rewritten text. No commentary or explanation.
 """
-        case .enhance: return """
+        case .enhance:
+            let wordCount = transcript.split(separator: " ").count
+            if wordCount < 50 {
+                return conciseEnhancePrompt
+            } else {
+                return fullEnhancePrompt
+            }
+        }
+    }
+
+    private static let conciseEnhancePrompt = """
+You are a prompt enhancer. Transform this voice input into a clear, actionable prompt.
+
+Extract the user's intent despite filler words, false starts, or incomplete thoughts.
+
+Output a direct prompt that:
+1. States the role/expertise needed (if applicable)
+2. Describes the task clearly
+3. Specifies the desired output format
+
+Keep it punchy. No meta-commentary. Output only the enhanced prompt.
+"""
+
+    private static let fullEnhancePrompt = """
 You are an elite prompt architect. Transform this voice input into a perfectly structured prompt using the 10-Step Gold Standard Framework.
 
 ## Your Task
@@ -118,6 +141,4 @@ Here is a structured response based on the provided context:
 - Preserve the user's actual goal—don't over-engineer
 - Include ALL 10 sections (mark N/A if truly not applicable)
 """
-        }
-    }
 }
