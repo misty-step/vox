@@ -200,10 +200,14 @@ public final class StatusBarController: NSObject {
                 fillPath.fill()
 
             case .processing:
-                // Dotted V instead of solid V with arc
-                let pattern: [CGFloat] = [2, 3]
-                vPath.setLineDash(pattern, count: 2, phase: 0)
-                vPath.stroke()
+                // Ghost outline: hollow V shape (stroke the closed triangle outline)
+                let ghostPath = NSBezierPath()
+                ghostPath.move(to: NSPoint(x: left, y: top))
+                ghostPath.line(to: NSPoint(x: center, y: bottom))
+                ghostPath.line(to: NSPoint(x: right, y: top))
+                ghostPath.close()
+                ghostPath.lineWidth = 1.0
+                ghostPath.stroke()
             }
 
             return true
