@@ -200,16 +200,10 @@ public final class StatusBarController: NSObject {
                 fillPath.fill()
 
             case .processing:
+                // Dotted V instead of solid V with arc
+                let pattern: [CGFloat] = [2, 3]
+                vPath.setLineDash(pattern, count: 2, phase: 0)
                 vPath.stroke()
-                // Dashed arc around the V
-                let arcCenter = NSPoint(x: rect.midX, y: rect.midY + 1)
-                let arc = NSBezierPath()
-                arc.appendArc(withCenter: arcCenter, radius: 7,
-                              startAngle: 30, endAngle: 150, clockwise: true)
-                arc.lineWidth = 1.0
-                let pattern: [CGFloat] = [2, 2]
-                arc.setLineDash(pattern, count: 2, phase: 0)
-                arc.stroke()
             }
 
             return true
