@@ -158,79 +158,62 @@ public final class StatusBarController: NSObject {
     private func createVoxIcon(for state: StatusBarState) -> NSImage {
         let size = NSSize(width: 18, height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            let vPath = NSBezierPath()
+            // Stroke weight based on processing level
+            let strokeWidth: CGFloat
+            switch state.processingLevel {
+            case .off:        strokeWidth = 1.5
+            case .light:      strokeWidth = 2.0
+            case .aggressive: strokeWidth = 2.5
+            case .enhance:    strokeWidth = 3.0
+            }
+
+            // V path coordinates
             let inset: CGFloat = 2
             let top = rect.height - inset
             let bottom = inset + 2
             let left = inset + 1
             let right = rect.width - inset - 1
             let center = rect.width / 2
-            let strokeWidth: CGFloat = 2.5
 
+            let vPath = NSBezierPath()
             vPath.move(to: NSPoint(x: left, y: top))
             vPath.line(to: NSPoint(x: center, y: bottom))
             vPath.line(to: NSPoint(x: right, y: top))
-
             vPath.lineWidth = strokeWidth
             vPath.lineCapStyle = .round
             vPath.lineJoinStyle = .round
 
             NSColor.black.setStroke()
-
-            vPath.stroke()
-
-            let badgeSize: CGFloat = 6
-            let badgeRect = NSRect(
-                x: rect.width - badgeSize - 1,
-                y: rect.height - badgeSize - 1,
-                width: badgeSize,
-                height: badgeSize
-            )
+            NSColor.black.setFill()
 
             switch state {
-            case .recording:
-                NSColor.black.setFill()
-                NSBezierPath(ovalIn: badgeRect).fill()
-            case .processing:
-                let ringWidth: CGFloat = 1.5
-                let ringRect = badgeRect.insetBy(dx: ringWidth / 2, dy: ringWidth / 2)
-                let ringPath = NSBezierPath(ovalIn: ringRect)
-                ringPath.lineWidth = ringWidth
-                NSColor.black.setStroke()
-                ringPath.stroke()
             case .idle:
-                break
-            }
+                vPath.stroke()
 
-            let dotCount: Int
-            switch state.processingLevel {
-            case .off:
-                dotCount = 0
-            case .light:
-                dotCount = 1
-            case .aggressive:
-                dotCount = 2
-            case .enhance:
-                dotCount = 3
-            }
+            case .recording:
+                // Filled V - close path to make triangle
+                let fillPath = NSBezierPath()
+                fillPath.move(to: NSPoint(x: left, y: top))
+                fillPath.line(to: NSPoint(x: center, y: bottom))
+                fillPath.line(to: NSPoint(x: right, y: top))
+                fillPath.close()
+                fillPath.fill()
 
-            if dotCount > 0 {
-                let dotSize: CGFloat = 2.5
-                let dotSpacing: CGFloat = 2
-                let totalWidth = CGFloat(dotCount) * dotSize + CGFloat(dotCount - 1) * dotSpacing
-                let startX = (rect.width - totalWidth) / 2
-                let dotY: CGFloat = 1
-                NSColor.black.setFill()
-                for index in 0..<dotCount {
-                    let x = startX + CGFloat(index) * (dotSize + dotSpacing)
-                    let dotRect = NSRect(x: x, y: dotY, width: dotSize, height: dotSize)
-                    NSBezierPath(ovalIn: dotRect).fill()
-                }
+            case .processing:
+                vPath.stroke()
+                // Dashed arc around the V
+                let arcCenter = NSPoint(x: rect.midX, y: rect.midY + 1)
+                let arc = NSBezierPath()
+                arc.appendArc(withCenter: arcCenter, radius: 7,
+                              startAngle: 30, endAngle: 150, clockwise: true)
+                arc.lineWidth = 1.0
+                let pattern: [CGFloat] = [2, 2]
+                arc.setLineDash(pattern, count: 2, phase: 0)
+                arc.stroke()
             }
 
             return true
         }
-
         image.isTemplate = true
         return image
     }
