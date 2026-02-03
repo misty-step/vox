@@ -15,8 +15,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
         print("[Vox] ElevenLabs API key: \(hasElevenLabs ? "✓" : "✗ MISSING")")
         print("[Vox] OpenRouter API key: \(hasOpenRouter ? "✓" : "✗ MISSING")")
-        print("[Vox] Model: \(prefs.selectedModel)")
         print("[Vox] Processing level: \(prefs.processingLevel.rawValue)")
+        print("[Vox] Model: \(prefs.processingLevel.defaultModel)")
 
         if !hasElevenLabs || !hasOpenRouter {
             print("[Vox] Tip: Set ELEVENLABS_API_KEY and OPENROUTER_API_KEY env vars, or use Settings to configure.")
@@ -34,15 +34,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onQuit: { NSApplication.shared.terminate(nil) }
         )
         self.statusBarController = statusBarController
+        statusBarController.updateState(.idle(processingLevel: prefs.processingLevel))
         session.onStateChange = { [weak statusBarController] state in
+            let level = PreferencesStore.shared.processingLevel
             let statusState: StatusBarState
             switch state {
             case .idle:
-                statusState = .idle
+                statusState = .idle(processingLevel: level)
             case .recording:
-                statusState = .recording
+                statusState = .recording(processingLevel: level)
             case .processing:
-                statusState = .processing
+                statusState = .processing(processingLevel: level)
             }
             statusBarController?.updateState(statusState)
         }

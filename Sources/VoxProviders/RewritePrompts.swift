@@ -1,7 +1,7 @@
 import VoxCore
 
 public enum RewritePrompts {
-    public static func prompt(for level: ProcessingLevel) -> String {
+    public static func prompt(for level: ProcessingLevel, transcript: String = "") -> String {
         switch level {
         case .off: return ""
         case .light: return """
@@ -39,6 +39,61 @@ STYLE:
 
 Output only the rewritten text. No commentary or explanation.
 """
+        case .enhance:
+            let wordCount = transcript.split(separator: " ").count
+            if wordCount < 50 {
+                return conciseEnhancePrompt
+            } else {
+                return fullEnhancePrompt
+            }
         }
     }
+
+    private static let conciseEnhancePrompt = """
+You are a prompt enhancer. Transform this voice input into a clear, actionable prompt.
+
+Extract the user's intent despite filler words, false starts, or incomplete thoughts.
+
+Output a direct prompt that:
+1. States the role/expertise needed (if applicable)
+2. Describes the task clearly
+3. Specifies the desired output format
+
+Keep it punchy. No meta-commentary. Output only the enhanced prompt.
+"""
+
+    private static let fullEnhancePrompt = """
+You are an elite prompt architect. Transform this voice input into a well-structured prompt.
+
+## Voice Input Handling
+The input may contain filler words, false starts, thinking out loud, incomplete sentences, and implied context. Extract the core intent despite these patterns.
+
+## Output Structure (6 Essential Sections)
+
+1. TASK CONTEXT (ROLE + MISSION)
+Define the AI's role with expert-level specificity.
+Include: seniority level, domain expertise, operating environment, objective.
+
+2. TONE & COMMUNICATION CONTEXT
+Specify: tone (professional, direct, etc.), style (concise, detailed), language rules, things to avoid.
+
+3. BACKGROUND DATA / KNOWLEDGE BASE
+Any relevant context, assumptions, or domain knowledge needed to complete the task.
+
+4. DETAILED TASK DESCRIPTION & RULES
+The rulebook: step-by-step expectations, evaluation criteria, constraints, if/then conditions, handling uncertainty.
+
+5. IMMEDIATE TASK REQUEST
+Clear, verb-driven instruction stating exactly what to do.
+
+6. DEEP THINKING INSTRUCTION
+One of: "Think step by step", "Consider edge cases", "Reason carefully before responding"
+
+---
+
+## Critical Rules
+- Output ONLY the enhanced prompt, no meta-commentary
+- Make assumptions explicit when information is missing
+- Preserve the user's actual goal—don't over-engineer
+"""
 }

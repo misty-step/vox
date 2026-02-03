@@ -8,6 +8,7 @@ final class RewriteQualityGateTests: XCTestCase {
         XCTAssertTrue(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 1, accuracy: 0.0001)
         XCTAssertEqual(decision.minimumRatio, 0.6, accuracy: 0.0001)
+        XCTAssertNil(decision.maximumRatio)
     }
 
     func test_evaluate_emptyCandidate_returnsNotAcceptable() {
@@ -16,6 +17,7 @@ final class RewriteQualityGateTests: XCTestCase {
         XCTAssertFalse(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 0, accuracy: 0.0001)
         XCTAssertEqual(decision.minimumRatio, 0.3, accuracy: 0.0001)
+        XCTAssertNil(decision.maximumRatio)
     }
 
     func test_evaluate_ratioCalculation_isCorrect() {
@@ -23,6 +25,7 @@ final class RewriteQualityGateTests: XCTestCase {
 
         XCTAssertEqual(decision.ratio, 0.5, accuracy: 0.0001)
         XCTAssertEqual(decision.minimumRatio, 0, accuracy: 0.0001)
+        XCTAssertNil(decision.maximumRatio)
     }
 
     func test_evaluate_minimumRatio_perProcessingLevel() {
@@ -30,12 +33,19 @@ final class RewriteQualityGateTests: XCTestCase {
             (.off, 0),
             (.light, 0.6),
             (.aggressive, 0.3),
+            (.enhance, 0.2),
         ]
 
         for (level, expected) in cases {
             let decision = RewriteQualityGate.evaluate(raw: "raw", candidate: "candidate", level: level)
             XCTAssertEqual(decision.minimumRatio, expected, accuracy: 0.0001)
         }
+    }
+
+    func test_evaluate_maximumRatio_forEnhance() {
+        let decision = RewriteQualityGate.evaluate(raw: "raw", candidate: "candidate", level: .enhance)
+
+        XCTAssertEqual(decision.maximumRatio!, 15.0, accuracy: 0.0001)
     }
 
     func test_evaluate_boundaryAtThreshold_isAcceptable() {
@@ -52,10 +62,45 @@ final class RewriteQualityGateTests: XCTestCase {
         XCTAssertEqual(aggressiveDecision.ratio, 0.3, accuracy: 0.0001)
     }
 
+    func test_evaluate_enhanceExpansionWithinBounds_isAcceptable() {
+        let raw = String(repeating: "r", count: 10)
+        let candidate = String(repeating: "c", count: 100)
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .enhance)
+
+        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 10.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_enhanceExpansionAboveMax_isNotAcceptable() {
+        let raw = String(repeating: "r", count: 10)
+        let candidate = String(repeating: "c", count: 200)
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .enhance)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 20.0, accuracy: 0.0001)
+    }
+
     func test_decision_equatable_matchesEqualValues() {
-        let decision = RewriteQualityGate.Decision(isAcceptable: true, ratio: 0.5, minimumRatio: 0.3)
-        let sameDecision = RewriteQualityGate.Decision(isAcceptable: true, ratio: 0.5, minimumRatio: 0.3)
-        let differentDecision = RewriteQualityGate.Decision(isAcceptable: false, ratio: 0.5, minimumRatio: 0.3)
+        let decision = RewriteQualityGate.Decision(
+            isAcceptable: true,
+            ratio: 0.5,
+            minimumRatio: 0.3,
+            maximumRatio: nil
+        )
+        let sameDecision = RewriteQualityGate.Decision(
+            isAcceptable: true,
+            ratio: 0.5,
+            minimumRatio: 0.3,
+            maximumRatio: nil
+        )
+        let differentDecision = RewriteQualityGate.Decision(
+            isAcceptable: false,
+            ratio: 0.5,
+            minimumRatio: 0.3,
+            maximumRatio: nil
+        )
 
         XCTAssertEqual(decision, sameDecision)
         XCTAssertNotEqual(decision, differentDecision)

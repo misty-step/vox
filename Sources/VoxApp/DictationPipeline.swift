@@ -32,11 +32,11 @@ public final class DictationPipeline {
         var output = transcript
         let level = prefs.processingLevel
         if level != .off {
-            let prompt = buildPrompt(level: level, customContext: prefs.customContext)
+            let prompt = buildPrompt(level: level, transcript: transcript, customContext: prefs.customContext)
             let candidate = try await rewriter.rewrite(
                 transcript: transcript,
                 systemPrompt: prompt,
-                model: prefs.selectedModel
+                model: level.defaultModel
             )
             let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
             output = decision.isAcceptable ? candidate : transcript
@@ -53,8 +53,8 @@ public final class DictationPipeline {
         return finalText
     }
 
-    private func buildPrompt(level: ProcessingLevel, customContext: String) -> String {
-        let base = RewritePrompts.prompt(for: level)
+    private func buildPrompt(level: ProcessingLevel, transcript: String, customContext: String) -> String {
+        let base = RewritePrompts.prompt(for: level, transcript: transcript)
         let trimmed = customContext.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return base }
         return "\(base)\n\nContext:\n\(trimmed)"
