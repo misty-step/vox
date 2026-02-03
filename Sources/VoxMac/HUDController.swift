@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-public final class HUDController {
+public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
 

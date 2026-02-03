@@ -20,42 +20,51 @@ public final class VoxSession: ObservableObject {
         }
     }
 
-    private let recorder = AudioRecorder()
-    private let prefs = PreferencesStore.shared
-    private let hud = HUDController()
+    private let recorder: AudioRecording
+    private let prefs: PreferencesStore
+    private let hud: HUDDisplaying
+    private let pipelineFactory: () -> DictationProcessing
+    private let permissionRequest: () async -> Bool
+    private let removeFile: (URL) -> Void
+    private let validateKeys: () throws -> Void
     private var levelTimer: Timer?
 
-    public init() {}
-
-    /// Creates pipeline with current API keys from preferences (trimmed)
-    private func makePipeline() -> DictationPipeline {
-        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        return DictationPipeline(
-            stt: makeSTTProvider(elevenKey: elevenKey),
-            rewriter: OpenRouterClient(apiKey: openRouterKey),
-            paster: ClipboardPaster(),
-            prefs: prefs
+    public convenience init(
+        recorder: AudioRecording = AudioRecorder(),
+        pipeline: DictationProcessing? = nil,
+        hud: HUDDisplaying = HUDController(),
+        prefs: PreferencesStore = .shared
+    ) {
+        self.init(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: hud,
+            prefs: prefs,
+            permissionRequest: { await PermissionManager.requestMicrophoneAccess() },
+            removeFile: { url in try? FileManager.default.removeItem(at: url) }
         )
     }
 
-    private func makeSTTProvider(elevenKey: String) -> STTProvider {
-        let elevenLabs = ElevenLabsClient(apiKey: elevenKey)
-        let retrying = RetryingSTTProvider(provider: elevenLabs) { [weak self] attempt, maxRetries, delay in
-            let delayStr = String(format: "%.1fs", delay)
-            Task { @MainActor in
-                self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
-            }
-        }
+    init(
+        recorder: AudioRecording,
+        pipeline: DictationProcessing?,
+        hud: HUDDisplaying,
+        prefs: PreferencesStore,
+        permissionRequest: @escaping () async -> Bool,
+        removeFile: @escaping (URL) -> Void
+    ) {
+        self.recorder = recorder
+        self.hud = hud
+        self.prefs = prefs
+        self.permissionRequest = permissionRequest
+        self.removeFile = removeFile
 
-        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !deepgramKey.isEmpty else { return retrying }
-
-        let deepgram = DeepgramClient(apiKey: deepgramKey)
-        return FallbackSTTProvider(primary: retrying, fallback: deepgram) { [weak self] in
-            Task { @MainActor in
-                self?.hud.showProcessing(message: "Switching to Deepgram")
-            }
+        if let pipeline {
+            self.pipelineFactory = { pipeline }
+            self.validateKeys = {}
+        } else {
+            self.pipelineFactory = { Self.makeDefaultPipeline(prefs: prefs, hud: hud) }
+            self.validateKeys = { try Self.validateKeys(prefs: prefs) }
         }
     }
 
@@ -68,7 +77,7 @@ public final class VoxSession: ObservableObject {
     }
 
     private func startRecording() async {
-        let granted = await PermissionManager.requestMicrophoneAccess()
+        let granted = await permissionRequest()
         guard granted else {
             presentError("Microphone permission is required.")
             return
@@ -102,26 +111,14 @@ public final class VoxSession: ObservableObject {
         }
 
         do {
-            // Validate required API keys before processing
-            let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !elevenKey.isEmpty else {
-                throw VoxError.provider("ElevenLabs API key is missing.")
-            }
-
-            if prefs.processingLevel != .off {
-                let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !openRouterKey.isEmpty else {
-                    throw VoxError.provider("OpenRouter API key is missing.")
-                }
-            }
-
-            let pipeline = makePipeline()
+            try validateKeys()
+            let pipeline = pipelineFactory()
             _ = try await pipeline.process(audioURL: url)
         } catch {
             presentError(error.localizedDescription)
         }
 
-        try? FileManager.default.removeItem(at: url)
+        removeFile(url)
         state = .idle
         hud.hide()
     }
@@ -144,5 +141,57 @@ public final class VoxSession: ObservableObject {
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
+    }
+
+    private static func validateKeys(prefs: PreferencesStore) throws {
+        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !elevenKey.isEmpty else {
+            throw VoxError.provider("ElevenLabs API key is missing.")
+        }
+
+        if prefs.processingLevel != .off {
+            let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !openRouterKey.isEmpty else {
+                throw VoxError.provider("OpenRouter API key is missing.")
+            }
+        }
+    }
+
+    private static func makeDefaultPipeline(
+        prefs: PreferencesStore,
+        hud: HUDDisplaying
+    ) -> DictationPipeline {
+        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return DictationPipeline(
+            stt: makeSTTProvider(prefs: prefs, hud: hud, elevenKey: elevenKey),
+            rewriter: OpenRouterClient(apiKey: openRouterKey),
+            paster: ClipboardPaster(),
+            prefs: prefs
+        )
+    }
+
+    private static func makeSTTProvider(
+        prefs: PreferencesStore,
+        hud: HUDDisplaying,
+        elevenKey: String
+    ) -> STTProvider {
+        let elevenLabs = ElevenLabsClient(apiKey: elevenKey)
+        let retrying = RetryingSTTProvider(provider: elevenLabs) { attempt, maxRetries, delay in
+            let delayStr = String(format: "%.1fs", delay)
+            Task { @MainActor in
+                hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
+            }
+        }
+
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deepgramKey.isEmpty else { return retrying }
+
+        let deepgram = DeepgramClient(apiKey: deepgramKey)
+        return FallbackSTTProvider(primary: retrying, fallback: deepgram) {
+            Task { @MainActor in
+                hud.showProcessing(message: "Switching to Deepgram")
+            }
+        }
     }
 }

@@ -3,7 +3,7 @@ import CoreAudio
 import Foundation
 import VoxCore
 
-public final class AudioRecorder {
+public final class AudioRecorder: AudioRecording {
     public static func currentInputDeviceName() -> String? {
         var deviceID = AudioDeviceID()
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)

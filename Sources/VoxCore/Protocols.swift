@@ -14,3 +14,20 @@ public protocol RewriteProvider: Sendable {
 public protocol TextPaster: Sendable {
     @MainActor func paste(text: String) throws
 }
+
+public protocol AudioRecording: AnyObject {
+    func start() throws
+    func currentLevel() -> (average: Float, peak: Float)
+    func stop() throws -> URL
+}
+
+public protocol DictationProcessing: Sendable {
+    func process(audioURL: URL) async throws -> String
+}
+
+public protocol HUDDisplaying: AnyObject {
+    @MainActor func showRecording(average: Float, peak: Float)
+    @MainActor func updateLevels(average: Float, peak: Float)
+    @MainActor func showProcessing(message: String)
+    @MainActor func hide()
+}
