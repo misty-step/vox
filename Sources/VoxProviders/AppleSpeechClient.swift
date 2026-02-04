@@ -17,21 +17,29 @@ public final class AppleSpeechClient: STTProvider {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            var resumed = false
+            let guard_ = ContinuationGuard()
             recognizer.recognitionTask(with: request) { result, error in
                 if let error {
-                    if !resumed {
-                        resumed = true
-                        continuation.resume(throwing: STTError.unknown(error.localizedDescription))
-                    }
+                    guard_.resumeOnce { continuation.resume(throwing: STTError.unknown(error.localizedDescription)) }
                     return
                 }
                 guard let result, result.isFinal else { return }
-                if !resumed {
-                    resumed = true
-                    continuation.resume(returning: result.bestTranscription.formattedString)
-                }
+                guard_.resumeOnce { continuation.resume(returning: result.bestTranscription.formattedString) }
             }
         }
+    }
+}
+
+/// Thread-safe one-shot guard for continuation resumption.
+private final class ContinuationGuard: @unchecked Sendable {
+    private var resumed = false
+    private let lock = NSLock()
+
+    func resumeOnce(_ body: () -> Void) {
+        lock.lock()
+        guard !resumed else { lock.unlock(); return }
+        resumed = true
+        lock.unlock()
+        body()
     }
 }

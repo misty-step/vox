@@ -23,10 +23,9 @@ public final class DictationPipeline {
 
     public func process(audioURL: URL) async throws -> String {
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
-        print("[Pipeline] Calling STT...")
         let rawTranscript = try await stt.transcribe(audioURL: audioURL)
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[Pipeline] Transcript: \(transcript)")
+        print("[Pipeline] STT complete (\(transcript.count) chars)")
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         var output = transcript
@@ -49,11 +48,9 @@ public final class DictationPipeline {
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalText.isEmpty else { throw VoxError.noTranscript }
 
-        print("[Pipeline] Final text to paste: \(finalText)")
-        print("[Pipeline] Accessibility trusted: \(PermissionManager.isAccessibilityTrusted())")
-        print("[Pipeline] Calling paster.paste()...")
+        print("[Pipeline] Pasting \(finalText.count) chars")
         try await paster.paste(text: finalText)
-        print("[Pipeline] Paste completed successfully")
+        print("[Pipeline] Done")
         return finalText
     }
 

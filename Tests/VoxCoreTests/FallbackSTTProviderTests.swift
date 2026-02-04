@@ -79,6 +79,38 @@ final class FallbackSTTProviderTests: XCTestCase {
         }
     }
 
+    func test_transcribe_fallsBackOnNonSTTError() async throws {
+        let urlError = URLError(.notConnectedToInternet)
+        let primary = MockSTTProvider(results: [.failure(urlError)])
+        let fallback = MockSTTProvider(results: [.success("fallback")])
+        let counter = CallbackCounter()
+        let provider = FallbackSTTProvider(
+            primary: primary,
+            fallback: fallback,
+            onFallback: { counter.increment() }
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "fallback")
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func test_transcribe_bothFailPropagatesError() async {
+        let primary = MockSTTProvider(results: [.failure(STTError.network("down"))])
+        let fallback = MockSTTProvider(results: [.failure(STTError.unknown("also down"))])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            XCTAssertEqual(error, .unknown("also down"))
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
+        }
+    }
+
     func test_transcribe_onFallbackCallback_isCalled() async throws {
         let primary = MockSTTProvider(results: [.failure(STTError.throttled)])
         let fallback = MockSTTProvider(results: [.success("fallback")])

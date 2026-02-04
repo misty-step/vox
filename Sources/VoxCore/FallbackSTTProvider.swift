@@ -22,6 +22,12 @@ public struct FallbackSTTProvider: STTProvider {
             guard error.isFallbackEligible else { throw error }
             await MainActor.run { onFallback?() }
             return try await fallback.transcribe(audioURL: audioURL)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Non-STTError (URLError, NSError, etc.) — fall back
+            await MainActor.run { onFallback?() }
+            return try await fallback.transcribe(audioURL: audioURL)
         }
     }
 }

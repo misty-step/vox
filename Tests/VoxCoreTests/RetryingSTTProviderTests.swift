@@ -85,6 +85,8 @@ final class RetryingSTTProviderTests: XCTestCase {
             .auth,
             .invalidAudio,
             .quotaExceeded,
+            .sessionLimit,
+            .unknown("?"),
         ]
 
         for error in errors {
@@ -107,6 +109,36 @@ final class RetryingSTTProviderTests: XCTestCase {
             }
             XCTAssertEqual(mock.callCount, 1)
             XCTAssertTrue(recorder.events.isEmpty)
+        }
+    }
+
+    func test_transcribe_retriesOnNonSTTError() async throws {
+        let urlError = URLError(.notConnectedToInternet)
+        let mock = MockSTTProvider(results: [.failure(urlError), .success("ok")])
+        let provider = RetryingSTTProvider(provider: mock, maxRetries: 2, baseDelay: 0)
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "ok")
+        XCTAssertEqual(mock.callCount, 2)
+    }
+
+    func test_transcribe_wrapsNonSTTErrorAfterMaxRetries() async {
+        let urlError = URLError(.timedOut)
+        let mock = MockSTTProvider(results: [.failure(urlError), .failure(urlError), .failure(urlError)])
+        let provider = RetryingSTTProvider(provider: mock, maxRetries: 2, baseDelay: 0)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            if case .network(let msg) = error {
+                XCTAssertTrue(msg.contains("timed out") || msg.contains("URLError"), "Got: \(msg)")
+            } else {
+                XCTFail("Expected .network, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
         }
     }
 

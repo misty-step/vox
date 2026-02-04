@@ -22,7 +22,7 @@ public final class WhisperClient: STTProvider {
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
             do {
-                try AudioConverter.convertCAFToWAV(from: audioURL, to: t)
+                try await AudioConverter.convertCAFToWAV(from: audioURL, to: t)
             } catch {
                 throw STTError.invalidAudio
             }

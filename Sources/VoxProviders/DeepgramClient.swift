@@ -13,7 +13,7 @@ public final class DeepgramClient: STTProvider {
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.deepgram.com/v1/listen?model=nova-3")!
-        let payload = try prepareAudioFile(for: audioURL)
+        let payload = try await prepareAudioFile(for: audioURL)
         defer {
             if let tempURL = payload.tempURL {
                 try? FileManager.default.removeItem(at: tempURL)
@@ -43,14 +43,14 @@ public final class DeepgramClient: STTProvider {
         }
     }
 
-    private func prepareAudioFile(for url: URL) throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+    private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
         if url.pathExtension.lowercased() == "caf" {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
 
             do {
-                try AudioConverter.convertCAFToWAV(from: url, to: tempURL)
+                try await AudioConverter.convertCAFToWAV(from: url, to: tempURL)
             } catch {
                 throw STTError.invalidAudio
             }

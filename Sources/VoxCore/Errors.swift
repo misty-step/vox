@@ -12,13 +12,13 @@ public enum STTError: Error, Sendable, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .auth:
-            return "ElevenLabs authentication failed. Check your API key."
+            return "Authentication failed. Check your API key."
         case .quotaExceeded:
-            return "ElevenLabs quota exceeded."
+            return "API quota exceeded."
         case .throttled:
-            return "ElevenLabs rate limited. Try again shortly."
+            return "Rate limited. Try again shortly."
         case .sessionLimit:
-            return "ElevenLabs session limit reached."
+            return "Session limit reached."
         case .invalidAudio:
             return "Invalid audio format."
         case .network(let msg):

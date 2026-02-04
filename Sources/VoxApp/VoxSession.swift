@@ -96,10 +96,14 @@ public final class VoxSession: ObservableObject {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let recoveryDir = support.appendingPathComponent("Vox/recovery")
-        try? fm.createDirectory(at: recoveryDir, withIntermediateDirectories: true)
-        let dest = recoveryDir.appendingPathComponent(url.lastPathComponent)
-        try? fm.moveItem(at: url, to: dest)
-        print("[Vox] Audio preserved to \(dest.path)")
+        do {
+            try fm.createDirectory(at: recoveryDir, withIntermediateDirectories: true)
+            let dest = recoveryDir.appendingPathComponent(url.lastPathComponent)
+            try fm.moveItem(at: url, to: dest)
+            print("[Vox] Audio preserved to \(dest.path)")
+        } catch {
+            print("[Vox] Failed to preserve audio: \(error.localizedDescription)")
+        }
     }
 
     private func startRecording() async {

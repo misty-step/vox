@@ -31,6 +31,19 @@ public struct RetryingSTTProvider: STTProvider {
                 let currentAttempt = attempt  // Capture for Sendable closure
                 onRetry?(currentAttempt, maxRetries, delay)
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Non-STTError (URLError, NSError, etc.) — treat as retryable network issue
+                guard attempt < maxRetries else {
+                    throw STTError.network(error.localizedDescription)
+                }
+                attempt += 1
+                let jitter = Double.random(in: 0...baseDelay)
+                let delay = baseDelay * pow(2.0, Double(attempt - 1)) + jitter
+                let currentAttempt = attempt
+                onRetry?(currentAttempt, maxRetries, delay)
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
         }
     }
