@@ -32,14 +32,18 @@ public final class DictationPipeline {
         var output = transcript
         let level = prefs.processingLevel
         if level != .off {
-            let prompt = buildPrompt(level: level, transcript: transcript, customContext: prefs.customContext)
-            let candidate = try await rewriter.rewrite(
-                transcript: transcript,
-                systemPrompt: prompt,
-                model: level.defaultModel
-            )
-            let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-            output = decision.isAcceptable ? candidate : transcript
+            do {
+                let prompt = buildPrompt(level: level, transcript: transcript, customContext: prefs.customContext)
+                let candidate = try await rewriter.rewrite(
+                    transcript: transcript,
+                    systemPrompt: prompt,
+                    model: level.defaultModel
+                )
+                let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
+                output = decision.isAcceptable ? candidate : transcript
+            } catch {
+                print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
+            }
         }
 
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)

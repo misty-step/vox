@@ -24,7 +24,14 @@ final class FallbackSTTProviderTests: XCTestCase {
     }
 
     func test_transcribe_fallsBackOnSpecificErrors() async throws {
-        let fallbackErrors: [STTError] = [.throttled, .quotaExceeded, .auth]
+        let fallbackErrors: [STTError] = [
+            .throttled,
+            .quotaExceeded,
+            .auth,
+            .network("offline"),
+            .unknown("boom"),
+            .sessionLimit,
+        ]
 
         for error in fallbackErrors {
             let primary = MockSTTProvider(results: [.failure(error)])
@@ -47,9 +54,7 @@ final class FallbackSTTProviderTests: XCTestCase {
 
     func test_transcribe_noFallbackOnNonFallbackErrors() async {
         let errors: [STTError] = [
-            .network("offline"),
             .invalidAudio,
-            .unknown("boom"),
         ]
 
         for error in errors {

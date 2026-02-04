@@ -24,7 +24,7 @@ public struct RetryingSTTProvider: STTProvider {
             do {
                 return try await provider.transcribe(audioURL: audioURL)
             } catch let error as STTError {
-                guard error == .throttled, attempt < maxRetries else { throw error }
+                guard error.isRetryable, attempt < maxRetries else { throw error }
                 attempt += 1
                 let jitter = Double.random(in: 0...baseDelay)
                 let delay = baseDelay * pow(2.0, Double(attempt - 1)) + jitter

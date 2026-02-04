@@ -48,6 +48,25 @@ final class RetryingSTTProviderTests: XCTestCase {
         }
     }
 
+    func test_transcribe_retriesOnNetworkError() async throws {
+        let mock = MockSTTProvider(results: [.failure(STTError.network("timeout")), .success("ok")])
+        let recorder = RetryRecorder()
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 2,
+            baseDelay: 0,
+            onRetry: { attempt, maxRetries, delay in
+                recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
+            }
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "ok")
+        XCTAssertEqual(mock.callCount, 2)
+        XCTAssertEqual(recorder.events.count, 1)
+    }
+
     func test_transcribe_givesUpAfterMaxRetries() async {
         let mock = MockSTTProvider(results: [.failure(STTError.throttled), .failure(STTError.throttled)])
         let provider = RetryingSTTProvider(provider: mock, maxRetries: 1, baseDelay: 0)
@@ -64,8 +83,8 @@ final class RetryingSTTProviderTests: XCTestCase {
     func test_transcribe_noRetryOnNonThrottledErrors() async {
         let errors: [STTError] = [
             .auth,
-            .network("offline"),
             .invalidAudio,
+            .quotaExceeded,
         ]
 
         for error in errors {

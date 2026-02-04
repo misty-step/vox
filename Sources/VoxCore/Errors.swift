@@ -27,6 +27,24 @@ public enum STTError: Error, Sendable, Equatable, LocalizedError {
             return "STT error: \(msg)"
         }
     }
+
+    public var isRetryable: Bool {
+        switch self {
+        case .throttled, .network:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public var isFallbackEligible: Bool {
+        switch self {
+        case .invalidAudio:
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 public enum RewriteError: Error, Sendable, Equatable, LocalizedError {
