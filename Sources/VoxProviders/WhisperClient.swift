@@ -34,7 +34,14 @@ public final class WhisperClient: STTProvider {
 
         var form = MultipartFormData()
         let ext = tempURL != nil ? "wav" : audioURL.pathExtension.lowercased()
-        let mimeType = ext == "wav" ? "audio/wav" : "audio/x-caf"
+        let mimeType: String
+        switch ext {
+        case "wav": mimeType = "audio/wav"
+        case "mp3": mimeType = "audio/mpeg"
+        case "m4a", "mp4": mimeType = "audio/mp4"
+        case "webm": mimeType = "audio/webm"
+        default: mimeType = "application/octet-stream"
+        }
         form.addFile(name: "file", filename: "audio.\(ext)", mimeType: mimeType, data: audioData)
         form.addField(name: "model", value: "whisper-1")
 
@@ -53,6 +60,7 @@ public final class WhisperClient: STTProvider {
         case 200:
             let result = try JSONDecoder().decode(WhisperResponse.self, from: data)
             return result.text
+        case 400: throw STTError.invalidAudio
         case 401: throw STTError.auth
         case 429: throw STTError.throttled
         default:

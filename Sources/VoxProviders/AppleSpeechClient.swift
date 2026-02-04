@@ -6,6 +6,15 @@ public final class AppleSpeechClient: STTProvider {
     public init() {}
 
     public func transcribe(audioURL: URL) async throws -> String {
+        let status = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status)
+            }
+        }
+        guard status == .authorized else {
+            throw STTError.auth
+        }
+
         guard let recognizer = SFSpeechRecognizer(locale: Locale.current)
                 ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")) else {
             throw STTError.unknown("Speech recognition unavailable")

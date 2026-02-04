@@ -94,11 +94,16 @@ public final class VoxSession: ObservableObject {
 
     private func preserveAudio(at url: URL) {
         let fm = FileManager.default
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            print("[Vox] Failed to preserve audio: no application support directory")
+            return
+        }
         let recoveryDir = support.appendingPathComponent("Vox/recovery")
         do {
             try fm.createDirectory(at: recoveryDir, withIntermediateDirectories: true)
-            let dest = recoveryDir.appendingPathComponent(url.lastPathComponent)
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let dest = recoveryDir.appendingPathComponent("\(timestamp)_\(url.lastPathComponent)")
             try fm.moveItem(at: url, to: dest)
             print("[Vox] Audio preserved to \(dest.path)")
         } catch {

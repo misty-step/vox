@@ -40,6 +40,8 @@ public final class DictationPipeline {
                 )
                 let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                 output = decision.isAcceptable ? candidate : transcript
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
             }
