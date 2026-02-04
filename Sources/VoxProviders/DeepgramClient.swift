@@ -49,7 +49,11 @@ public final class DeepgramClient: STTProvider {
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
 
-            try convertCAFToWAV(from: url, to: tempURL)
+            do {
+                try AudioConverter.convertCAFToWAV(from: url, to: tempURL)
+            } catch {
+                throw STTError.invalidAudio
+            }
             return (tempURL, "audio/wav", tempURL)
         }
 
@@ -68,24 +72,6 @@ public final class DeepgramClient: STTProvider {
         return (url, mimeType, nil)
     }
 
-    private func convertCAFToWAV(from inputURL: URL, to outputURL: URL) throws {
-        // Use macOS built-in afconvert for reliable format conversion
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-        process.arguments = [
-            inputURL.path,
-            "-o", outputURL.path,
-            "-f", "WAVE",  // WAV format
-            "-d", "LEI16"  // Little-endian 16-bit integer
-        ]
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw STTError.invalidAudio
-        }
-    }
 }
 
 private struct DeepgramResponse: Decodable {

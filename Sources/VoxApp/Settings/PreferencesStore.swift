@@ -48,4 +48,14 @@ public final class PreferencesStore: ObservableObject {
         }
         set { KeychainHelper.save(newValue, for: .deepgramAPIKey); objectWillChange.send() }
     }
+
+    public var openAIAPIKey: String {
+        get {
+            if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"], !envKey.isEmpty {
+                return envKey
+            }
+            return KeychainHelper.load(.openAIAPIKey) ?? ""
+        }
+        set { KeychainHelper.save(newValue, for: .openAIAPIKey); objectWillChange.send() }
+    }
 }
