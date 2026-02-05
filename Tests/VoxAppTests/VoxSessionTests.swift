@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import VoxCore
-@testable import VoxAppKit
+import VoxAppKit
 
 // MARK: - Mocks
 
@@ -68,6 +68,7 @@ final class MockHUD: HUDDisplaying {
     }
 }
 
+@MainActor
 final class MockPipeline: DictationProcessing {
     var processCallCount = 0
     var lastAudioURL: URL?

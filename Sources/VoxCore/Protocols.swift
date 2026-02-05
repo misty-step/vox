@@ -36,7 +36,8 @@ extension HUDDisplaying {
     public func showProcessing() { showProcessing(message: "Transcribing") }
 }
 
-/// Dictation processing abstraction
-public protocol DictationProcessing {
+/// Dictation processing abstraction.
+/// Implementations must be safe for repeated calls across recording sessions.
+public protocol DictationProcessing: Sendable {
     func process(audioURL: URL) async throws -> String
 }

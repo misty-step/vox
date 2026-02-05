@@ -42,7 +42,7 @@ public final class HUDController: HUDDisplaying {
         state.peak = peak
     }
 
-    public func showProcessing(message: String = "Transcribing") {
+    public func showProcessing(message: String) {
         state.startProcessing(message: message)
         show()
     }
