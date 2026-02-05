@@ -27,36 +27,68 @@ public final class VoxSession: ObservableObject {
 
     public init() {}
 
-    /// Creates pipeline with current API keys from preferences (trimmed)
     private func makePipeline() -> DictationPipeline {
-        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return DictationPipeline(
-            stt: makeSTTProvider(elevenKey: elevenKey),
+            stt: makeSTTProvider(),
             rewriter: OpenRouterClient(apiKey: openRouterKey),
             paster: ClipboardPaster(),
             prefs: prefs
         )
     }
 
-    private func makeSTTProvider(elevenKey: String) -> STTProvider {
-        let elevenLabs = ElevenLabsClient(apiKey: elevenKey)
-        let retrying = RetryingSTTProvider(provider: elevenLabs) { [weak self] attempt, maxRetries, delay in
-            let delayStr = String(format: "%.1fs", delay)
-            Task { @MainActor in
-                self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
+    private func makeSTTProvider() -> STTProvider {
+        // Build chain bottom-up: last fallback first
+        var chain: STTProvider = AppleSpeechClient()
+
+        // Optional: Whisper (OpenAI)
+        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !openAIKey.isEmpty {
+            let whisper = WhisperClient(apiKey: openAIKey)
+            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Whisper") { [weak self] in
+                Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
             }
         }
 
+        // Optional: Deepgram
         let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !deepgramKey.isEmpty else { return retrying }
-
-        let deepgram = DeepgramClient(apiKey: deepgramKey)
-        return FallbackSTTProvider(primary: retrying, fallback: deepgram) { [weak self] in
-            Task { @MainActor in
-                self?.hud.showProcessing(message: "Switching to Deepgram")
+        if !deepgramKey.isEmpty {
+            let deepgram = DeepgramClient(apiKey: deepgramKey)
+            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Deepgram") { [weak self] in
+                let next = openAIKey.isEmpty ? "Apple Speech" : "Whisper"
+                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
             }
         }
+
+        // Optional: ElevenLabs (primary if configured)
+        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !elevenKey.isEmpty {
+            let eleven = ElevenLabsClient(apiKey: elevenKey)
+            let timed = TimeoutSTTProvider(provider: eleven, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs") { [weak self] attempt, maxRetries, delay in
+                let delayStr = String(format: "%.1fs", delay)
+                Task { @MainActor in
+                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
+                }
+            }
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "ElevenLabs") { [weak self] in
+                let next: String
+                if !deepgramKey.isEmpty {
+                    next = "Deepgram"
+                } else if !openAIKey.isEmpty {
+                    next = "Whisper"
+                } else {
+                    next = "Apple Speech"
+                }
+                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
+            }
+        }
+
+        return chain
     }
 
     public func toggleRecording() async {
@@ -67,11 +99,39 @@ public final class VoxSession: ObservableObject {
         }
     }
 
+    /// Moves the recorded audio to a recovery directory. Returns the destination path on success.
+    @discardableResult
+    private func preserveAudio(at url: URL) -> URL? {
+        let fm = FileManager.default
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            print("[Vox] Failed to preserve audio: no application support directory")
+            return nil
+        }
+        let recoveryDir = support.appendingPathComponent("Vox/recovery")
+        do {
+            try fm.createDirectory(at: recoveryDir, withIntermediateDirectories: true)
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let dest = recoveryDir.appendingPathComponent("\(timestamp)_\(url.lastPathComponent)")
+            try fm.moveItem(at: url, to: dest)
+            print("[Vox] Audio preserved to \(dest.path)")
+            return dest
+        } catch {
+            print("[Vox] Failed to preserve audio: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func startRecording() async {
         let granted = await PermissionManager.requestMicrophoneAccess()
         guard granted else {
             presentError("Microphone permission is required.")
             return
+        }
+
+        if let uid = prefs.selectedInputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
+            AudioDeviceManager.setDefaultInputDevice(deviceID)
         }
 
         do {
@@ -101,27 +161,23 @@ public final class VoxSession: ObservableObject {
             return
         }
 
+        var succeeded = false
         do {
-            // Validate required API keys before processing
-            let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !elevenKey.isEmpty else {
-                throw VoxError.provider("ElevenLabs API key is missing.")
-            }
-
-            if prefs.processingLevel != .off {
-                let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !openRouterKey.isEmpty else {
-                    throw VoxError.provider("OpenRouter API key is missing.")
-                }
-            }
-
             let pipeline = makePipeline()
             _ = try await pipeline.process(audioURL: url)
+            succeeded = true
         } catch {
-            presentError(error.localizedDescription)
+            print("[Vox] Processing failed: \(error.localizedDescription)")
+            if let saved = preserveAudio(at: url) {
+                presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
+            } else {
+                presentError(error.localizedDescription)
+            }
         }
 
-        try? FileManager.default.removeItem(at: url)
+        if succeeded {
+            try? FileManager.default.removeItem(at: url)
+        }
         state = .idle
         hud.hide()
     }

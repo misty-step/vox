@@ -12,6 +12,11 @@ public struct APIKeysTab: View {
                     .textContentType(.password)
                 SecureField("Deepgram API Key (optional fallback)", text: binding(for: \.deepgramAPIKey))
                     .textContentType(.password)
+                SecureField("OpenAI API Key (optional Whisper)", text: binding(for: \.openAIAPIKey))
+                    .textContentType(.password)
+                Text("Apple Speech (on-device) is always available as final fallback")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Link("Deepgram Console", destination: URL(string: "https://console.deepgram.com/")!)
             }
 

@@ -4,5 +4,7 @@
 <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>Vox needs microphone access to capture dictation.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Vox uses speech recognition as a fallback when cloud transcription is unavailable.</string>
 </dict>
 </plist>

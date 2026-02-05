@@ -24,7 +24,14 @@ final class FallbackSTTProviderTests: XCTestCase {
     }
 
     func test_transcribe_fallsBackOnSpecificErrors() async throws {
-        let fallbackErrors: [STTError] = [.throttled, .quotaExceeded, .auth]
+        let fallbackErrors: [STTError] = [
+            .throttled,
+            .quotaExceeded,
+            .auth,
+            .network("offline"),
+            .unknown("boom"),
+            .sessionLimit,
+        ]
 
         for error in fallbackErrors {
             let primary = MockSTTProvider(results: [.failure(error)])
@@ -47,9 +54,7 @@ final class FallbackSTTProviderTests: XCTestCase {
 
     func test_transcribe_noFallbackOnNonFallbackErrors() async {
         let errors: [STTError] = [
-            .network("offline"),
             .invalidAudio,
-            .unknown("boom"),
         ]
 
         for error in errors {
@@ -71,6 +76,38 @@ final class FallbackSTTProviderTests: XCTestCase {
             XCTAssertEqual(primary.callCount, 1)
             XCTAssertEqual(fallback.callCount, 0)
             XCTAssertEqual(counter.count, 0)
+        }
+    }
+
+    func test_transcribe_fallsBackOnNonSTTError() async throws {
+        let urlError = URLError(.notConnectedToInternet)
+        let primary = MockSTTProvider(results: [.failure(urlError)])
+        let fallback = MockSTTProvider(results: [.success("fallback")])
+        let counter = CallbackCounter()
+        let provider = FallbackSTTProvider(
+            primary: primary,
+            fallback: fallback,
+            onFallback: { counter.increment() }
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "fallback")
+        XCTAssertEqual(counter.count, 1)
+    }
+
+    func test_transcribe_bothFailPropagatesError() async {
+        let primary = MockSTTProvider(results: [.failure(STTError.network("down"))])
+        let fallback = MockSTTProvider(results: [.failure(STTError.unknown("also down"))])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            XCTAssertEqual(error, .unknown("also down"))
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
         }
     }
 

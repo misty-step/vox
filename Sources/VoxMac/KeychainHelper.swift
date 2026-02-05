@@ -8,6 +8,7 @@ public enum KeychainHelper {
         case elevenLabsAPIKey = "com.vox.elevenlabs.apikey"
         case openRouterAPIKey = "com.vox.openrouter.apikey"
         case deepgramAPIKey = "com.vox.deepgram.apikey"
+        case openAIAPIKey = "com.vox.openai.apikey"
     }
 
     public static func save(_ value: String, for key: Key) -> Bool {

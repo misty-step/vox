@@ -10,17 +10,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // Clean up recovery audio older than 24 hours
+        cleanupOldRecoveryFiles()
+
         let prefs = PreferencesStore.shared
         let hasElevenLabs = !prefs.elevenLabsAPIKey.isEmpty
         let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
-        print("[Vox] ElevenLabs API key: \(hasElevenLabs ? "✓" : "✗ MISSING")")
-        print("[Vox] OpenRouter API key: \(hasOpenRouter ? "✓" : "✗ MISSING")")
+        let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
+        let hasOpenAI = !prefs.openAIAPIKey.isEmpty
+        print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Whisper \(hasOpenAI ? "✓" : "–") | Apple Speech ✓")
+        print("[Vox] Rewrite: OpenRouter \(hasOpenRouter ? "✓" : "–")")
         print("[Vox] Processing level: \(prefs.processingLevel.rawValue)")
-        print("[Vox] Model: \(prefs.processingLevel.defaultModel)")
-
-        if !hasElevenLabs || !hasOpenRouter {
-            print("[Vox] Tip: Set ELEVENLABS_API_KEY and OPENROUTER_API_KEY env vars, or use Settings to configure.")
-        }
 
         PermissionManager.promptForAccessibilityIfNeeded()
 
@@ -63,6 +63,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSettings() {
         settingsWindowController?.showWindow(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func cleanupOldRecoveryFiles() {
+        let fm = FileManager.default
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        let recoveryDir = support.appendingPathComponent("Vox/recovery")
+        guard let files = try? fm.contentsOfDirectory(at: recoveryDir, includingPropertiesForKeys: [.creationDateKey]) else { return }
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        for file in files {
+            guard let attrs = try? file.resourceValues(forKeys: [.creationDateKey]),
+                  let created = attrs.creationDate,
+                  created < cutoff else { continue }
+            try? fm.removeItem(at: file)
+            print("[Vox] Cleaned up old recovery file: \(file.lastPathComponent)")
+        }
     }
 
     private func presentHotkeyError(_ error: Error) {

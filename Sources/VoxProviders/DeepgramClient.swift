@@ -13,12 +13,16 @@ public final class DeepgramClient: STTProvider {
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.deepgram.com/v1/listen?model=nova-3")!
-        let payload = try prepareAudioFile(for: audioURL)
+        let payload = try await prepareAudioFile(for: audioURL)
         defer {
             if let tempURL = payload.tempURL {
                 try? FileManager.default.removeItem(at: tempURL)
             }
         }
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: payload.fileURL.path)[.size] as? Int) ?? 0
+        let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
+        print("[Deepgram] Transcribing \(sizeMB)MB audio (\(payload.mimeType))")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -34,22 +38,39 @@ public final class DeepgramClient: STTProvider {
         case 200:
             let result = try JSONDecoder().decode(DeepgramResponse.self, from: data)
             return result.results.channels.first?.alternatives.first?.transcript ?? ""
-        case 400: throw STTError.invalidAudio
-        case 401: throw STTError.auth
-        case 402, 403: throw STTError.quotaExceeded
-        case 429: throw STTError.throttled
+        case 400:
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Deepgram] Invalid audio (HTTP 400) — \(excerpt)")
+            throw STTError.invalidAudio
+        case 401:
+            print("[Deepgram] Auth failed (HTTP 401)")
+            throw STTError.auth
+        case 402, 403:
+            print("[Deepgram] Quota exceeded (HTTP \(httpResponse.statusCode))")
+            throw STTError.quotaExceeded
+        case 429:
+            print("[Deepgram] Rate limited (HTTP 429)")
+            throw STTError.throttled
         default:
-            throw STTError.unknown("HTTP \(httpResponse.statusCode)")
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Deepgram] Failed: HTTP \(httpResponse.statusCode) — \(excerpt)")
+            throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
 
-    private func prepareAudioFile(for url: URL) throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+    private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
         if url.pathExtension.lowercased() == "caf" {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
 
-            try convertCAFToWAV(from: url, to: tempURL)
+            do {
+                try await AudioConverter.convertCAFToWAV(from: url, to: tempURL)
+            } catch {
+                throw STTError.invalidAudio
+            }
             return (tempURL, "audio/wav", tempURL)
         }
 
@@ -68,24 +89,6 @@ public final class DeepgramClient: STTProvider {
         return (url, mimeType, nil)
     }
 
-    private func convertCAFToWAV(from inputURL: URL, to outputURL: URL) throws {
-        // Use macOS built-in afconvert for reliable format conversion
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-        process.arguments = [
-            inputURL.path,
-            "-o", outputURL.path,
-            "-f", "WAVE",  // WAV format
-            "-d", "LEI16"  // Little-endian 16-bit integer
-        ]
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw STTError.invalidAudio
-        }
-    }
 }
 
 private struct DeepgramResponse: Decodable {
