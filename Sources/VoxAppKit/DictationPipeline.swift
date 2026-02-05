@@ -1,5 +1,5 @@
 import Foundation
-import VoxCore
+@preconcurrency import VoxCore
 import VoxMac
 import VoxProviders
 
