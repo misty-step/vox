@@ -23,4 +23,27 @@ final class STTErrorTests: XCTestCase {
 
         XCTAssertFalse(STTError.invalidAudio.isFallbackEligible)
     }
+
+    // MARK: - Error Description Tests
+
+    func test_errorDescription() {
+        XCTAssertEqual(STTError.auth.errorDescription, "Authentication failed. Check your API key.")
+        XCTAssertEqual(STTError.quotaExceeded.errorDescription, "API quota exceeded.")
+        XCTAssertEqual(STTError.throttled.errorDescription, "Rate limited. Try again shortly.")
+        XCTAssertEqual(STTError.sessionLimit.errorDescription, "Session limit reached.")
+        XCTAssertEqual(STTError.invalidAudio.errorDescription, "Invalid audio format.")
+        XCTAssertEqual(STTError.network("timeout").errorDescription, "Network error: timeout")
+        XCTAssertEqual(STTError.unknown("something").errorDescription, "STT error: something")
+    }
+
+    // MARK: - Equatable Tests
+
+    func test_equatable() {
+        XCTAssertEqual(STTError.auth, STTError.auth)
+        XCTAssertEqual(STTError.throttled, STTError.throttled)
+        XCTAssertEqual(STTError.network("timeout"), STTError.network("timeout"))
+
+        XCTAssertNotEqual(STTError.auth, STTError.throttled)
+        XCTAssertNotEqual(STTError.network("timeout"), STTError.network("offline"))
+    }
 }
