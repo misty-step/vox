@@ -92,7 +92,7 @@ Note: this changes the system-wide default. See [issue #136](https://github.com/
 `VoxCore/Protocols.swift` defines core contracts:
 - `STTProvider`: async transcription from audio URL
 - `RewriteProvider`: async rewrite with prompt + model
-- `TextPaster`: main-actor text insertion
+- `TextPaster`: async main-actor text insertion
 
 App wires concrete providers in `DictationPipeline`. Swap implementations without touching flow logic.
 

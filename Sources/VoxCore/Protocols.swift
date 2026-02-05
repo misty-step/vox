@@ -12,7 +12,7 @@ public protocol RewriteProvider: Sendable {
 
 /// Text pasting abstraction (already exists as ClipboardPaster, extract protocol)
 public protocol TextPaster: Sendable {
-    @MainActor func paste(text: String) throws
+    @MainActor func paste(text: String) async throws
 }
 
 /// Audio recording abstraction
