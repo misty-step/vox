@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "[pre-push] Building with warnings-as-errors..."
+if ! swift build -Xswiftc -warnings-as-errors 2>&1; then
+    echo ""
+    echo "[pre-push] FAILED: Fix compiler warnings before pushing."
+    exit 1
+fi
+echo "[pre-push] OK"
