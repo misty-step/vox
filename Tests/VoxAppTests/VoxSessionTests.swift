@@ -85,6 +85,17 @@ final class MockPipeline: DictationProcessing {
     }
 }
 
+@MainActor
+final class MockPreferencesStore: PreferencesReading {
+    var processingLevel: ProcessingLevel = .light
+    var customContext: String = ""
+    var selectedInputDeviceUID: String? = nil
+    var elevenLabsAPIKey: String = ""
+    var openRouterAPIKey: String = ""
+    var deepgramAPIKey: String = ""
+    var openAIAPIKey: String = ""
+}
+
 // MARK: - Tests
 
 @Suite("VoxSession DI")
@@ -127,10 +138,34 @@ struct VoxSessionDITests {
         let recorder = MockRecorder()
         let hud = MockHUD()
         let pipeline = MockPipeline()
+        let prefs = MockPreferencesStore()
         let session = VoxSession(
             recorder: recorder,
             pipeline: pipeline,
-            hud: hud
+            hud: hud,
+            prefs: prefs
+        )
+        #expect(session.state == .idle)
+    }
+
+    @Test("Injected preferences are used")
+    @MainActor func injectedPreferences() {
+        let prefs = MockPreferencesStore()
+        let session = VoxSession(prefs: prefs)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Full injection with all dependencies including prefs")
+    @MainActor func fullInjectionWithPrefs() {
+        let recorder = MockRecorder()
+        let hud = MockHUD()
+        let pipeline = MockPipeline()
+        let prefs = MockPreferencesStore()
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: hud,
+            prefs: prefs
         )
         #expect(session.state == .idle)
     }
