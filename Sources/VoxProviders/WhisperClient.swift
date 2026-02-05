@@ -13,54 +13,34 @@ public final class WhisperClient: STTProvider {
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
 
-        let audioData: Data
-        var tempURL: URL?
+        // Prepare audio file (convert CAF to WAV if needed)
+        let (fileURL, mimeType, tempURL) = try await prepareAudioFile(for: audioURL)
         defer { if let t = tempURL { SecureFileDeleter.delete(at: t) } }
 
-        if audioURL.pathExtension.lowercased() == "caf" {
-            let t = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension("wav")
-            tempURL = t
-            do {
-                try await AudioConverter.convertCAFToWAV(from: audioURL, to: t)
-            } catch {
-                throw STTError.invalidAudio
-            }
-            audioData = try Data(contentsOf: t)
-        } else {
-            audioData = try Data(contentsOf: audioURL)
-        }
-
-        let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576)
-        print("[Whisper] Transcribing \(sizeMB)MB audio")
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? 0
+        let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
+        print("[Whisper] Transcribing \(sizeMB)MB audio (streaming)")
 
         // OpenAI Whisper API has a 25MB file size limit
-        if audioData.count > 25_000_000 {
+        if fileSize > 25_000_000 {
             print("[Whisper] File size \(sizeMB)MB exceeds 25MB limit — skipping")
             throw STTError.unknown("File size \(sizeMB)MB exceeds Whisper 25MB limit")
         }
 
-        var form = MultipartFormData()
-        let ext = tempURL != nil ? "wav" : audioURL.pathExtension.lowercased()
-        let mimeType: String
-        switch ext {
-        case "wav": mimeType = "audio/wav"
-        case "mp3": mimeType = "audio/mpeg"
-        case "m4a", "mp4": mimeType = "audio/mp4"
-        case "webm": mimeType = "audio/webm"
-        default: mimeType = "application/octet-stream"
-        }
-        form.addFile(name: "file", filename: "audio.\(ext)", mimeType: mimeType, data: audioData)
-        form.addField(name: "model", value: "whisper-1")
+        // Build multipart form data as a temporary file for streaming upload
+        let (multipartURL, multipartSize) = try await buildMultipartFile(
+            audioURL: fileURL,
+            mimeType: mimeType
+        )
+        defer { try? FileManager.default.removeItem(at: multipartURL) }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(form.boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = form.finalize()
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.upload(for: request, fromFile: multipartURL)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
         }
@@ -87,6 +67,85 @@ public final class WhisperClient: STTProvider {
             throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
+
+    private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+        if url.pathExtension.lowercased() == "caf" {
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("wav")
+
+            do {
+                try await AudioConverter.convertCAFToWAV(from: url, to: tempURL)
+            } catch {
+                throw STTError.invalidAudio
+            }
+            return (tempURL, "audio/wav", tempURL)
+        }
+
+        let mimeType: String
+        switch url.pathExtension.lowercased() {
+        case "wav":
+            mimeType = "audio/wav"
+        case "mp3":
+            mimeType = "audio/mpeg"
+        case "m4a", "mp4":
+            mimeType = "audio/mp4"
+        case "webm":
+            mimeType = "audio/webm"
+        default:
+            mimeType = "application/octet-stream"
+        }
+
+        return (url, mimeType, nil)
+    }
+
+    /// Writes multipart form data to a temporary file and returns (fileURL, totalSize).
+    private func buildMultipartFile(audioURL: URL, mimeType: String) async throws -> (URL, Int) {
+        let tempDir = FileManager.default.temporaryDirectory
+        let multipartURL = tempDir.appendingPathComponent("vox-whisper-\(UUID().uuidString).tmp")
+
+        let filename = "audio.\(audioURL.pathExtension)"
+        let audioFileHandle = try FileHandle(forReadingFrom: audioURL)
+        defer { audioFileHandle.closeFile() }
+
+        // Build multipart body parts
+        let preamble = """
+            --\(boundary)\r\n\
+            Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n\
+            Content-Type: \(mimeType)\r\n\r\n
+            """.data(using: .utf8)!
+
+        let postamble = """
+
+            --\(boundary)\r\n\
+            Content-Disposition: form-data; name=\"model\"\r\n\r\n\
+            whisper-1\r\n\
+            --\(boundary)--\r\n
+            """.data(using: .utf8)!
+
+        // Write preamble + audio file + postamble to temp file
+        FileManager.default.createFile(atPath: multipartURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: multipartURL)
+
+        handle.write(preamble)
+
+        // Stream audio file in chunks to avoid loading into memory
+        let chunkSize = 64 * 1024  // 64KB chunks
+        while let chunk = audioFileHandle.readData(ofLength: chunkSize), !chunk.isEmpty {
+            handle.write(chunk)
+        }
+
+        handle.write(postamble)
+        try handle.close()
+
+        // Get total size
+        let attributes = try FileManager.default.attributesOfItem(atPath: multipartURL.path)
+        let totalSize = attributes[.size] as? Int ?? 0
+
+        return (multipartURL, totalSize)
+    }
 }
 
 private struct WhisperResponse: Decodable { let text: String }
+
+private let boundary = "vox.boundary.\(UUID().uuidString)"
