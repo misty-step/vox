@@ -21,12 +21,12 @@ public final class WhisperClient: STTProvider {
             let t = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("wav")
+            tempURL = t
             do {
                 try await AudioConverter.convertCAFToWAV(from: audioURL, to: t)
             } catch {
                 throw STTError.invalidAudio
             }
-            tempURL = t
             audioData = try Data(contentsOf: t)
         } else {
             audioData = try Data(contentsOf: audioURL)

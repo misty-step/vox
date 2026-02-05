@@ -25,21 +25,21 @@ final class SecureFileDeleterTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
 
-    func testDeleteOverwritesBeforeRemoving() {
-        let file = tempDir.appendingPathComponent("test.caf")
-        let original = Data("sensitive audio data".utf8)
-        FileManager.default.createFile(atPath: file.path, contents: original)
-
-        // We can't easily verify overwrite after deletion.
-        // Instead verify the file is gone (overwrite + delete is atomic from caller perspective).
-        SecureFileDeleter.delete(at: file)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-    }
-
     func testDeleteNonexistentFileDoesNotCrash() {
         let file = tempDir.appendingPathComponent("does-not-exist.caf")
         // Should not throw or crash
         SecureFileDeleter.delete(at: file)
+    }
+
+    func testDeleteAlreadyDeletedFileDoesNotCrash() {
+        let file = tempDir.appendingPathComponent("deleted-twice.caf")
+        FileManager.default.createFile(atPath: file.path, contents: Data("audio".utf8))
+
+        SecureFileDeleter.delete(at: file)
+        // Second delete should not crash (file already gone)
+        SecureFileDeleter.delete(at: file)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }
 
     func testDeleteEmptyFile() {
