@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import VoxCore
 import VoxMac
 
 @MainActor
@@ -75,7 +76,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let attrs = try? file.resourceValues(forKeys: [.creationDateKey]),
                   let created = attrs.creationDate,
                   created < cutoff else { continue }
-            try? fm.removeItem(at: file)
+            SecureFileDeleter.delete(at: file)
             print("[Vox] Cleaned up old recovery file: \(file.lastPathComponent)")
         }
     }
