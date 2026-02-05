@@ -3,7 +3,7 @@ import VoxCore
 import VoxMac
 import VoxProviders
 
-public final class DictationPipeline {
+public final class DictationPipeline: DictationProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster

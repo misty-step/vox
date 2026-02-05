@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import VoxCore
 
-public final class AudioRecorder {
+public final class AudioRecorder: AudioRecording {
     private var recorder: AVAudioRecorder?
     private var currentURL: URL?
 

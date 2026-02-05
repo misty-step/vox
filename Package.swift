@@ -11,9 +11,13 @@ let package = Package(
         .target(name: "VoxCore"),
         .target(name: "VoxProviders", dependencies: ["VoxCore"]),
         .target(name: "VoxMac", dependencies: ["VoxCore"]),
+        .target(
+            name: "VoxAppKit",
+            dependencies: ["VoxCore", "VoxProviders", "VoxMac"]
+        ),
         .executableTarget(
             name: "VoxApp",
-            dependencies: ["VoxCore", "VoxProviders", "VoxMac"]
+            dependencies: ["VoxAppKit"]
         ),
         .testTarget(
             name: "VoxProvidersTests",
@@ -22,6 +26,10 @@ let package = Package(
         .testTarget(
             name: "VoxCoreTests",
             dependencies: ["VoxCore"]
+        ),
+        .testTarget(
+            name: "VoxAppTests",
+            dependencies: ["VoxAppKit", "VoxCore"]
         ),
     ]
 )

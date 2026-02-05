@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
+import VoxCore
 
-public final class HUDController {
+public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
 
