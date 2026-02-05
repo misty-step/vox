@@ -20,6 +20,10 @@ public final class DeepgramClient: STTProvider {
             }
         }
 
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: payload.fileURL.path)[.size] as? Int) ?? 0
+        let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
+        print("[Deepgram] Transcribing \(sizeMB)MB audio (\(payload.mimeType))")
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -34,12 +38,25 @@ public final class DeepgramClient: STTProvider {
         case 200:
             let result = try JSONDecoder().decode(DeepgramResponse.self, from: data)
             return result.results.channels.first?.alternatives.first?.transcript ?? ""
-        case 400: throw STTError.invalidAudio
-        case 401: throw STTError.auth
-        case 402, 403: throw STTError.quotaExceeded
-        case 429: throw STTError.throttled
+        case 400:
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Deepgram] Invalid audio (HTTP 400) — \(excerpt)")
+            throw STTError.invalidAudio
+        case 401:
+            print("[Deepgram] Auth failed (HTTP 401)")
+            throw STTError.auth
+        case 402, 403:
+            print("[Deepgram] Quota exceeded (HTTP \(httpResponse.statusCode))")
+            throw STTError.quotaExceeded
+        case 429:
+            print("[Deepgram] Rate limited (HTTP 429)")
+            throw STTError.throttled
         default:
-            throw STTError.unknown("HTTP \(httpResponse.statusCode)")
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Deepgram] Failed: HTTP \(httpResponse.statusCode) — \(excerpt)")
+            throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
 

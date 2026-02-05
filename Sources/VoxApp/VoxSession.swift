@@ -46,8 +46,8 @@ public final class VoxSession: ObservableObject {
         if !openAIKey.isEmpty {
             let whisper = WhisperClient(apiKey: openAIKey)
             let timed = TimeoutSTTProvider(provider: whisper, timeout: 20)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5)
-            chain = FallbackSTTProvider(primary: retried, fallback: chain) { [weak self] in
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Whisper") { [weak self] in
                 Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
             }
         }
@@ -57,8 +57,8 @@ public final class VoxSession: ObservableObject {
         if !deepgramKey.isEmpty {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
             let timed = TimeoutSTTProvider(provider: deepgram, timeout: 20)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5)
-            chain = FallbackSTTProvider(primary: retried, fallback: chain) { [weak self] in
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Deepgram") { [weak self] in
                 let next = openAIKey.isEmpty ? "Apple Speech" : "Whisper"
                 Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
             }
@@ -69,14 +69,21 @@ public final class VoxSession: ObservableObject {
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
             let timed = TimeoutSTTProvider(provider: eleven, timeout: 15)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 3, baseDelay: 0.5) { [weak self] attempt, maxRetries, delay in
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs") { [weak self] attempt, maxRetries, delay in
                 let delayStr = String(format: "%.1fs", delay)
                 Task { @MainActor in
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            chain = FallbackSTTProvider(primary: retried, fallback: chain) { [weak self] in
-                let next = deepgramKey.isEmpty ? (openAIKey.isEmpty ? "Apple Speech" : "Whisper") : "Deepgram"
+            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "ElevenLabs") { [weak self] in
+                let next: String
+                if !deepgramKey.isEmpty {
+                    next = "Deepgram"
+                } else if !openAIKey.isEmpty {
+                    next = "Whisper"
+                } else {
+                    next = "Apple Speech"
+                }
                 Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
             }
         }
@@ -118,6 +125,11 @@ public final class VoxSession: ObservableObject {
             return
         }
 
+        if let uid = prefs.selectedInputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
+            AudioDeviceManager.setDefaultInputDevice(deviceID)
+        }
+
         do {
             try recorder.start()
             state = .recording
@@ -151,6 +163,7 @@ public final class VoxSession: ObservableObject {
             _ = try await pipeline.process(audioURL: url)
             succeeded = true
         } catch {
+            print("[Vox] Processing failed: \(error.localizedDescription)")
             presentError(error.localizedDescription)
         }
 

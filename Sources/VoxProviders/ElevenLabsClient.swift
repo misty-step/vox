@@ -15,6 +15,8 @@ public final class ElevenLabsClient: STTProvider {
 
         var form = MultipartFormData()
         let audioData = try Data(contentsOf: audioURL)
+        let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576)
+        print("[ElevenLabs] Transcribing \(sizeMB)MB audio")
         form.addFile(name: "file", filename: "audio.caf", mimeType: "audio/x-caf", data: audioData)
         form.addField(name: "model_id", value: "scribe_v2")
 
@@ -33,10 +35,17 @@ public final class ElevenLabsClient: STTProvider {
         case 200:
             let result = try JSONDecoder().decode(ElevenLabsResponse.self, from: data)
             return result.text
-        case 401: throw STTError.auth
-        case 429: throw STTError.throttled
+        case 401:
+            print("[ElevenLabs] Auth failed (HTTP 401)")
+            throw STTError.auth
+        case 429:
+            print("[ElevenLabs] Rate limited (HTTP 429)")
+            throw STTError.throttled
         default:
-            throw STTError.unknown("HTTP \(httpResponse.statusCode)")
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[ElevenLabs] Failed: HTTP \(httpResponse.statusCode) — \(excerpt)")
+            throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
 }

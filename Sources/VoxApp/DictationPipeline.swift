@@ -23,7 +23,13 @@ public final class DictationPipeline {
 
     public func process(audioURL: URL) async throws -> String {
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
-        let rawTranscript = try await stt.transcribe(audioURL: audioURL)
+        let rawTranscript: String
+        do {
+            rawTranscript = try await stt.transcribe(audioURL: audioURL)
+        } catch {
+            print("[Pipeline] STT failed: \(error.localizedDescription)")
+            throw error
+        }
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Pipeline] STT complete (\(transcript.count) chars)")
         guard !transcript.isEmpty else { throw VoxError.noTranscript }

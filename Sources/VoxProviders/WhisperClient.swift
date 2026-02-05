@@ -32,6 +32,9 @@ public final class WhisperClient: STTProvider {
             audioData = try Data(contentsOf: audioURL)
         }
 
+        let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576)
+        print("[Whisper] Transcribing \(sizeMB)MB audio")
+
         var form = MultipartFormData()
         let ext = tempURL != nil ? "wav" : audioURL.pathExtension.lowercased()
         let mimeType: String
@@ -60,11 +63,22 @@ public final class WhisperClient: STTProvider {
         case 200:
             let result = try JSONDecoder().decode(WhisperResponse.self, from: data)
             return result.text
-        case 400: throw STTError.invalidAudio
-        case 401: throw STTError.auth
-        case 429: throw STTError.throttled
+        case 400:
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Whisper] Invalid audio (HTTP 400) — \(excerpt)")
+            throw STTError.invalidAudio
+        case 401:
+            print("[Whisper] Auth failed (HTTP 401)")
+            throw STTError.auth
+        case 429:
+            print("[Whisper] Rate limited (HTTP 429)")
+            throw STTError.throttled
         default:
-            throw STTError.unknown("HTTP \(httpResponse.statusCode)")
+            let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+            let excerpt = String(body.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            print("[Whisper] Failed: HTTP \(httpResponse.statusCode) — \(excerpt)")
+            throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
 }
