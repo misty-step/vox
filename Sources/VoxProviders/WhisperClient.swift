@@ -35,6 +35,12 @@ public final class WhisperClient: STTProvider {
         let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576)
         print("[Whisper] Transcribing \(sizeMB)MB audio")
 
+        // OpenAI Whisper API has a 25MB file size limit
+        if audioData.count > 25_000_000 {
+            print("[Whisper] File size \(sizeMB)MB exceeds 25MB limit — skipping")
+            throw STTError.unknown("File size \(sizeMB)MB exceeds Whisper 25MB limit")
+        }
+
         var form = MultipartFormData()
         let ext = tempURL != nil ? "wav" : audioURL.pathExtension.lowercased()
         let mimeType: String

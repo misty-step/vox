@@ -2,15 +2,28 @@ import Foundation
 
 public struct TimeoutSTTProvider: STTProvider {
     private let provider: STTProvider
-    private let duration: TimeInterval
+    private let computeTimeout: @Sendable (URL) -> TimeInterval
 
+    /// Fixed timeout — use for tests or when file size doesn't matter.
     public init(provider: STTProvider, timeout duration: TimeInterval) {
         self.provider = provider
-        self.duration = duration
+        self.computeTimeout = { _ in duration }
+    }
+
+    /// Dynamic timeout that scales with file size.
+    /// Timeout = max(baseTimeout, baseTimeout + fileSizeMB * secondsPerMB)
+    public init(provider: STTProvider, baseTimeout: TimeInterval, secondsPerMB: TimeInterval) {
+        self.provider = provider
+        self.computeTimeout = { url in
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            let sizeMB = Double(fileSize) / 1_048_576
+            return max(baseTimeout, baseTimeout + sizeMB * secondsPerMB)
+        }
     }
 
     public func transcribe(audioURL: URL) async throws -> String {
-        try await withThrowingTaskGroup(of: String.self) { group in
+        let duration = computeTimeout(audioURL)
+        return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
                 try await provider.transcribe(audioURL: audioURL)
             }
