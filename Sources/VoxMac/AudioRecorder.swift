@@ -1,38 +1,8 @@
 import AVFoundation
-import CoreAudio
 import Foundation
 import VoxCore
 
 public final class AudioRecorder {
-    public static func currentInputDeviceName() -> String? {
-        var deviceID = AudioDeviceID()
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID
-        )
-        guard status == noErr, deviceID != kAudioDeviceUnknown else { return nil }
-
-        var nameAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceNameCFString,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var nameSize = UInt32(MemoryLayout<CFString>.size)
-        var nameRef: Unmanaged<CFString>?
-
-        let nameStatus = withUnsafeMutablePointer(to: &nameRef) { ptr in
-            AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, ptr)
-        }
-        guard nameStatus == noErr, let unmanagedName = nameRef else { return nil }
-        return unmanagedName.takeUnretainedValue() as String
-    }
-
     private var recorder: AVAudioRecorder?
     private var currentURL: URL?
 

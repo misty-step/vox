@@ -14,9 +14,20 @@ public final class PreferencesStore: ObservableObject {
         didSet { defaults.set(customContext, forKey: "customContext") }
     }
 
+    @Published public var selectedInputDeviceUID: String? {
+        didSet {
+            if let uid = selectedInputDeviceUID {
+                defaults.set(uid, forKey: "selectedInputDeviceUID")
+            } else {
+                defaults.removeObject(forKey: "selectedInputDeviceUID")
+            }
+        }
+    }
+
     private init() {
         processingLevel = ProcessingLevel(rawValue: defaults.string(forKey: "processingLevel") ?? "light") ?? .light
         customContext = defaults.string(forKey: "customContext") ?? ""
+        selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
     }
 
     public var elevenLabsAPIKey: String {
