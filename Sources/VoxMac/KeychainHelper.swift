@@ -11,6 +11,7 @@ public enum KeychainHelper {
         case openAIAPIKey = "com.vox.openai.apikey"
     }
 
+    @discardableResult
     public static func save(_ value: String, for key: Key) -> Bool {
         delete(key)
         let data = value.data(using: .utf8)!
