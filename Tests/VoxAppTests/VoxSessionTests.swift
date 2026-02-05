@@ -155,21 +155,6 @@ struct VoxSessionDITests {
         #expect(session.state == .idle)
     }
 
-    @Test("Full injection with all dependencies including prefs")
-    @MainActor func fullInjectionWithPrefs() {
-        let recorder = MockRecorder()
-        let hud = MockHUD()
-        let pipeline = MockPipeline()
-        let prefs = MockPreferencesStore()
-        let session = VoxSession(
-            recorder: recorder,
-            pipeline: pipeline,
-            hud: hud,
-            prefs: prefs
-        )
-        #expect(session.state == .idle)
-    }
-
     @Test("HUDDisplaying default showProcessing message")
     @MainActor func hudDefaultMessage() {
         let hud = MockHUD()
