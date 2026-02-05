@@ -6,27 +6,33 @@ public enum PermissionManager {
     private static var micRequestInFlight = false
     private static let lock = NSLock()
 
+    private static func claimMicRequest() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if micRequestInFlight { return false }
+        micRequestInFlight = true
+        return true
+    }
+
+    private static func releaseMicRequest() {
+        lock.lock()
+        micRequestInFlight = false
+        lock.unlock()
+    }
+
     public static func requestMicrophoneAccess() async -> Bool {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         if status == .authorized { return true }
         if status == .denied || status == .restricted { return false }
 
-        lock.lock()
-        if micRequestInFlight {
-            lock.unlock()
+        if !claimMicRequest() {
             while AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
                 try? await Task.sleep(for: .milliseconds(100))
             }
             return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         }
-        micRequestInFlight = true
-        lock.unlock()
 
-        defer {
-            lock.lock()
-            micRequestInFlight = false
-            lock.unlock()
-        }
+        defer { releaseMicRequest() }
 
         return await withCheckedContinuation { continuation in
             AVCaptureDevice.requestAccess(for: .audio) { granted in

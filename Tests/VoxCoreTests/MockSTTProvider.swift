@@ -15,17 +15,19 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
         self.results = results
     }
 
-    func transcribe(audioURL: URL) async throws -> String {
+    private func nextResult() -> Result<String, Error>? {
         lock.lock()
+        defer { lock.unlock() }
         let index = _callCount
         _callCount += 1
-        guard index < results.count else {
-            lock.unlock()
+        guard index < results.count else { return nil }
+        return results[index]
+    }
+
+    func transcribe(audioURL: URL) async throws -> String {
+        guard let result = nextResult() else {
             throw STTError.unknown("No more mock results")
         }
-        let result = results[index]
-        lock.unlock()
-
         switch result {
         case .success(let text):
             return text

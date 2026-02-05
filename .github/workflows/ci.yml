@@ -20,11 +20,11 @@ jobs:
       - name: Show Swift version
         run: swift --version
 
-      - name: Build
-        run: swift build
+      - name: Build (warnings as errors)
+        run: swift build -Xswiftc -warnings-as-errors
 
       - name: Run tests
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors
         env:
           # Skip integration tests requiring API keys
           DEEPGRAM_API_KEY: ""
