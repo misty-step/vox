@@ -177,6 +177,9 @@ public final class VoxSession: ObservableObject {
             let active = pipeline ?? makePipeline()
             _ = try await active.process(audioURL: url)
             succeeded = true
+        } catch is CancellationError {
+            print("[Vox] Processing cancelled")
+            SecureFileDeleter.delete(at: url)
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             if let saved = preserveAudio(at: url) {
@@ -187,7 +190,7 @@ public final class VoxSession: ObservableObject {
         }
 
         if succeeded {
-            try? FileManager.default.removeItem(at: url)
+            SecureFileDeleter.delete(at: url)
         }
         state = .idle
         hud.hide()

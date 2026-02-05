@@ -16,7 +16,7 @@ public final class DeepgramClient: STTProvider {
         let payload = try await prepareAudioFile(for: audioURL)
         defer {
             if let tempURL = payload.tempURL {
-                try? FileManager.default.removeItem(at: tempURL)
+                SecureFileDeleter.delete(at: tempURL)
             }
         }
 

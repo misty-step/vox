@@ -15,7 +15,7 @@ public final class WhisperClient: STTProvider {
 
         let audioData: Data
         var tempURL: URL?
-        defer { if let t = tempURL { try? FileManager.default.removeItem(at: t) } }
+        defer { if let t = tempURL { SecureFileDeleter.delete(at: t) } }
 
         if audioURL.pathExtension.lowercased() == "caf" {
             let t = FileManager.default.temporaryDirectory
