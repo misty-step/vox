@@ -85,7 +85,8 @@ final class MockPipeline: DictationProcessing {
     }
 }
 
-final class MockPreferencesStore: PreferencesReading, Sendable {
+@MainActor
+final class MockPreferencesStore: PreferencesReading {
     let processingLevel: ProcessingLevel = .light
     let customContext: String = ""
     let selectedInputDeviceUID: String? = nil

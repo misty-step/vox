@@ -43,6 +43,7 @@ public protocol DictationProcessing: Sendable {
 }
 
 /// Read-only preferences abstraction for dependency injection.
+@MainActor
 public protocol PreferencesReading: AnyObject, Sendable {
     var processingLevel: ProcessingLevel { get }
     var customContext: String { get }
