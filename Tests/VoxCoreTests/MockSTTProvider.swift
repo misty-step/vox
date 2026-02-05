@@ -17,15 +17,11 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
 
     private func nextResult() -> Result<String, Error>? {
         lock.lock()
+        defer { lock.unlock() }
         let index = _callCount
         _callCount += 1
-        guard index < results.count else {
-            lock.unlock()
-            return nil
-        }
-        let result = results[index]
-        lock.unlock()
-        return result
+        guard index < results.count else { return nil }
+        return results[index]
     }
 
     func transcribe(audioURL: URL) async throws -> String {

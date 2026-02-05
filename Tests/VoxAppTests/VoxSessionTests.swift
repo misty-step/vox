@@ -85,14 +85,14 @@ final class MockPipeline: DictationProcessing {
     }
 }
 
-final class MockPreferencesStore: PreferencesReading, @unchecked Sendable {
-    var processingLevel: ProcessingLevel = .light
-    var customContext: String = ""
-    var selectedInputDeviceUID: String? = nil
-    var elevenLabsAPIKey: String = ""
-    var openRouterAPIKey: String = ""
-    var deepgramAPIKey: String = ""
-    var openAIAPIKey: String = ""
+final class MockPreferencesStore: PreferencesReading, Sendable {
+    let processingLevel: ProcessingLevel = .light
+    let customContext: String = ""
+    let selectedInputDeviceUID: String? = nil
+    let elevenLabsAPIKey: String = ""
+    let openRouterAPIKey: String = ""
+    let deepgramAPIKey: String = ""
+    let openAIAPIKey: String = ""
 }
 
 // MARK: - Tests
