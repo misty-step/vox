@@ -99,11 +99,13 @@ public final class VoxSession: ObservableObject {
         }
     }
 
-    private func preserveAudio(at url: URL) {
+    /// Moves the recorded audio to a recovery directory. Returns the destination path on success.
+    @discardableResult
+    private func preserveAudio(at url: URL) -> URL? {
         let fm = FileManager.default
         guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             print("[Vox] Failed to preserve audio: no application support directory")
-            return
+            return nil
         }
         let recoveryDir = support.appendingPathComponent("Vox/recovery")
         do {
@@ -113,8 +115,10 @@ public final class VoxSession: ObservableObject {
             let dest = recoveryDir.appendingPathComponent("\(timestamp)_\(url.lastPathComponent)")
             try fm.moveItem(at: url, to: dest)
             print("[Vox] Audio preserved to \(dest.path)")
+            return dest
         } catch {
             print("[Vox] Failed to preserve audio: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -164,13 +168,15 @@ public final class VoxSession: ObservableObject {
             succeeded = true
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
-            presentError(error.localizedDescription)
+            if let saved = preserveAudio(at: url) {
+                presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
+            } else {
+                presentError(error.localizedDescription)
+            }
         }
 
         if succeeded {
             try? FileManager.default.removeItem(at: url)
-        } else {
-            preserveAudio(at: url)
         }
         state = .idle
         hud.hide()
