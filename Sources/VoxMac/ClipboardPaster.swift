@@ -33,13 +33,18 @@ public final class ClipboardPaster: TextPaster {
         let pasteboard = NSPasteboard.general
         let snapshot = snapshotPasteboard(pasteboard)
         pasteboard.clearContents()
+        #if DEBUG
         let success = pasteboard.setString(text, forType: .string)
-        print("[Paster] Clipboard set success: \(success)")
-        print("[Paster] Clipboard now contains: \(pasteboard.string(forType: .string) ?? "nil")")
+        print("[Paster] Clipboard set: \(success)")
+        #else
+        pasteboard.setString(text, forType: .string)
+        #endif
 
         guard let delay else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            #if DEBUG
             print("[Paster] Restoring clipboard after \(delay)s")
+            #endif
             self.restorePasteboard(pasteboard, snapshot: snapshot)
         }
     }
@@ -66,14 +71,14 @@ public final class ClipboardPaster: TextPaster {
     }
 
     private func sendPasteKeystroke() {
-        // Log frontmost app
+        #if DEBUG
         if let frontmost = NSWorkspace.shared.frontmostApplication {
             print("[Paster] Frontmost app: \(frontmost.localizedName ?? "unknown") (bundle: \(frontmost.bundleIdentifier ?? "none"))")
         } else {
             print("[Paster] WARNING: No frontmost application!")
         }
+        #endif
 
-        print("[Paster] Attempting AppleScript Cmd+V...")
         let script = NSAppleScript(source: """
             tell application "System Events"
                 keystroke "v" using command down
@@ -86,7 +91,9 @@ public final class ClipboardPaster: TextPaster {
                 print("[Paster] AppleScript paste failed: \(error)")
                 sendCGEventPaste()
             } else {
+                #if DEBUG
                 print("[Paster] AppleScript paste succeeded")
+                #endif
             }
         } else {
             print("[Paster] AppleScript init failed, falling back to CGEvent")
@@ -95,18 +102,16 @@ public final class ClipboardPaster: TextPaster {
     }
 
     private func sendCGEventPaste() {
-        print("[Paster] Sending CGEvent Cmd+V keystroke...")
         let source = CGEventSource(stateID: .combinedSessionState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true)
         keyDown?.flags = .maskCommand
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
         keyUp?.flags = .maskCommand
 
-        print("[Paster] keyDown event: \(keyDown != nil ? "created" : "FAILED")")
-        print("[Paster] keyUp event: \(keyUp != nil ? "created" : "FAILED")")
-
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
-        print("[Paster] Keystroke posted to .cghidEventTap")
+        #if DEBUG
+        print("[Paster] CGEvent Cmd+V posted")
+        #endif
     }
 }
