@@ -83,6 +83,7 @@ public enum VoxError: Error, Sendable, Equatable, LocalizedError {
     case insertionFailed
     case provider(String)
     case internalError(String)
+    case pipelineTimeout(stage: PipelineStage)
 
     public var errorDescription: String? {
         switch self {
@@ -98,6 +99,22 @@ public enum VoxError: Error, Sendable, Equatable, LocalizedError {
             return msg
         case .internalError(let msg):
             return msg
+        case .pipelineTimeout(let stage):
+            return "\(stage.displayName) timed out. Try again or check your connection."
+        }
+    }
+}
+
+public enum PipelineStage: Sendable, Equatable {
+    case stt
+    case rewrite
+    case fullPipeline
+
+    var displayName: String {
+        switch self {
+        case .stt: return "Transcription"
+        case .rewrite: return "Text processing"
+        case .fullPipeline: return "Processing"
         }
     }
 }
