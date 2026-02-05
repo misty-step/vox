@@ -11,7 +11,9 @@ SuperWhisper alternative that's simpler and smarter.
 ## Features
 
 - **Press Option+Space** to start/stop recording
+- **Resilient STT chain**: ElevenLabs → Deepgram → Whisper → Apple Speech (on-device fallback)
 - **Three processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite)
+- **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
 - **BYOK** (Bring Your Own Keys) for complete control over costs
@@ -41,9 +43,11 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 
 - macOS 14 (Sonoma) or later
 - Swift 5.9+
-- [ElevenLabs API key](https://elevenlabs.io) for transcription
+- [ElevenLabs API key](https://elevenlabs.io) for primary transcription
 - [OpenRouter API key](https://openrouter.ai) for AI rewriting
 - [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription
+- [OpenAI API key](https://platform.openai.com) (optional) for Whisper fallback transcription
+- Apple Speech is always available as a final on-device fallback (no key needed)
 
 ### Installation
 
@@ -72,6 +76,7 @@ API keys can be provided two ways:
 export ELEVENLABS_API_KEY=your-key
 export OPENROUTER_API_KEY=your-key
 export DEEPGRAM_API_KEY=your-key  # optional fallback
+export OPENAI_API_KEY=your-key    # optional Whisper fallback
 ```
 
 **Settings window** (persisted in Keychain):
@@ -100,10 +105,10 @@ swift run Vox
 
 ```
 Sources/
-  VoxCore/       # Protocols, errors, shared types
-  VoxProviders/  # ElevenLabs STT, OpenRouter rewriting
-  VoxMac/        # macOS-specific: Keychain, HUD, hotkeys, permissions
-  VoxApp/        # Main executable, UI, pipeline orchestration
+  VoxCore/       # Protocols, errors, decorators (retry/fallback/timeout)
+  VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
+  VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
+  VoxApp/        # Main executable, UI, pipeline orchestration, settings
 ```
 
 ### Supported Models

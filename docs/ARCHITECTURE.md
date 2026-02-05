@@ -8,38 +8,76 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
                          VoxApp (top)
  ┌─────────────────────────────────────────────────────────────────────┐
  │ AppDelegate • VoxSession • DictationPipeline • StatusBarController   │
- │ SettingsWindowController • PreferencesStore                          │
+ │ SettingsWindowController • PreferencesStore • ProcessingTab          │
  └─────────────────────────────────────────────────────────────────────┘
                 ▲                         ▲
                 │                         │
-      VoxMac (OS integration)      VoxProviders (network)
+      VoxMac (OS integration)      VoxProviders (network + on-device)
  ┌──────────────────────────┐     ┌───────────────────────────────┐
  │ AudioRecorder            │     │ ElevenLabsClient (STT)         │
- │ HotkeyMonitor            │     │ OpenRouterClient (rewrite)     │
- │ HUDController            │     │ RewritePrompts                 │
- │ ClipboardPaster          │     └───────────────────────────────┘
- │ KeychainHelper           │
- │ PermissionManager        │
- └──────────────────────────┘
+ │ AudioDeviceManager       │     │ DeepgramClient (STT)           │
+ │ HotkeyMonitor            │     │ WhisperClient (STT)            │
+ │ HUDController / HUDView  │     │ AppleSpeechClient (STT)        │
+ │ ClipboardPaster          │     │ AudioConverter (CAF→WAV)       │
+ │ KeychainHelper           │     │ OpenRouterClient (rewrite)     │
+ │ PermissionManager        │     │ RewritePrompts                 │
+ └──────────────────────────┘     └───────────────────────────────┘
                 ▲                         ▲
                 └──────────────┬──────────┘
                                │
                         VoxCore (foundation)
  ┌─────────────────────────────────────────────────────────────────────┐
  │ Protocols: STTProvider • RewriteProvider • TextPaster                │
+ │ Decorators: TimeoutSTTProvider • RetryingSTTProvider                 │
+ │             FallbackSTTProvider                                      │
  │ ProcessingLevel • RewriteQualityGate • Errors • MultipartFormData    │
  └─────────────────────────────────────────────────────────────────────┘
 ```
 
+## STT Resilience Chain
+
+Providers are wrapped in decorators and composed bottom-up:
+
+```
+ElevenLabs ─► Timeout(15s) ─► Retry(3x) ─┐
+                                           ├─► Fallback
+Deepgram ──► Timeout(20s) ─► Retry(2x) ──┤    ├─► Fallback
+                                           │    │    ├─► Fallback
+Whisper ───► Timeout(20s) ─► Retry(2x) ───┘    │    │
+                                                 │    │
+Apple Speech (on-device, no timeout) ────────────┘    │
+                                                      │
+                                              Final result
+```
+
+Each decorator is a `STTProvider` wrapping another `STTProvider`:
+- **TimeoutSTTProvider**: races transcription against a deadline
+- **RetryingSTTProvider**: retries on `.isRetryable` errors with exponential backoff + jitter
+- **FallbackSTTProvider**: catches `.isFallbackEligible` errors and tries the next provider
+
+Error classification is centralized in `STTError.isRetryable` and `STTError.isFallbackEligible`.
+
 ## Data Flow (Dictation Pipeline)
 
-1) User presses Option+Space  
-2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`  
-3) `AudioRecorder` captures CAF audio  
-4) `ElevenLabsClient` transcribes  
-5) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)  
-6) `RewriteQualityGate` validates output length ratio  
-7) Result → `ClipboardPaster` → text insertion
+1) User presses Option+Space
+2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
+3) If a specific input device is selected, `AudioDeviceManager.setDefaultInputDevice()` applies it
+4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio
+5) STT chain transcribes (ElevenLabs → Deepgram → Whisper → Apple Speech)
+6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
+7) `RewriteQualityGate` validates output length ratio
+8) Result → `ClipboardPaster` → text insertion
+
+## Input Device Selection
+
+`AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and manages the system default input. Uses stable `kAudioDevicePropertyDeviceUID` for persistence across reboots rather than volatile `AudioDeviceID`.
+
+Behavior:
+- **System Default** (nil): Vox records from whatever macOS has selected
+- **Specific device**: set as system default before recording starts
+- **Device unplugged**: silently falls back to current system default
+
+Note: this changes the system-wide default. See [issue #136](https://github.com/misty-step/vox/issues/136) for future per-app AVAudioEngine approach.
 
 ## State Machine
 
@@ -60,7 +98,7 @@ App wires concrete providers in `DictationPipeline`. Swap implementations withou
 
 ## Extension Points for Vox Pro
 
-From `vision.md`: “Vox is the engine; future Vox Pro wrapper adds auth/billing/sync.”  
+From `vision.md`: "Vox is the engine; future Vox Pro wrapper adds auth/billing/sync."
 Design supports composition, not fork.
 
 Injection points:
@@ -91,11 +129,15 @@ public final class MeteredRewriteProvider: RewriteProvider {
 ## API Configuration
 
 BYOK. `PreferencesStore` reads env first, then Keychain:
-- `ELEVENLABS_API_KEY`
-- `OPENROUTER_API_KEY`
+- `ELEVENLABS_API_KEY` — primary STT (ElevenLabs Scribe v2)
+- `OPENROUTER_API_KEY` — rewriting
+- `DEEPGRAM_API_KEY` — fallback STT (Deepgram Nova-3)
+- `OPENAI_API_KEY` — fallback STT (Whisper)
 
 Endpoints:
 - ElevenLabs STT: `https://api.elevenlabs.io/v1/speech-to-text`
+- Deepgram STT: `https://api.deepgram.com/v1/listen?model=nova-3`
+- OpenAI Whisper: `https://api.openai.com/v1/audio/transcriptions`
 - OpenRouter chat: `https://openrouter.ai/api/v1/chat/completions`
 
 Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
@@ -104,12 +146,17 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 
 | Area | Role | Files |
 | --- | --- | --- |
-| App entry | App lifecycle, hotkey, status bar | `Sources/VoxApp/AppDelegate.swift`, `Sources/VoxApp/StatusBarController.swift` |
-| Session + pipeline | State machine, dictation flow | `Sources/VoxApp/VoxSession.swift`, `Sources/VoxApp/DictationPipeline.swift` |
-| Settings | Preferences + UI | `Sources/VoxApp/Settings/PreferencesStore.swift`, `Sources/VoxApp/SettingsWindowController.swift`, `Sources/VoxApp/Settings/SettingsView.swift` |
-| Providers | STT + rewrite | `Sources/VoxProviders/ElevenLabsClient.swift`, `Sources/VoxProviders/OpenRouterClient.swift`, `Sources/VoxProviders/RewritePrompts.swift` |
-| macOS integration | Audio, hotkey, HUD, paste, permissions | `Sources/VoxMac/AudioRecorder.swift`, `Sources/VoxMac/HotkeyMonitor.swift`, `Sources/VoxMac/HUDController.swift`, `Sources/VoxMac/ClipboardPaster.swift`, `Sources/VoxMac/PermissionManager.swift`, `Sources/VoxMac/KeychainHelper.swift` |
-| Core | Protocols + shared types | `Sources/VoxCore/Protocols.swift`, `Sources/VoxCore/ProcessingLevel.swift`, `Sources/VoxCore/RewriteQualityGate.swift`, `Sources/VoxCore/Errors.swift`, `Sources/VoxCore/MultipartFormData.swift` |
+| App entry | App lifecycle, hotkey, status bar | `AppDelegate.swift`, `StatusBarController.swift`, `main.swift` |
+| Session + pipeline | State machine, dictation flow | `VoxSession.swift`, `DictationPipeline.swift` |
+| Settings | Preferences + UI | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
+| STT providers | Speech-to-text clients | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
+| STT decorators | Resilience layer | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `FallbackSTTProvider.swift` |
+| Rewrite provider | AI rewriting | `OpenRouterClient.swift`, `RewritePrompts.swift` |
+| Audio | Recording, conversion, device management | `AudioRecorder.swift`, `AudioConverter.swift`, `AudioDeviceManager.swift` |
+| macOS integration | Hotkey, HUD, paste, permissions, keychain | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
+| Core | Protocols + shared types | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift` |
+
+All paths under `Sources/{VoxApp,VoxCore,VoxMac,VoxProviders}/`.
 
 ## Quality Gate
 
@@ -129,4 +176,14 @@ If below min, pipeline falls back to raw transcript.
 ## macOS Permissions
 
 - Microphone: requested by `PermissionManager.requestMicrophoneAccess()` before recording
+- Speech Recognition: checked by `SFSpeechRecognizer.authorizationStatus()` before Apple Speech fallback; guarded against TCC crash for unbundled binaries
 - Accessibility: required for paste; checked by `PermissionManager.isAccessibilityTrusted()` and prompted via `promptForAccessibilityIfNeeded()`
+
+## Logging Convention
+
+All modules log with bracket-prefixed tags to stdout:
+- `[ElevenLabs]`, `[Deepgram]`, `[Whisper]`, `[AppleSpeech]` — provider-level request/response
+- `[STT]` — decorator-level retries, fallback transitions
+- `[Pipeline]` — processing stages
+- `[Vox]` — session-level events
+- `[Paster]` — clipboard and paste operations
