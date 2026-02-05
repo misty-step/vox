@@ -41,3 +41,14 @@ extension HUDDisplaying {
 public protocol DictationProcessing: Sendable {
     func process(audioURL: URL) async throws -> String
 }
+
+/// Read-only preferences abstraction for dependency injection.
+public protocol PreferencesReading: AnyObject {
+    var processingLevel: ProcessingLevel { get }
+    var customContext: String { get }
+    var selectedInputDeviceUID: String? { get }
+    var elevenLabsAPIKey: String { get }
+    var openRouterAPIKey: String { get }
+    var deepgramAPIKey: String { get }
+    var openAIAPIKey: String { get }
+}

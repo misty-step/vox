@@ -21,7 +21,7 @@ public final class VoxSession: ObservableObject {
     }
 
     private let recorder: AudioRecording
-    private let prefs: PreferencesStore
+    private let prefs: PreferencesReading
     private let hud: HUDDisplaying
     private let pipeline: DictationProcessing?
     private var levelTimer: Timer?
@@ -30,12 +30,12 @@ public final class VoxSession: ObservableObject {
         recorder: AudioRecording? = nil,
         pipeline: DictationProcessing? = nil,
         hud: HUDDisplaying? = nil,
-        prefs: PreferencesStore = .shared
+        prefs: PreferencesReading? = nil
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
         self.hud = hud ?? HUDController()
-        self.prefs = prefs
+        self.prefs = prefs ?? PreferencesStore.shared
     }
 
     private func makePipeline() -> DictationProcessing {

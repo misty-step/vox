@@ -7,18 +7,18 @@ public final class DictationPipeline: DictationProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
-    private let prefs: PreferencesStore
+    private let prefs: PreferencesReading
 
     public init(
         stt: STTProvider,
         rewriter: RewriteProvider,
         paster: TextPaster,
-        prefs: PreferencesStore = .shared
+        prefs: PreferencesReading? = nil
     ) {
         self.stt = stt
         self.rewriter = rewriter
         self.paster = paster
-        self.prefs = prefs
+        self.prefs = prefs ?? PreferencesStore.shared
     }
 
     public func process(audioURL: URL) async throws -> String {
