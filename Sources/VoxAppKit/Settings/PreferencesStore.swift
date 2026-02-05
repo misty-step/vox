@@ -2,7 +2,7 @@ import Foundation
 import VoxCore
 import VoxMac
 
-public final class PreferencesStore: ObservableObject, PreferencesReading {
+public final class PreferencesStore: ObservableObject, PreferencesReading, @unchecked Sendable {
     public static let shared = PreferencesStore()
     private let defaults = UserDefaults.standard
 
