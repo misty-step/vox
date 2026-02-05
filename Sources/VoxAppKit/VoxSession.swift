@@ -20,14 +20,25 @@ public final class VoxSession: ObservableObject {
         }
     }
 
-    private let recorder = AudioRecorder()
-    private let prefs = PreferencesStore.shared
-    private let hud = HUDController()
+    private let recorder: AudioRecording
+    private let prefs: PreferencesStore
+    private let hud: HUDDisplaying
+    private let pipeline: DictationProcessing?
     private var levelTimer: Timer?
 
-    public init() {}
+    public init(
+        recorder: AudioRecording? = nil,
+        pipeline: DictationProcessing? = nil,
+        hud: HUDDisplaying? = nil,
+        prefs: PreferencesStore = .shared
+    ) {
+        self.recorder = recorder ?? AudioRecorder()
+        self.pipeline = pipeline
+        self.hud = hud ?? HUDController()
+        self.prefs = prefs
+    }
 
-    private func makePipeline() -> DictationPipeline {
+    private func makePipeline() -> DictationProcessing {
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return DictationPipeline(
             stt: makeSTTProvider(),
@@ -163,8 +174,8 @@ public final class VoxSession: ObservableObject {
 
         var succeeded = false
         do {
-            let pipeline = makePipeline()
-            _ = try await pipeline.process(audioURL: url)
+            let active = pipeline ?? makePipeline()
+            _ = try await active.process(audioURL: url)
             succeeded = true
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")

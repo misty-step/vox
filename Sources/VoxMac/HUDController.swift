@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
+import VoxCore
 
-public final class HUDController {
+public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
 
@@ -41,7 +42,7 @@ public final class HUDController {
         state.peak = peak
     }
 
-    public func showProcessing(message: String = "Transcribing") {
+    public func showProcessing(message: String) {
         state.startProcessing(message: message)
         show()
     }
