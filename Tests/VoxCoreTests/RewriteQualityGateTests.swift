@@ -105,4 +105,138 @@ final class RewriteQualityGateTests: XCTestCase {
         XCTAssertEqual(decision, sameDecision)
         XCTAssertNotEqual(decision, differentDecision)
     }
+
+    // MARK: - Edge Cases
+
+    func test_evaluate_bothEmpty_returnsNotAcceptable() {
+        let decision = RewriteQualityGate.evaluate(raw: "", candidate: "", level: .light)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_singleCharacterRaw_expansionWithinBounds() {
+        let decision = RewriteQualityGate.evaluate(raw: "a", candidate: "This is expanded", level: .enhance)
+
+        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 16.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_singleCharacterRaw_expansionExceedsBounds() {
+        let decision = RewriteQualityGate.evaluate(raw: "a", candidate: String(repeating: "x", count: 20), level: .enhance)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 20.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_exactlyAtMinimumRatio_isAcceptable() {
+        let raw = "hello world"  // 11 chars
+        let candidate = "hello"   // 5 chars, ratio = 5/11 ≈ 0.45
+
+        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .aggressive)
+        XCTAssertTrue(aggressiveDecision.isAcceptable)
+        XCTAssertEqual(aggressiveDecision.ratio, 5.0/11.0, accuracy: 0.0001)
+
+        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+        XCTAssertFalse(lightDecision.isAcceptable)
+    }
+
+    func test_evaluate_justBelowMinimumRatio_isNotAcceptable() {
+        let raw = "hello world test"  // 16 chars
+        let candidate = "hello"        // 5 chars, ratio = 5/16 = 0.3125
+
+        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .aggressive)
+        XCTAssertTrue(aggressiveDecision.isAcceptable)  // Just above 0.3
+
+        let candidate2 = "hello wor"  // 9 chars, ratio = 9/16 = 0.5625
+        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate2, level: .light)
+        XCTAssertFalse(lightDecision.isAcceptable)  // Below 0.6
+    }
+
+    func test_evaluate_veryLongRaw_veryShortCandidate() {
+        let raw = String(repeating: "a", count: 1000)
+        let candidate = "ok"
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .enhance)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 0.002, accuracy: 0.0001)
+    }
+
+    func test_evaluate_whitespaceOnlyRaw_treatedAsEmpty() {
+        let decision = RewriteQualityGate.evaluate(raw: "   \n\t  ", candidate: "result", level: .light)
+
+        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 1.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_whitespaceOnlyCandidate_treatedAsEmpty() {
+        let decision = RewriteQualityGate.evaluate(raw: "raw text", candidate: "   \n\t  ", level: .light)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_unicodeCharacters_countedCorrectly() {
+        let raw = "こんにちは"  // 5 Japanese characters
+        let candidate = "hello"   // 5 English characters
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 1.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_emojiCharacters_countedCorrectly() {
+        let raw = "hello 👋 world"  // 13 characters (including emoji)
+        let candidate = "hello world"  // 11 characters
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertEqual(decision.ratio, 11.0/13.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_offLevel_alwaysAcceptable() {
+        let testCases = [
+            ("", ""),
+            ("raw", ""),
+            ("", "candidate"),
+            ("short", String(repeating: "x", count: 1000)),
+        ]
+
+        for (raw, candidate) in testCases {
+            let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .off)
+            XCTAssertTrue(decision.isAcceptable, "Failed for raw='\(raw)', candidate='\(candidate)'")
+            XCTAssertEqual(decision.minimumRatio, 0, accuracy: 0.0001)
+            XCTAssertNil(decision.maximumRatio)
+        }
+    }
+
+    func test_evaluate_enhanceLevel_noMaximumForOtherLevels() {
+        let raw = "test"
+        let candidate = String(repeating: "x", count: 1000)
+
+        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+        XCTAssertNil(lightDecision.maximumRatio)
+
+        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .aggressive)
+        XCTAssertNil(aggressiveDecision.maximumRatio)
+
+        let offDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .off)
+        XCTAssertNil(offDecision.maximumRatio)
+    }
+
+    func test_evaluate_decisionPropertiesAreConsistent() {
+        let raw = "hello world this is a test"
+        let candidate = "hello world"
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertEqual(decision.minimumRatio, 0.6, accuracy: 0.0001)
+        XCTAssertNil(decision.maximumRatio)
+        XCTAssertEqual(decision.ratio, 11.0/26.0, accuracy: 0.0001)
+        // 11/26 ≈ 0.42, which is below 0.6, so not acceptable
+        XCTAssertFalse(decision.isAcceptable)
+    }
 }
