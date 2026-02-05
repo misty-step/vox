@@ -37,7 +37,7 @@ public final class PreferencesStore: ObservableObject {
             }
             return KeychainHelper.load(.elevenLabsAPIKey) ?? ""
         }
-        set { KeychainHelper.save(newValue, for: .elevenLabsAPIKey); objectWillChange.send() }
+        set { _ = KeychainHelper.save(newValue, for: .elevenLabsAPIKey); objectWillChange.send() }
     }
 
     public var openRouterAPIKey: String {
@@ -47,7 +47,7 @@ public final class PreferencesStore: ObservableObject {
             }
             return KeychainHelper.load(.openRouterAPIKey) ?? ""
         }
-        set { KeychainHelper.save(newValue, for: .openRouterAPIKey); objectWillChange.send() }
+        set { _ = KeychainHelper.save(newValue, for: .openRouterAPIKey); objectWillChange.send() }
     }
 
     public var deepgramAPIKey: String {
@@ -57,7 +57,7 @@ public final class PreferencesStore: ObservableObject {
             }
             return KeychainHelper.load(.deepgramAPIKey) ?? ""
         }
-        set { KeychainHelper.save(newValue, for: .deepgramAPIKey); objectWillChange.send() }
+        set { _ = KeychainHelper.save(newValue, for: .deepgramAPIKey); objectWillChange.send() }
     }
 
     public var openAIAPIKey: String {
@@ -67,6 +67,6 @@ public final class PreferencesStore: ObservableObject {
             }
             return KeychainHelper.load(.openAIAPIKey) ?? ""
         }
-        set { KeychainHelper.save(newValue, for: .openAIAPIKey); objectWillChange.send() }
+        set { _ = KeychainHelper.save(newValue, for: .openAIAPIKey); objectWillChange.send() }
     }
 }
