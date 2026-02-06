@@ -10,7 +10,7 @@ Vox competes with SuperWhisper and similar voice-to-text tools that have accumul
 
 Every setting is a question the user must answer. Every option is a decision the user didn't want to make. Feature creep is the existential threat to this product.
 
-An audit of the current codebase (Feb 2025) found the configuration surface is already minimal:
+An audit of the current codebase (Feb 2026) found the configuration surface is already minimal:
 
 - **4 API keys** (credentials, not preferences)
 - **1 microphone picker** (defaults to system device)
@@ -24,13 +24,11 @@ All new features and changes must pass a simplicity gate before merging:
 
 ### The Gate
 
-1. **Does this add a user-visible setting?** If yes, it must justify why a sensible default isn't possible. The burden of proof is on the setting, not the default.
+1. **Does this add a user-visible setting?** If yes, it must justify why a sensible default isn't possible. The burden of proof is on the setting, not the default. Adding a toggle, dropdown, or text field requires explicit justification in the PR description.
 
 2. **Would this confuse a non-technical user?** If the feature requires explanation beyond a single sentence, it's too complex.
 
 3. **Can this be automatic?** STT provider selection is automatic (cascading fallback). Processing level models are automatic (baked into the enum). This pattern should extend to all new capabilities.
-
-4. **Does this increase the settings surface?** Adding a toggle, dropdown, or text field to settings requires explicit justification in the PR description.
 
 ### Concrete Rules
 
