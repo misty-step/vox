@@ -13,20 +13,31 @@ public final class ElevenLabsClient: STTProvider {
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!
 
-        var form = MultipartFormData()
-        let audioData = try Data(contentsOf: audioURL)
-        let sizeMB = String(format: "%.1f", Double(audioData.count) / 1_048_576)
-        print("[ElevenLabs] Transcribing \(sizeMB)MB audio")
-        form.addFile(name: "file", filename: "audio.caf", mimeType: "audio/x-caf", data: audioData)
-        form.addField(name: "model_id", value: "scribe_v2")
+        let fileExt = audioURL.pathExtension.lowercased()
+        let mimeType = mimeTypeForExtension(fileExt)
+
+        // Build multipart form data as a temporary file for streaming upload
+        let (uploadFileURL, fileSize) = try MultipartFileBuilder.build(
+            audioURL: audioURL,
+            mimeType: mimeType,
+            boundary: boundary,
+            additionalFields: [(name: "model_id", value: "scribe_v2")]
+        )
+        defer {
+            // Clean up temporary multipart file
+            SecureFileDeleter.delete(at: uploadFileURL)
+        }
+
+        let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
+        print("[ElevenLabs] Transcribing \(sizeMB)MB \(fileExt) (streaming)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-        request.setValue("multipart/form-data; boundary=\(form.boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = form.finalize()
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.upload(for: request, fromFile: uploadFileURL)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
         }
@@ -48,6 +59,20 @@ public final class ElevenLabsClient: STTProvider {
             throw STTError.unknown("HTTP \(httpResponse.statusCode): \(excerpt)")
         }
     }
+
 }
 
 private struct ElevenLabsResponse: Decodable { let text: String }
+
+private let boundary = "vox.boundary.\(UUID().uuidString)"
+
+private func mimeTypeForExtension(_ ext: String) -> String {
+    switch ext {
+    case "ogg", "opus": return "audio/ogg"
+    case "caf": return "audio/x-caf"
+    case "wav": return "audio/wav"
+    case "mp3": return "audio/mpeg"
+    case "m4a", "mp4": return "audio/mp4"
+    default: return "audio/x-caf"
+    }
+}
