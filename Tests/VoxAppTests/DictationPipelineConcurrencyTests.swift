@@ -35,22 +35,15 @@ private final class NoopPaster: TextPaster {
 @MainActor
 private final class AccessTrackingPreferences: PreferencesReading {
     private let level: ProcessingLevel
-    private let context: String
     private var offMainAccesses = 0
 
-    init(level: ProcessingLevel, context: String) {
+    init(level: ProcessingLevel) {
         self.level = level
-        self.context = context
     }
 
     var processingLevel: ProcessingLevel {
         recordAccess()
         return level
-    }
-
-    var customContext: String {
-        recordAccess()
-        return context
     }
 
     var selectedInputDeviceUID: String? { nil }
@@ -72,7 +65,7 @@ struct DictationPipelineConcurrencyTests {
     @Test("process reads preferences on main thread")
     func process_readsPreferencesOnMainThread() async throws {
         let prefs = await MainActor.run {
-            AccessTrackingPreferences(level: .light, context: "project context")
+            AccessTrackingPreferences(level: .light)
         }
         let pipeline = await MainActor.run {
             DictationPipeline(

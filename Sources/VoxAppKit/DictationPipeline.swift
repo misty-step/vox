@@ -36,20 +36,10 @@ public final class DictationPipeline: DictationProcessing {
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         var output = transcript
-        let preferenceSnapshot = await MainActor.run {
-            (
-                processingLevel: prefs.processingLevel,
-                customContext: prefs.customContext
-            )
-        }
-        let level = preferenceSnapshot.processingLevel
+        let level = await MainActor.run { prefs.processingLevel }
         if level != .off {
             do {
-                let prompt = buildPrompt(
-                    level: level,
-                    transcript: transcript,
-                    customContext: preferenceSnapshot.customContext
-                )
+                let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
                 let candidate = try await rewriter.rewrite(
                     transcript: transcript,
                     systemPrompt: prompt,
@@ -71,12 +61,5 @@ public final class DictationPipeline: DictationProcessing {
         try await paster.paste(text: finalText)
         print("[Pipeline] Done")
         return finalText
-    }
-
-    private func buildPrompt(level: ProcessingLevel, transcript: String, customContext: String) -> String {
-        let base = RewritePrompts.prompt(for: level, transcript: transcript)
-        let trimmed = customContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return base }
-        return "\(base)\n\nContext:\n\(trimmed)"
     }
 }
