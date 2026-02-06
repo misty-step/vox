@@ -87,7 +87,7 @@ Keep commits focused. Reference issues when applicable: `feat(stt): add Opus com
 1. Fork the repository
 2. Create a feature branch (`feat/`, `fix/`, `refactor/`, `docs/`)
 3. Make your changes
-4. Verify: `swift build -Xswiftc -warnings-as-errors && swift test`
+4. Verify: `swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`
 5. Submit a pull request
 
 PRs should include:

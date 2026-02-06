@@ -128,7 +128,7 @@ Available via OpenRouter:
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
 
-Quick version: fork, branch, `swift build -Xswiftc -warnings-as-errors && swift test`, submit PR.
+Quick version: fork, branch, `swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
 
 ## License
 
