@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import VoxCore
+import VoxCore
 import VoxMac
 import VoxProviders
 
@@ -9,6 +9,7 @@ public final class DictationPipeline: DictationProcessing {
     private let paster: TextPaster
     private let prefs: PreferencesReading
 
+    @MainActor
     public init(
         stt: STTProvider,
         rewriter: RewriteProvider,
@@ -35,10 +36,20 @@ public final class DictationPipeline: DictationProcessing {
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         var output = transcript
-        let level = prefs.processingLevel
+        let preferenceSnapshot = await MainActor.run {
+            (
+                processingLevel: prefs.processingLevel,
+                customContext: prefs.customContext
+            )
+        }
+        let level = preferenceSnapshot.processingLevel
         if level != .off {
             do {
-                let prompt = buildPrompt(level: level, transcript: transcript, customContext: prefs.customContext)
+                let prompt = buildPrompt(
+                    level: level,
+                    transcript: transcript,
+                    customContext: preferenceSnapshot.customContext
+                )
                 let candidate = try await rewriter.rewrite(
                     transcript: transcript,
                     systemPrompt: prompt,

@@ -12,7 +12,7 @@ public protocol RewriteProvider: Sendable {
 
 /// Text pasting abstraction (already exists as ClipboardPaster, extract protocol)
 public protocol TextPaster: Sendable {
-    @MainActor func paste(text: String) throws
+    @MainActor func paste(text: String) async throws
 }
 
 /// Audio recording abstraction
@@ -43,7 +43,8 @@ public protocol DictationProcessing: Sendable {
 }
 
 /// Read-only preferences abstraction for dependency injection.
-public protocol PreferencesReading: AnyObject {
+@MainActor
+public protocol PreferencesReading: AnyObject, Sendable {
     var processingLevel: ProcessingLevel { get }
     var customContext: String { get }
     var selectedInputDeviceUID: String? { get }

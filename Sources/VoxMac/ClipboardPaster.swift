@@ -12,20 +12,20 @@ public final class ClipboardPaster: TextPaster {
         self.shouldRestore = shouldRestore
     }
 
-    @MainActor public func paste(text: String) throws {
+    @MainActor public func paste(text: String) async throws {
         guard PermissionManager.isAccessibilityTrusted() else {
             throw VoxError.permissionDenied("Accessibility permission required.")
         }
-        try paste(text: text, restoreAfter: shouldRestore ? restoreDelay : nil)
+        try await paste(text: text, restoreAfter: shouldRestore ? restoreDelay : nil)
     }
 
-    public func paste(text: String, restoreAfter delay: TimeInterval?) throws {
+    @MainActor public func paste(text: String, restoreAfter delay: TimeInterval?) async throws {
         guard PermissionManager.isAccessibilityTrusted() else {
             throw VoxError.permissionDenied("Accessibility permission required.")
         }
         copy(text: text, restoreAfter: delay)
-        // Small delay to let clipboard update propagate before sending keystroke
-        Thread.sleep(forTimeInterval: 0.05)
+        // Yield main thread while clipboard update propagates
+        try await Task.sleep(for: .milliseconds(50))
         sendPasteKeystroke()
     }
 
