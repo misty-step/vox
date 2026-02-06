@@ -17,10 +17,15 @@ public final class ElevenLabsClient: STTProvider {
         let mimeType = mimeTypeForExtension(fileExt)
 
         // Build multipart form data as a temporary file for streaming upload
-        let (uploadFileURL, fileSize) = try await buildMultipartFile(audioURL: audioURL, mimeType: mimeType)
+        let (uploadFileURL, fileSize) = try MultipartFileBuilder.build(
+            audioURL: audioURL,
+            mimeType: mimeType,
+            boundary: boundary,
+            additionalFields: [(name: "model_id", value: "scribe_v2")]
+        )
         defer {
             // Clean up temporary multipart file
-            try? FileManager.default.removeItem(at: uploadFileURL)
+            SecureFileDeleter.delete(at: uploadFileURL)
         }
 
         let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
@@ -55,52 +60,6 @@ public final class ElevenLabsClient: STTProvider {
         }
     }
 
-    /// Writes multipart form data to a temporary file and returns (fileURL, totalSize).
-    /// This allows URLSession to stream from disk instead of loading everything into memory.
-    private func buildMultipartFile(audioURL: URL, mimeType: String) async throws -> (URL, Int) {
-        let tempDir = FileManager.default.temporaryDirectory
-        let multipartURL = tempDir.appendingPathComponent("vox-multipart-\(UUID().uuidString).tmp")
-
-        let filename = "audio.\(audioURL.pathExtension)"
-        let audioFileHandle = try FileHandle(forReadingFrom: audioURL)
-        defer { audioFileHandle.closeFile() }
-
-        // Build multipart body parts
-        let preamble = """
-            --\(boundary)\r\n\
-            Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n\
-            Content-Type: \(mimeType)\r\n\r\n
-            """.data(using: .utf8)!
-
-        let postamble = """
-
-            --\(boundary)\r\n\
-            Content-Disposition: form-data; name=\"model_id\"\r\n\r\n\
-            scribe_v2\r\n\
-            --\(boundary)--\r\n
-            """.data(using: .utf8)!
-
-        // Write preamble + audio file + postamble to temp file
-        FileManager.default.createFile(atPath: multipartURL.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: multipartURL)
-
-        handle.write(preamble)
-
-        // Stream audio file in chunks to avoid loading into memory
-        let chunkSize = 64 * 1024  // 64KB chunks
-        while let chunk = audioFileHandle.readData(ofLength: chunkSize), !chunk.isEmpty {
-            handle.write(chunk)
-        }
-
-        handle.write(postamble)
-        try handle.close()
-
-        // Get total size
-        let attributes = try FileManager.default.attributesOfItem(atPath: multipartURL.path)
-        let totalSize = attributes[.size] as? Int ?? 0
-
-        return (multipartURL, totalSize)
-    }
 }
 
 private struct ElevenLabsResponse: Decodable { let text: String }

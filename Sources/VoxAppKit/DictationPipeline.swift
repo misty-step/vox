@@ -64,26 +64,28 @@ public final class DictationPipeline: DictationProcessing {
     public func process(audioURL: URL) async throws -> String {
         var timing = PipelineTiming()
 
+        // Capture original size BEFORE encoding
+        let originalAttributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
+        timing.originalSizeBytes = originalAttributes?[.size] as? Int ?? 0
+
         // Encode to Opus if enabled
         let uploadURL: URL
         if enableOpus {
             let encodeStart = CFAbsoluteTimeGetCurrent()
             let result = await AudioEncoder.encodeForUpload(cafURL: audioURL)
             timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
-            timing.originalSizeBytes = result.bytes
             if result.format == .opus {
                 timing.encodedSizeBytes = result.bytes
             }
             uploadURL = result.url
         } else {
             uploadURL = audioURL
-            timing.originalSizeBytes = (try? Data(contentsOf: audioURL).count) ?? 0
         }
 
         // Clean up encoded file after processing (if different from original)
         defer {
             if uploadURL != audioURL {
-                try? FileManager.default.removeItem(at: uploadURL)
+                SecureFileDeleter.delete(at: uploadURL)
             }
         }
 

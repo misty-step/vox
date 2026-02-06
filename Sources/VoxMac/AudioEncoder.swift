@@ -44,7 +44,7 @@ public enum AudioEncoder {
         while inputFile.framePosition < inputFile.length {
             try inputFile.read(into: inputBuffer)
 
-            let status = try await convertBuffer(
+            let status = try convertBuffer(
                 inputBuffer: inputBuffer,
                 converter: converter,
                 outputFormat: outputFormat
@@ -64,48 +64,47 @@ public enum AudioEncoder {
         inputBuffer: AVAudioPCMBuffer,
         converter: AVAudioConverter,
         outputFormat: AVAudioFormat
-    ) async throws -> (buffer: AVAudioPCMBuffer?, status: AVAudioConverterOutputStatus) {
+    ) throws -> (buffer: AVAudioPCMBuffer?, status: AVAudioConverterOutputStatus) {
         let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFormat,
             frameCapacity: AVAudioFrameCount(4096)
         )!
 
-        return try await withCheckedThrowingContinuation { continuation in
-            var error: NSError?
-            let status = converter.convert(
-                to: outputBuffer,
-                error: &error
-            ) { inNumPackets, outStatus in
-                outStatus.pointee = .haveData
-                return inputBuffer
-            }
-
-            if let error {
-                continuation.resume(throwing: error)
-            } else {
-                continuation.resume(returning: (outputBuffer, status))
-            }
+        var error: NSError?
+        let status = converter.convert(
+            to: outputBuffer,
+            error: &error
+        ) { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return inputBuffer
         }
+
+        if let error {
+            throw error
+        }
+        return (outputBuffer, status)
     }
 
     /// Converts CAF to Opus with fallback.
     /// Returns the Opus URL on success, or the original CAF URL on failure.
     public static func encodeForUpload(cafURL: URL) async -> (url: URL, format: AudioFormat, bytes: Int) {
         let opusURL = cafURL.deletingPathExtension().appendingPathExtension("ogg")
-        let cafSize = (try? Data(contentsOf: cafURL).count) ?? 0
+        let cafAttributes = try? FileManager.default.attributesOfItem(atPath: cafURL.path)
+        let cafSize = cafAttributes?[.size] as? Int ?? 0
 
         let startTime = CFAbsoluteTimeGetCurrent()
         do {
             try await convertToOpus(inputURL: cafURL, outputURL: opusURL)
             let encodeTime = CFAbsoluteTimeGetCurrent() - startTime
-            let opusSize = (try? Data(contentsOf: opusURL).count) ?? 0
+            let opusAttributes = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
+            let opusSize = opusAttributes?[.size] as? Int ?? 0
             let ratio = Double(opusSize) / Double(max(cafSize, 1))
             print("[Encoder] Opus conversion: \(String(format: "%.3f", encodeTime))s, \(ratio*100)% of original")
             return (opusURL, .opus, opusSize)
         } catch {
             print("[Encoder] Opus conversion failed: \(error.localizedDescription), using CAF fallback")
             // Clean up partial output if exists
-            try? FileManager.default.removeItem(at: opusURL)
+            SecureFileDeleter.delete(at: opusURL)
             return (cafURL, .caf, cafSize)
         }
     }

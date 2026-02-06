@@ -28,11 +28,13 @@ public final class WhisperClient: STTProvider {
         }
 
         // Build multipart form data as a temporary file for streaming upload
-        let (multipartURL, multipartSize) = try await buildMultipartFile(
+        let (multipartURL, _) = try MultipartFileBuilder.build(
             audioURL: fileURL,
-            mimeType: mimeType
+            mimeType: mimeType,
+            boundary: boundary,
+            additionalFields: [(name: "model", value: "whisper-1")]
         )
-        defer { try? FileManager.default.removeItem(at: multipartURL) }
+        defer { SecureFileDeleter.delete(at: multipartURL) }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -99,52 +101,6 @@ public final class WhisperClient: STTProvider {
         return (url, mimeType, nil)
     }
 
-    /// Writes multipart form data to a temporary file and returns (fileURL, totalSize).
-    private func buildMultipartFile(audioURL: URL, mimeType: String) async throws -> (URL, Int) {
-        let tempDir = FileManager.default.temporaryDirectory
-        let multipartURL = tempDir.appendingPathComponent("vox-whisper-\(UUID().uuidString).tmp")
-
-        let filename = "audio.\(audioURL.pathExtension)"
-        let audioFileHandle = try FileHandle(forReadingFrom: audioURL)
-        defer { audioFileHandle.closeFile() }
-
-        // Build multipart body parts
-        let preamble = """
-            --\(boundary)\r\n\
-            Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n\
-            Content-Type: \(mimeType)\r\n\r\n
-            """.data(using: .utf8)!
-
-        let postamble = """
-
-            --\(boundary)\r\n\
-            Content-Disposition: form-data; name=\"model\"\r\n\r\n\
-            whisper-1\r\n\
-            --\(boundary)--\r\n
-            """.data(using: .utf8)!
-
-        // Write preamble + audio file + postamble to temp file
-        FileManager.default.createFile(atPath: multipartURL.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: multipartURL)
-
-        handle.write(preamble)
-
-        // Stream audio file in chunks to avoid loading into memory
-        let chunkSize = 64 * 1024  // 64KB chunks
-        while let chunk = audioFileHandle.readData(ofLength: chunkSize), !chunk.isEmpty {
-            handle.write(chunk)
-        }
-
-        handle.write(postamble)
-        try handle.close()
-
-        // Get total size
-        let attributes = try FileManager.default.attributesOfItem(atPath: multipartURL.path)
-        let totalSize = attributes[.size] as? Int ?? 0
-
-        return (multipartURL, totalSize)
-    }
-}
 
 private struct WhisperResponse: Decodable { let text: String }
 
