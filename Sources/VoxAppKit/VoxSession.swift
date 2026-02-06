@@ -191,9 +191,12 @@ public final class VoxSession: ObservableObject {
 
         if succeeded {
             SecureFileDeleter.delete(at: url)
+            state = .idle
+            hud.showSuccess()
+        } else {
+            state = .idle
+            hud.hide()
         }
-        state = .idle
-        hud.hide()
     }
 
     private func startLevelTimer() {
