@@ -134,8 +134,7 @@ public enum AudioFormat {
 private extension AVAudioFormat {
     /// Returns a standardized format suitable for conversion.
     var standardized: AVAudioFormat? {
-        guard let commonFormat = commonFormat,
-              commonFormat != .otherFormat else {
+        guard commonFormat != .otherFormat else {
             // For non-standard formats, create a PCM equivalent
             return AVAudioFormat(
                 standardFormatWithSampleRate: sampleRate,
