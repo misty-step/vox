@@ -28,6 +28,13 @@ public enum AudioEncoder {
             throw VoxError.internalError("Failed to create Opus output format")
         }
 
+        // AVAudioPCMBuffer only supports PCM formats. Opus resolves to `.otherFormat`,
+        // and attempting to allocate PCM buffers for it throws NSException (uncatchable in Swift).
+        // Bail out so caller can safely fall back to CAF.
+        guard outputFormat.commonFormat != .otherFormat else {
+            throw VoxError.internalError("Opus conversion unavailable on this macOS runtime")
+        }
+
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             throw VoxError.internalError("Failed to create audio converter")
         }
