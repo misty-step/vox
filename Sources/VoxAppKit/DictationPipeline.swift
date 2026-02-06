@@ -45,6 +45,7 @@ public final class DictationPipeline: DictationProcessing {
     private let rewriter: RewriteProvider
     private let paster: TextPaster
     private let prefs: PreferencesReading
+    private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
 
     @MainActor
@@ -53,13 +54,15 @@ public final class DictationPipeline: DictationProcessing {
         rewriter: RewriteProvider,
         paster: TextPaster,
         prefs: PreferencesReading? = nil,
-        enableOpus: Bool = true
+        enableOpus: Bool = true,
+        pipelineTimeout: TimeInterval = 120
     ) {
         self.stt = stt
         self.rewriter = rewriter
         self.paster = paster
         self.prefs = prefs ?? PreferencesStore.shared
         self.enableOpus = enableOpus
+        self.pipelineTimeout = pipelineTimeout
     }
 
     public func process(audioURL: URL) async throws -> String {
@@ -90,13 +93,17 @@ public final class DictationPipeline: DictationProcessing {
             }
         }
 
+        #if DEBUG
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
+        #endif
 
         // STT stage
         let rawTranscript: String
         let sttStart = CFAbsoluteTimeGetCurrent()
         do {
-            rawTranscript = try await stt.transcribe(audioURL: uploadURL)
+            rawTranscript = try await withPipelineTimeout(seconds: pipelineTimeout) {
+                try await self.stt.transcribe(audioURL: uploadURL)
+            }
         } catch {
             print("[Pipeline] STT failed: \(error.localizedDescription)")
             throw error
@@ -104,7 +111,9 @@ public final class DictationPipeline: DictationProcessing {
         timing.sttTime = CFAbsoluteTimeGetCurrent() - sttStart
 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if DEBUG
         print("[Pipeline] STT complete (\(transcript.count) chars)")
+        #endif
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         // Rewrite stage
@@ -121,10 +130,14 @@ public final class DictationPipeline: DictationProcessing {
                 )
                 let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                 output = decision.isAcceptable ? candidate : transcript
+                if !decision.isAcceptable {
+                    print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                }
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
+                output = transcript
             }
             timing.rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
         }
@@ -134,11 +147,56 @@ public final class DictationPipeline: DictationProcessing {
 
         // Paste stage
         let pasteStart = CFAbsoluteTimeGetCurrent()
+        #if DEBUG
         print("[Pipeline] Pasting \(finalText.count) chars")
+        #endif
         try await paster.paste(text: finalText)
         timing.pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
+        #if DEBUG
         print(timing.summary())
+        #endif
         return finalText
     }
+}
+
+// MARK: - Timeout Helper
+
+/// Wraps an async operation with a deadline.
+/// Used to cap the STT fallback chain (4 providers × retries = 360s worst-case without this).
+private func withPipelineTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds)
+
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            throw VoxError.pipelineTimeout
+        }
+        guard let result = try await group.next() else {
+            group.cancelAll()
+            throw VoxError.pipelineTimeout
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
+private func validatedTimeoutNanoseconds(seconds: TimeInterval) throws -> UInt64 {
+    guard seconds > 0, seconds.isFinite else {
+        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+    }
+
+    let nanoseconds = seconds * 1_000_000_000
+    // Keep conversion strict: values rounding up to 2^64 must be rejected.
+    guard nanoseconds.isFinite, nanoseconds >= 0, nanoseconds < Double(UInt64.max) else {
+        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+    }
+
+    return UInt64(nanoseconds)
 }

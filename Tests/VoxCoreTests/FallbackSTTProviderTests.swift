@@ -125,6 +125,84 @@ final class FallbackSTTProviderTests: XCTestCase {
 
         XCTAssertEqual(counter.count, 1)
     }
+
+    // MARK: - Additional Edge Cases
+
+    func test_transcribe_cancellationPropagatesImmediately() async {
+        let primary = MockSTTProvider(results: [.failure(CancellationError())])
+        let fallback = MockSTTProvider(results: [.success("fallback")])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // Expected
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+        XCTAssertEqual(primary.callCount, 1)
+        XCTAssertEqual(fallback.callCount, 0)
+    }
+
+    func test_transcribe_primaryNameLoggedOnFallback() async throws {
+        let primary = MockSTTProvider(results: [.failure(STTError.network("timeout"))])
+        let fallback = MockSTTProvider(results: [.success("fallback")])
+        let provider = FallbackSTTProvider(
+            primary: primary,
+            fallback: fallback,
+            primaryName: "ElevenLabs"
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "fallback")
+        XCTAssertEqual(primary.callCount, 1)
+        XCTAssertEqual(fallback.callCount, 1)
+    }
+
+    func test_transcribe_nestedNSError_fallsBack() async throws {
+        let nsError = NSError(domain: "NSURLErrorDomain", code: -1009, userInfo: [
+            NSLocalizedDescriptionKey: "The Internet connection appears to be offline."
+        ])
+        let primary = MockSTTProvider(results: [.failure(nsError)])
+        let fallback = MockSTTProvider(results: [.success("fallback")])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "fallback")
+    }
+
+    func test_transcribe_fallbackAlsoFailsWithCancellation() async {
+        let primary = MockSTTProvider(results: [.failure(STTError.throttled)])
+        let fallback = MockSTTProvider(results: [.failure(CancellationError())])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // Expected
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
+    func test_transcribe_fallbackFailsWithNonFallbackEligibleError() async {
+        let primary = MockSTTProvider(results: [.failure(STTError.throttled)])
+        let fallback = MockSTTProvider(results: [.failure(STTError.invalidAudio)])
+        let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            XCTAssertEqual(error, .invalidAudio)
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
+        }
+    }
 }
 
 private final class CallbackCounter: @unchecked Sendable {

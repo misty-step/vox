@@ -163,6 +163,154 @@ final class RetryingSTTProviderTests: XCTestCase {
             XCTAssertEqual(event.2, 0, accuracy: 0.0001)
         }
     }
+
+    // MARK: - Additional Edge Cases
+
+    func test_transcribe_cancellationPropagatesImmediately() async {
+        let mock = MockSTTProvider(results: [.failure(CancellationError())])
+        let provider = RetryingSTTProvider(provider: mock, maxRetries: 3, baseDelay: 0)
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // Expected
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+        XCTAssertEqual(mock.callCount, 1)
+    }
+
+    func test_transcribe_multipleRetriesBeforeSuccess() async throws {
+        let mock = MockSTTProvider(results: [
+            .failure(STTError.throttled),
+            .failure(STTError.throttled),
+            .failure(STTError.throttled),
+            .success("finally")
+        ])
+        let recorder = RetryRecorder()
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 3,
+            baseDelay: 0,
+            onRetry: { attempt, maxRetries, delay in
+                recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
+            }
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "finally")
+        XCTAssertEqual(mock.callCount, 4)
+        XCTAssertEqual(recorder.events.count, 3)
+        XCTAssertEqual(recorder.events[0].0, 1)
+        XCTAssertEqual(recorder.events[1].0, 2)
+        XCTAssertEqual(recorder.events[2].0, 3)
+    }
+
+    func test_transcribe_zeroMaxRetries_noRetries() async {
+        let mock = MockSTTProvider(results: [.failure(STTError.throttled)])
+        let recorder = RetryRecorder()
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 0,
+            baseDelay: 0,
+            onRetry: { attempt, maxRetries, delay in
+                recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
+            }
+        )
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            XCTAssertEqual(error, .throttled)
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
+        }
+        XCTAssertEqual(mock.callCount, 1)
+        XCTAssertEqual(recorder.events.count, 0)
+    }
+
+    func test_transcribe_mixedRetryableAndNonRetryableErrors() async {
+        // First error is retryable, second is not
+        let mock = MockSTTProvider(results: [
+            .failure(STTError.throttled),
+            .failure(STTError.auth)
+        ])
+        let recorder = RetryRecorder()
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 3,
+            baseDelay: 0,
+            onRetry: { attempt, maxRetries, delay in
+                recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
+            }
+        )
+
+        do {
+            _ = try await provider.transcribe(audioURL: audioURL)
+            XCTFail("Expected error")
+        } catch let error as STTError {
+            XCTAssertEqual(error, .auth)
+        } catch {
+            XCTFail("Expected STTError, got \(error)")
+        }
+        XCTAssertEqual(mock.callCount, 2)
+        XCTAssertEqual(recorder.events.count, 1)
+    }
+
+    func test_transcribe_nsErrorWithRetryableCode_retries() async throws {
+        let nsError = NSError(domain: "NSURLErrorDomain", code: -1001, userInfo: [
+            NSLocalizedDescriptionKey: "The request timed out."
+        ])
+        let mock = MockSTTProvider(results: [.failure(nsError), .success("ok")])
+        let provider = RetryingSTTProvider(provider: mock, maxRetries: 2, baseDelay: 0)
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "ok")
+        XCTAssertEqual(mock.callCount, 2)
+    }
+
+    func test_transcribe_nameIsLogged() async throws {
+        let mock = MockSTTProvider(results: [.failure(STTError.throttled), .success("ok")])
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 1,
+            baseDelay: 0,
+            name: "ElevenLabs"
+        )
+
+        let result = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(result, "ok")
+        XCTAssertEqual(mock.callCount, 2)
+    }
+
+    func test_transcribe_exponentialBackoff_delaysIncrease() async throws {
+        let mock = MockSTTProvider(results: [
+            .failure(STTError.throttled),
+            .failure(STTError.throttled),
+            .success("ok")
+        ])
+        let recorder = RetryRecorder()
+        let provider = RetryingSTTProvider(
+            provider: mock,
+            maxRetries: 3,
+            baseDelay: 0.01,  // 10ms base delay — fast test
+            onRetry: { attempt, maxRetries, delay in
+                recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
+            }
+        )
+
+        _ = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(recorder.events.count, 2)
+        // Verify exponential growth: second delay >= first delay
+        XCTAssertGreaterThanOrEqual(recorder.events[0].2, 0.01)
+        XCTAssertGreaterThanOrEqual(recorder.events[1].2, recorder.events[0].2)
+    }
 }
 
 private final class RetryRecorder: @unchecked Sendable {
