@@ -61,24 +61,23 @@ public enum MultipartFileBuilder {
         let audioFileHandle = try FileHandle(forReadingFrom: audioURL)
         defer { audioFileHandle.closeFile() }
 
-        // Build preamble with file field
-        var preamble = """
+        // Build file part preamble (headers only, audio data follows immediately)
+        let preamble = """
             --\(boundary)\r\n\
             Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n\
             Content-Type: \(mimeType)\r\n\r\n
             """
 
-        // Add additional fields
+        // Build postamble with additional fields as separate parts
+        var postamble = "\r\n"
         for field in additionalFields {
-            preamble += """
-
+            postamble += """
                 --\(boundary)\r\n\
                 Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n\
                 \(field.value)\r\n
                 """
         }
-
-        let postamble = "\n--\(boundary)--\r\n"
+        postamble += "--\(boundary)--\r\n"
 
         guard let preambleData = preamble.data(using: .utf8),
               let postambleData = postamble.data(using: .utf8) else {
