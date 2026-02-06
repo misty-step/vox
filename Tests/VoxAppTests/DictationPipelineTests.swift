@@ -47,13 +47,12 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
-        lock.lock()
-        _callCount += 1
-        let index = _callCount - 1
-        _lastAudioURL = audioURL
-        let currentDelay = _delay
-        let resultsSnapshot = _results
-        lock.unlock()
+        let (index, currentDelay, resultsSnapshot) = lock.withLock {
+            _callCount += 1
+            let index = _callCount - 1
+            _lastAudioURL = audioURL
+            return (index, _delay, _results)
+        }
 
         if currentDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(currentDelay * 1_000_000_000))
@@ -125,15 +124,14 @@ final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        lock.lock()
-        _callCount += 1
-        let index = _callCount - 1
-        _lastTranscript = transcript
-        _lastPrompt = systemPrompt
-        _lastModel = model
-        let currentDelay = _delay
-        let resultsSnapshot = _results
-        lock.unlock()
+        let (index, currentDelay, resultsSnapshot) = lock.withLock {
+            _callCount += 1
+            let index = _callCount - 1
+            _lastTranscript = transcript
+            _lastPrompt = systemPrompt
+            _lastModel = model
+            return (index, _delay, _results)
+        }
 
         if currentDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(currentDelay * 1_000_000_000))
@@ -164,11 +162,11 @@ final class MockTextPaster: TextPaster, @unchecked Sendable {
 
     @MainActor
     func paste(text: String) throws {
-        lock.lock()
-        _callCount += 1
-        lastText = text
-        let shouldFail = shouldThrow
-        lock.unlock()
+        let shouldFail = lock.withLock {
+            _callCount += 1
+            lastText = text
+            return shouldThrow
+        }
 
         if shouldFail {
             throw VoxError.insertionFailed
