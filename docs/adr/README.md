@@ -49,4 +49,6 @@ Examples:
 
 ## Index
 
-_No ADRs yet. This section will be updated as decisions are recorded._
+| ADR | Title | Status |
+|-----|-------|--------|
+| [0001](0001-simplicity-first-design.md) | Simplicity-First Design | Accepted |
