@@ -507,6 +507,39 @@ struct DictationPipelineTests {
         }
     }
 
+    @Test("Invalid timeout (infinity) throws internalError")
+    func process_infinityTimeout_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false,
+            pipelineTimeout: .infinity
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError = error {
+                // Expected
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError, got \(error)")
+        }
+    }
+
     @Test("Invalid timeout (excessive) throws internalError")
     func process_excessiveTimeout_throwsInternalError() async {
         let stt = MockSTTProvider()
