@@ -105,9 +105,7 @@ public final class DictationPipeline: DictationProcessing {
                 try await self.stt.transcribe(audioURL: uploadURL)
             }
         } catch {
-            #if DEBUG
             print("[Pipeline] STT failed: \(error.localizedDescription)")
-            #endif
             throw error
         }
         timing.sttTime = CFAbsoluteTimeGetCurrent() - sttStart
@@ -133,16 +131,12 @@ public final class DictationPipeline: DictationProcessing {
                 let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                 output = decision.isAcceptable ? candidate : transcript
                 if !decision.isAcceptable {
-                    #if DEBUG
                     print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
-                    #endif
                 }
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                #if DEBUG
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
-                #endif
                 output = transcript
             }
             timing.rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart

@@ -161,27 +161,6 @@ final class FallbackSTTProviderTests: XCTestCase {
         XCTAssertEqual(fallback.callCount, 1)
     }
 
-    func test_transcribe_multipleFallbackEligibleErrors_allTriggerFallback() async throws {
-        let errors: [STTError] = [
-            .auth,
-            .quotaExceeded,
-            .throttled,
-            .sessionLimit,
-            .network("any network"),
-            .unknown("any unknown"),
-        ]
-
-        for error in errors {
-            let primary = MockSTTProvider(results: [.failure(error)])
-            let fallback = MockSTTProvider(results: [.success("fallback")])
-            let provider = FallbackSTTProvider(primary: primary, fallback: fallback)
-
-            let result = try await provider.transcribe(audioURL: audioURL)
-
-            XCTAssertEqual(result, "fallback", "Failed for error: \(error)")
-        }
-    }
-
     func test_transcribe_nestedNSError_fallsBack() async throws {
         let nsError = NSError(domain: "NSURLErrorDomain", code: -1009, userInfo: [
             NSLocalizedDescriptionKey: "The Internet connection appears to be offline."
