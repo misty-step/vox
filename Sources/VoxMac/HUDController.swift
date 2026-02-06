@@ -2,12 +2,17 @@ import AppKit
 import SwiftUI
 import VoxCore
 
+@MainActor
 public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
+    private let reducedMotion: Bool
+    private var scheduledHide: DispatchWorkItem?
 
     public init() {
+        reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let content = HUDView(state: state)
+            .environment(\.reducedMotion, reducedMotion)
         let hosting = NSHostingView(rootView: content)
         hosting.frame = NSRect(x: 0, y: 0, width: 220, height: 110)
 
@@ -47,12 +52,35 @@ public final class HUDController: HUDDisplaying {
         show()
     }
 
+    public func showSuccess() {
+        scheduledHide?.cancel()
+        state.startSuccess()
+        show()
+        let task = DispatchWorkItem { [weak self] in
+            self?.animatedHide()
+        }
+        scheduledHide = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + HUDTiming.successDisplayDuration, execute: task)
+    }
+
     public func hide() {
-        panel.orderOut(nil)
+        scheduledHide?.cancel()
+        scheduledHide = nil
+        animatedHide()
+    }
+
+    private func animatedHide() {
+        guard state.isVisible else { return }
+        state.dismiss(reducedMotion: reducedMotion) { [weak self] in
+            self?.panel.orderOut(nil)
+        }
     }
 
     private func show() {
+        scheduledHide?.cancel()
+        scheduledHide = nil
         positionPanel()
+        state.show()
         panel.orderFrontRegardless()
     }
 
