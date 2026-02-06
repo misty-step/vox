@@ -9,6 +9,12 @@ public enum HUDMode: Equatable {
     case success
 }
 
+/// Timing constants shared between HUDView and HUDController.
+enum HUDTiming {
+    static let successDisplayDuration: Double = 0.5
+}
+
+@MainActor
 public final class HUDState: ObservableObject {
     @Published public var mode: HUDMode = .idle
     @Published public var average: Float = 0
@@ -30,7 +36,9 @@ public final class HUDState: ObservableObject {
         recordingDuration = 0
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.recordingDuration += 1
+            Task { @MainActor in
+                self?.recordingDuration += 1
+            }
         }
         RunLoop.main.add(timer!, forMode: .common)
     }
@@ -104,7 +112,7 @@ private enum Design {
     static let transitionDuration: Double = 0.18
     static let fadeOutDuration: Double = 0.18
     static let contentTransitionDuration: Double = 0.15
-    static let successDisplayDuration: Double = 0.5
+    static let successDisplayDuration = HUDTiming.successDisplayDuration
     static let pulseDuration: Double = 1.2
     static let segmentUpdateDuration: Double = 0.06
     

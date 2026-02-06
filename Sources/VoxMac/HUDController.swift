@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import VoxCore
 
+@MainActor
 public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
@@ -59,7 +60,7 @@ public final class HUDController: HUDDisplaying {
             self?.animatedHide()
         }
         scheduledHide = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + HUDTiming.successDisplayDuration, execute: task)
     }
 
     public func hide() {
@@ -76,6 +77,8 @@ public final class HUDController: HUDDisplaying {
     }
 
     private func show() {
+        scheduledHide?.cancel()
+        scheduledHide = nil
         positionPanel()
         state.show()
         panel.orderFrontRegardless()
