@@ -96,3 +96,4 @@ Shared mock: `Tests/VoxCoreTests/MockSTTProvider.swift` — thread-safe with NSL
 - **Logging**: bracket-prefixed tags — `[ElevenLabs]`, `[STT]`, `[Pipeline]`, `[Vox]`, `[Paster]`
 - **Security**: no transcript content in logs (char counts only); debug logs gated behind `#if DEBUG`
 - **Audio cleanup**: `SecureFileDeleter` — relies on FileVault; `preserveAudio()` returns `URL?` for error recovery dialog
+- **Simplicity gate** ([ADR-0001](docs/adr/0001-simplicity-first-design.md)): no new user-facing settings without ADR justification; no advanced tabs, threshold tuning, or model selection UI; defaults over options; no dark features (stored prefs without UI)

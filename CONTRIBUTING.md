@@ -96,6 +96,15 @@ PRs should include:
 - Evidence that build and tests pass
 - Screenshots or GIFs for UI changes (HUD, menu bar, settings)
 
+### Simplicity Checklist
+
+Before submitting, verify your PR passes the simplicity gate (see [ADR-0001](docs/adr/0001-simplicity-first-design.md)):
+
+- [ ] No new user-visible settings without explicit justification
+- [ ] No "Advanced" UI, threshold tuning, or model selection exposed to users
+- [ ] New behavior uses sensible defaults rather than asking users to configure
+- [ ] No dark features (stored preferences without a UI path)
+
 ## Filing Issues
 
 Check existing issues first. When filing:

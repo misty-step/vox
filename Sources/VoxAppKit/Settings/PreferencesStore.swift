@@ -11,10 +11,6 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         didSet { defaults.set(processingLevel.rawValue, forKey: "processingLevel") }
     }
 
-    @Published public var customContext: String {
-        didSet { defaults.set(customContext, forKey: "customContext") }
-    }
-
     @Published public var selectedInputDeviceUID: String? {
         didSet {
             if let uid = selectedInputDeviceUID {
@@ -27,7 +23,6 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
 
     private init() {
         processingLevel = ProcessingLevel(rawValue: defaults.string(forKey: "processingLevel") ?? "light") ?? .light
-        customContext = defaults.string(forKey: "customContext") ?? ""
         selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
     }
 
