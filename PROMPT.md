@@ -1,54 +1,83 @@
-# Mission: Fix PR #155 — CI Failures + Review Comments
+# Mission: Fix PR #155 — Self-Healing PR Protocol
 
-You are Bramble. You previously opened PR #155 on misty-step/vox (branch `bramble/performance`). CI is failing and reviewers flagged issues. Fix everything and push.
+You are Bramble. You opened PR #155 on misty-step/vox (`bramble/performance`). CI is failing. Fix it and shepherd the PR to merge-ready.
 
 ## Location
-`/home/sprite/workspace/vox` — checkout branch `bramble/performance`
+`/home/sprite/workspace/vox` — branch `bramble/performance`
 
-## CI Build Errors (MUST FIX FIRST)
-
-### 1. ElevenLabsClient.swift — `readData(ofLength:)` returns `Data`, not `Data?`
-```
-error: initializer for conditional binding must have Optional type, not 'Data'
-while let chunk = audioFileHandle.readData(ofLength: chunkSize), !chunk.isEmpty {
-```
-Fix: `readData(ofLength:)` returns `Data` (non-optional). Use a regular loop:
-```swift
-var chunk = audioFileHandle.readData(ofLength: chunkSize)
-while !chunk.isEmpty {
-    handle.write(chunk)
-    chunk = audioFileHandle.readData(ofLength: chunkSize)
-}
-```
-
-### 2. WhisperClient.swift — Same `readData` issue + unused variable
-```
-error: immutable value 'multipartSize' was never used
-error: initializer for conditional binding must have Optional type, not 'Data'
-```
-Fix: Replace `let (multipartURL, multipartSize)` with `let (multipartURL, _)` and fix the same readData loop pattern.
-
-## Review Comments to Address
-
-### Critical (gemini-code-assist)
-1. **AudioEncoder.swift:89** — `convertBuffer` uses `withCheckedThrowingContinuation` unnecessarily. `AVAudioConverter.convert(to:error:withInputFrom:)` is synchronous. Remove the continuation wrapper, call it directly.
-2. **DictationPipeline.swift:76** — `timing.originalSizeBytes` is set to encoded file size, not original. Fix: capture original size BEFORE encoding.
-3. **AudioEncoder.swift:111** — Reads entire file into memory with `Data(contentsOf:)` just for size. Use `FileManager.default.attributesOfItem(atPath:)` instead.
-
-### Major (coderabbitai)
-4. **Use SecureFileDeleter** for all audio file cleanup (DictationPipeline, AudioEncoder, ElevenLabsClient, WhisperClient). Check if `SecureFileDeleter` exists in the codebase; if not, use `FileManager.default.removeItem`.
-5. **ElevenLabsClient.swift + WhisperClient.swift** — Deduplicate `buildMultipartFile` into a shared utility.
-
-## Rules
-- `git checkout bramble/performance` first
-- Fix ALL build errors — run `swift build` to verify
-- Address ALL critical and major review comments
-- Small commits with conventional messages (e.g., `fix: resolve readData non-optional type error`)
-- Push when done — CI will re-run automatically
-- Do NOT rebase or force-push
-
-## Git Config
+## Git Config (run first)
 ```bash
 git config user.name "kaylee-mistystep"
 git config user.email "kaylee@mistystep.io"
+```
+
+## Step 1: Understand Current Failures
+
+Check out your branch and understand the errors:
+```bash
+git checkout bramble/performance
+git log --oneline -5
+```
+
+The current CI failure is a syntax/compilation error in WhisperClient.swift:
+```
+WhisperClient.swift:5: error: expected declaration
+WhisperClient.swift:5: error: expected '}' in class
+WhisperClient.swift:4: error: type 'WhisperClient' does not conform to protocol 'STTProvider'
+```
+
+This suggests a structural issue — likely a missing brace, malformed function, or botched edit that broke the class structure. You need to:
+
+1. Read `Sources/VoxProviders/WhisperClient.swift` carefully
+2. Find the syntax error (likely near line 4-5)
+3. Fix the structural issue
+4. Verify the class conforms to `STTProvider` protocol
+
+Also check that `ElevenLabsClient.swift` still compiles cleanly.
+
+Run `swift build` after fixing.
+
+## Step 2: Fix and Push
+
+```bash
+git add -A
+git commit -m "fix: resolve WhisperClient compilation errors"
+git push origin bramble/performance
+```
+
+## Step 3: Wait for CI and Check Results
+
+```bash
+sleep 120
+gh pr checks 155 2>&1
+```
+
+If CI passes → check for review comments:
+```bash
+gh api repos/misty-step/vox/pulls/155/comments \
+  --jq '.[] | "[\(.user.login)] \(.path):\(.line) severity=\(.body | if test("critical|Critical|CRITICAL") then "CRITICAL" elif test("high|High|HIGH") then "HIGH" elif test("major|Major|MAJOR") then "MAJOR" else "other" end) — \(.body[:150])"'
+```
+
+Address any critical/high/major comments, push fixes, wait for CI again.
+
+If CI fails again → read the new errors:
+```bash
+RUN_ID=$(gh api repos/misty-step/vox/actions/runs?branch=bramble/performance --jq '.workflow_runs[0].id')
+gh run view $RUN_ID --log-failed 2>&1 | grep "error:" | head -20
+```
+
+Fix and push again. Maximum 3 fix attempts.
+
+## Step 4: Completion Signal
+
+When CI passes and no unaddressed critical/high review comments:
+```
+TASK_COMPLETE: PR #155 is merge-ready
+SUMMARY: CAF-to-Opus encoding, timing instrumentation, file-based uploads
+```
+
+If stuck after 3 attempts:
+```
+BLOCKED: [description of what's blocking]
+ATTEMPTED: [list of what you tried]
 ```

@@ -100,7 +100,7 @@ public final class WhisperClient: STTProvider {
 
         return (url, mimeType, nil)
     }
-
+}
 
 private struct WhisperResponse: Decodable { let text: String }
 
