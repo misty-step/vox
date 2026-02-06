@@ -1,37 +1,31 @@
 import AppKit
 import VoxCore
 
-enum StatusBarBadgeStyle: Equatable {
-    case ring
-    case filled
-    case progressArc
+enum StatusBarMonogramStyle: Equatable {
+    case openV
+    case outlinedTriangle
+    case filledTriangle
 }
 
 struct StatusBarIconDescriptor: Equatable {
     let strokeWidth: CGFloat
-    let fillsMonogram: Bool
-    let badgeStyle: StatusBarBadgeStyle
+    let monogramStyle: StatusBarMonogramStyle
 
     static func make(for state: StatusBarState) -> StatusBarIconDescriptor {
-        let badgeStyle: StatusBarBadgeStyle
-        let fillsMonogram: Bool
+        let monogramStyle: StatusBarMonogramStyle
 
         switch state {
         case .idle:
-            badgeStyle = .ring
-            fillsMonogram = false
+            monogramStyle = .openV
         case .recording:
-            badgeStyle = .filled
-            fillsMonogram = true
+            monogramStyle = .outlinedTriangle
         case .processing:
-            badgeStyle = .progressArc
-            fillsMonogram = false
+            monogramStyle = .filledTriangle
         }
 
         return StatusBarIconDescriptor(
             strokeWidth: CGFloat(BrandIdentity.menuIconStrokeWidth(for: state.processingLevel)),
-            fillsMonogram: fillsMonogram,
-            badgeStyle: badgeStyle
+            monogramStyle: monogramStyle
         )
     }
 }
@@ -46,7 +40,6 @@ enum StatusBarIconRenderer {
             NSColor.black.setFill()
 
             drawMonogram(in: rect, descriptor: descriptor)
-            drawBadge(in: rect, descriptor: descriptor)
             return true
         }
         image.isTemplate = true
@@ -55,56 +48,37 @@ enum StatusBarIconRenderer {
 
     private static func drawMonogram(in rect: NSRect, descriptor: StatusBarIconDescriptor) {
         let inset: CGFloat = 2.2
-        let top = rect.maxY - inset - 0.8
-        let bottom = rect.minY + inset + 1.9
-        let left = rect.minX + inset + 0.7
-        let right = rect.maxX - inset - 4.0
-        let center = (left + right) / 2.0
+        let top = rect.maxY - inset - 0.4
+        let bottom = rect.minY + inset + 0.9
+        let left = rect.minX + inset
+        let right = rect.maxX - inset
+        let center = rect.midX
 
-        let monogram = NSBezierPath()
-        monogram.move(to: NSPoint(x: left, y: top))
-        monogram.line(to: NSPoint(x: center, y: bottom))
-        monogram.line(to: NSPoint(x: right, y: top))
-        monogram.lineWidth = descriptor.strokeWidth
-        monogram.lineCapStyle = .round
-        monogram.lineJoinStyle = .round
-        monogram.stroke()
+        let triangle = NSBezierPath()
+        triangle.move(to: NSPoint(x: left, y: top))
+        triangle.line(to: NSPoint(x: center, y: bottom))
+        triangle.line(to: NSPoint(x: right, y: top))
+        triangle.close()
+        triangle.lineJoinStyle = .round
+        triangle.lineCapStyle = .round
 
-        guard descriptor.fillsMonogram else { return }
-        let fillPath = NSBezierPath()
-        fillPath.move(to: NSPoint(x: left, y: top - 0.2))
-        fillPath.line(to: NSPoint(x: center, y: bottom + 0.1))
-        fillPath.line(to: NSPoint(x: right, y: top - 0.2))
-        fillPath.close()
-        fillPath.fill()
-    }
+        switch descriptor.monogramStyle {
+        case .openV:
+            let openV = NSBezierPath()
+            openV.move(to: NSPoint(x: left, y: top))
+            openV.line(to: NSPoint(x: center, y: bottom))
+            openV.line(to: NSPoint(x: right, y: top))
+            openV.lineWidth = descriptor.strokeWidth
+            openV.lineCapStyle = .round
+            openV.lineJoinStyle = .round
+            openV.stroke()
 
-    private static func drawBadge(in rect: NSRect, descriptor: StatusBarIconDescriptor) {
-        let radius: CGFloat = 2.5
-        let center = NSPoint(x: rect.maxX - 4.0, y: rect.maxY - 4.0)
-        let badgeRect = NSRect(
-            x: center.x - radius,
-            y: center.y - radius,
-            width: radius * 2.0,
-            height: radius * 2.0
-        )
+        case .outlinedTriangle:
+            triangle.lineWidth = descriptor.strokeWidth
+            triangle.stroke()
 
-        switch descriptor.badgeStyle {
-        case .ring:
-            let ring = NSBezierPath(ovalIn: badgeRect)
-            ring.lineWidth = 1.3
-            ring.stroke()
-
-        case .filled:
-            let filled = NSBezierPath(ovalIn: badgeRect)
-            filled.fill()
-
-        case .progressArc:
-            let arc = NSBezierPath()
-            arc.appendArc(withCenter: center, radius: radius, startAngle: 35, endAngle: 305, clockwise: false)
-            arc.lineWidth = 1.5
-            arc.lineCapStyle = .round
-            arc.stroke()
+        case .filledTriangle:
+            triangle.fill()
         }
     }
 }
