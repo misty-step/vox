@@ -174,6 +174,7 @@ final class MockTextPaster: TextPaster, @unchecked Sendable {
     }
 }
 
+@MainActor
 final class MockPreferences: PreferencesReading, @unchecked Sendable {
     var processingLevel: ProcessingLevel = .light
     var customContext: String = ""
@@ -187,6 +188,7 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
 // MARK: - Tests
 
 @Suite("DictationPipeline")
+@MainActor
 struct DictationPipelineTests {
     let audioURL = URL(fileURLWithPath: "/tmp/test-audio.caf")
 
