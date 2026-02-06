@@ -175,7 +175,7 @@ private func withPipelineTimeout<T: Sendable>(
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
     guard seconds > 0, !seconds.isNaN, !seconds.isInfinite else {
-        throw VoxError.pipelineTimeout
+        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
     }
 
     return try await withThrowingTaskGroup(of: T.self) { group in

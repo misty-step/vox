@@ -408,6 +408,144 @@ struct DictationPipelineTests {
         }
     }
 
+    @Test("Invalid timeout (zero) throws internalError")
+    func process_zeroTimeout_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false,
+            pipelineTimeout: 0
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError = error {
+                // Expected
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError, got \(error)")
+        }
+    }
+
+    @Test("Invalid timeout (negative) throws internalError")
+    func process_negativeTimeout_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false,
+            pipelineTimeout: -5
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError = error {
+                // Expected
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError, got \(error)")
+        }
+    }
+
+    @Test("Invalid timeout (NaN) throws internalError")
+    func process_nanTimeout_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false,
+            pipelineTimeout: .nan
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError = error {
+                // Expected
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError, got \(error)")
+        }
+    }
+
+    @Test("Cancellation during rewrite propagates correctly")
+    func process_cancellationDuringRewrite_propagates() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Hello, world!")]
+        rewriter.delay = 0.5
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let task = Task {
+            try await pipeline.process(audioURL: audioURL)
+        }
+
+        // Give the task time to pass STT and enter rewrite before cancelling
+        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            Issue.record("Expected cancellation error")
+        } catch is CancellationError {
+            // Expected
+        } catch {
+            Issue.record("Expected CancellationError, got \(error)")
+        }
+    }
+
     // MARK: - Edge Cases
 
     @Test("Rewrite produces empty result uses raw transcript")
