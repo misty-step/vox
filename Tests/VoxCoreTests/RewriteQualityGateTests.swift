@@ -116,9 +116,10 @@ final class RewriteQualityGateTests: XCTestCase {
     }
 
     func test_evaluate_singleCharacterRaw_expansionWithinBounds() {
+        // "This is expanded" is 16 chars, ratio = 16/1 = 16.0 which exceeds max of 15.0
         let decision = RewriteQualityGate.evaluate(raw: "a", candidate: "This is expanded", level: .enhance)
 
-        XCTAssertTrue(decision.isAcceptable)
+        XCTAssertFalse(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 16.0, accuracy: 0.0001)
     }
 
@@ -198,16 +199,16 @@ final class RewriteQualityGateTests: XCTestCase {
     }
 
     func test_evaluate_offLevel_alwaysAcceptable() {
-        let testCases = [
-            ("", ""),
-            ("raw", ""),
-            ("", "candidate"),
-            ("short", String(repeating: "x", count: 1000)),
+        let testCases: [(String, String, Bool)] = [
+            ("", "", false),  // Empty candidate is never acceptable
+            ("raw", "", false),  // Empty candidate is never acceptable
+            ("", "candidate", true),
+            ("short", String(repeating: "x", count: 1000), true),
         ]
 
-        for (raw, candidate) in testCases {
+        for (raw, candidate, expectedAcceptable) in testCases {
             let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .off)
-            XCTAssertTrue(decision.isAcceptable, "Failed for raw='\(raw)', candidate='\(candidate)'")
+            XCTAssertEqual(decision.isAcceptable, expectedAcceptable, "Failed for raw='\(raw)', candidate='\(candidate)'")
             XCTAssertEqual(decision.minimumRatio, 0, accuracy: 0.0001)
             XCTAssertNil(decision.maximumRatio)
         }
