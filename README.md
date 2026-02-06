@@ -16,6 +16,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
+- **State-aware visual identity**: consistent menu icon + HUD language for ready/recording/processing
 - **BYOK** (Bring Your Own Keys) for complete control over costs
 - **Secure storage** via macOS Keychain
 

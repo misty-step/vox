@@ -141,7 +141,7 @@ public final class StatusBarController: NSObject {
     private func updateIcon(for state: StatusBarState) {
         guard let button = statusItem.button else { return }
 
-        let icon = createVoxIcon(for: state)
+        let icon = StatusBarIconRenderer.makeIcon(for: state)
         button.image = icon
         button.imagePosition = .imageOnly
 
@@ -153,67 +153,6 @@ public final class StatusBarController: NSObject {
         case .processing:
             button.toolTip = "Vox – Processing..."
         }
-    }
-
-    private func createVoxIcon(for state: StatusBarState) -> NSImage {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size, flipped: false) { rect in
-            // Stroke weight based on processing level
-            let strokeWidth: CGFloat
-            switch state.processingLevel {
-            case .off:        strokeWidth = 1.5
-            case .light:      strokeWidth = 2.0
-            case .aggressive: strokeWidth = 2.5
-            case .enhance:    strokeWidth = 3.0
-            }
-
-            // V path coordinates
-            let inset: CGFloat = 2
-            let top = rect.height - inset
-            let bottom = inset + 2
-            let left = inset + 1
-            let right = rect.width - inset - 1
-            let center = rect.width / 2
-
-            let vPath = NSBezierPath()
-            vPath.move(to: NSPoint(x: left, y: top))
-            vPath.line(to: NSPoint(x: center, y: bottom))
-            vPath.line(to: NSPoint(x: right, y: top))
-            vPath.lineWidth = strokeWidth
-            vPath.lineCapStyle = .round
-            vPath.lineJoinStyle = .round
-
-            NSColor.black.setStroke()
-            NSColor.black.setFill()
-
-            switch state {
-            case .idle:
-                vPath.stroke()
-
-            case .recording:
-                // Filled V - close path to make triangle
-                let fillPath = NSBezierPath()
-                fillPath.move(to: NSPoint(x: left, y: top))
-                fillPath.line(to: NSPoint(x: center, y: bottom))
-                fillPath.line(to: NSPoint(x: right, y: top))
-                fillPath.close()
-                fillPath.fill()
-
-            case .processing:
-                // Ghost outline: hollow V shape (stroke the closed triangle outline)
-                let ghostPath = NSBezierPath()
-                ghostPath.move(to: NSPoint(x: left, y: top))
-                ghostPath.line(to: NSPoint(x: center, y: bottom))
-                ghostPath.line(to: NSPoint(x: right, y: top))
-                ghostPath.close()
-                ghostPath.lineWidth = 1.0
-                ghostPath.stroke()
-            }
-
-            return true
-        }
-        image.isTemplate = true
-        return image
     }
 
     @objc private func selectProcessingLevel(_ sender: NSMenuItem) {

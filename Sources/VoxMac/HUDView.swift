@@ -1,4 +1,5 @@
 import SwiftUI
+import VoxCore
 
 // MARK: - State Management
 
@@ -103,7 +104,11 @@ private enum Design {
     static let borderActive = Color.red.opacity(0.85)
     static let textPrimary = Color.white.opacity(0.92)
     static let textSecondary = Color.white.opacity(0.45)
-    static let accentIndicator = Color(red: 1.0, green: 0.25, blue: 0.25)
+    static let accentIndicator = Color(
+        red: BrandIdentity.accent.red,
+        green: BrandIdentity.accent.green,
+        blue: BrandIdentity.accent.blue
+    )
     static let segmentActive = Color.white.opacity(0.9)
     static let segmentInactive = Color.white.opacity(0.12)
     static let brandMark = Color.white.opacity(0.08)
