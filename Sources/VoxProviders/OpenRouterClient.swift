@@ -28,7 +28,7 @@ public final class OpenRouterClient: RewriteProvider {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("https://vox.app", forHTTPHeaderField: "HTTP-Referer")
+        request.setValue("https://github.com/misty-step/vox", forHTTPHeaderField: "HTTP-Referer")
         request.setValue("Vox", forHTTPHeaderField: "X-Title")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

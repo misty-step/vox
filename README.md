@@ -129,9 +129,12 @@ Contributions welcome. Please:
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Run `swift build` to verify compilation
-5. Submit a pull request
+3. Enable the pre-push hook: `git config core.hooksPath .githooks`
+4. Make your changes
+5. Run `swift build -Xswiftc -warnings-as-errors` to verify
+6. Submit a pull request
+
+The pre-push hook runs a warnings-as-errors build before each push. CI enforces the same check.
 
 Keep changes focused and minimal. Match existing code style.
 

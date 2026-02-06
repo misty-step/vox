@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import VoxCore
+import VoxCore
 import VoxMac
 import VoxProviders
 
@@ -12,6 +12,7 @@ public final class DictationPipeline: DictationProcessing {
     private let rewriteTimeout: TimeInterval
     private let totalTimeout: TimeInterval
 
+    @MainActor
     public init(
         stt: STTProvider,
         rewriter: RewriteProvider,
@@ -69,11 +70,20 @@ public final class DictationPipeline: DictationProcessing {
 
     private func processTranscript(_ transcript: String) async throws -> String {
         var output = transcript
-        let level = prefs.processingLevel
-
+        let preferenceSnapshot = await MainActor.run {
+            (
+                processingLevel: prefs.processingLevel,
+                customContext: prefs.customContext
+            )
+        }
+        let level = preferenceSnapshot.processingLevel
         if level != .off {
             do {
-                let prompt = buildPrompt(level: level, transcript: transcript, customContext: prefs.customContext)
+                let prompt = buildPrompt(
+                    level: level,
+                    transcript: transcript,
+                    customContext: preferenceSnapshot.customContext
+                )
                 let candidate = try await withTimeout(seconds: rewriteTimeout, stage: .rewrite) {
                     try await self.rewriter.rewrite(
                         transcript: transcript,

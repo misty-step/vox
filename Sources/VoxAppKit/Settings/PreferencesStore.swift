@@ -2,6 +2,7 @@ import Foundation
 import VoxCore
 import VoxMac
 
+@MainActor
 public final class PreferencesStore: ObservableObject, PreferencesReading {
     public static let shared = PreferencesStore()
     private let defaults = UserDefaults.standard
@@ -31,42 +32,34 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     }
 
     public var elevenLabsAPIKey: String {
-        get {
-            if let envKey = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"], !envKey.isEmpty {
-                return envKey
-            }
-            return KeychainHelper.load(.elevenLabsAPIKey) ?? ""
-        }
-        set { KeychainHelper.save(newValue, for: .elevenLabsAPIKey); objectWillChange.send() }
+        get { apiKey(env: "ELEVENLABS_API_KEY", keychain: .elevenLabsAPIKey) }
+        set { setAPIKey(newValue, for: .elevenLabsAPIKey) }
     }
 
     public var openRouterAPIKey: String {
-        get {
-            if let envKey = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"], !envKey.isEmpty {
-                return envKey
-            }
-            return KeychainHelper.load(.openRouterAPIKey) ?? ""
-        }
-        set { KeychainHelper.save(newValue, for: .openRouterAPIKey); objectWillChange.send() }
+        get { apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey) }
+        set { setAPIKey(newValue, for: .openRouterAPIKey) }
     }
 
     public var deepgramAPIKey: String {
-        get {
-            if let envKey = ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"], !envKey.isEmpty {
-                return envKey
-            }
-            return KeychainHelper.load(.deepgramAPIKey) ?? ""
-        }
-        set { KeychainHelper.save(newValue, for: .deepgramAPIKey); objectWillChange.send() }
+        get { apiKey(env: "DEEPGRAM_API_KEY", keychain: .deepgramAPIKey) }
+        set { setAPIKey(newValue, for: .deepgramAPIKey) }
     }
 
     public var openAIAPIKey: String {
-        get {
-            if let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"], !envKey.isEmpty {
-                return envKey
-            }
-            return KeychainHelper.load(.openAIAPIKey) ?? ""
+        get { apiKey(env: "OPENAI_API_KEY", keychain: .openAIAPIKey) }
+        set { setAPIKey(newValue, for: .openAIAPIKey) }
+    }
+
+    private func apiKey(env: String, keychain: KeychainHelper.Key) -> String {
+        if let envKey = ProcessInfo.processInfo.environment[env], !envKey.isEmpty {
+            return envKey
         }
-        set { KeychainHelper.save(newValue, for: .openAIAPIKey); objectWillChange.send() }
+        return KeychainHelper.load(keychain) ?? ""
+    }
+
+    private func setAPIKey(_ value: String, for key: KeychainHelper.Key) {
+        KeychainHelper.save(value, for: key)
+        objectWillChange.send()
     }
 }
