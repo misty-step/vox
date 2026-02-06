@@ -7,31 +7,62 @@ import Testing
 
 final class MockSTTProvider: STTProvider, @unchecked Sendable {
     private let lock = NSLock()
-    var results: [Result<String, Error>] = []
+    private var _results: [Result<String, Error>] = []
+    var results: [Result<String, Error>] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _results
+        }
+        set {
+            lock.lock()
+            _results = newValue
+            lock.unlock()
+        }
+    }
     private var _callCount = 0
     var callCount: Int {
         lock.lock()
         defer { lock.unlock() }
         return _callCount
     }
-    var lastAudioURL: URL?
-    var delay: TimeInterval = 0
+    private var _lastAudioURL: URL?
+    var lastAudioURL: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastAudioURL
+    }
+    private var _delay: TimeInterval = 0
+    var delay: TimeInterval {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _delay
+        }
+        set {
+            lock.lock()
+            _delay = newValue
+            lock.unlock()
+        }
+    }
 
     func transcribe(audioURL: URL) async throws -> String {
         lock.lock()
         _callCount += 1
         let index = _callCount - 1
-        lastAudioURL = audioURL
+        _lastAudioURL = audioURL
+        let currentDelay = _delay
+        let resultsSnapshot = _results
         lock.unlock()
 
-        if delay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        if currentDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(currentDelay * 1_000_000_000))
         }
 
-        guard index < results.count else {
+        guard index < resultsSnapshot.count else {
             throw STTError.unknown("No more mock results")
         }
-        switch results[index] {
+        switch resultsSnapshot[index] {
         case .success(let text):
             return text
         case .failure(let error):
@@ -42,35 +73,76 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
 
 final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
     private let lock = NSLock()
-    var results: [Result<String, Error>] = []
+    private var _results: [Result<String, Error>] = []
+    var results: [Result<String, Error>] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _results
+        }
+        set {
+            lock.lock()
+            _results = newValue
+            lock.unlock()
+        }
+    }
     private var _callCount = 0
     var callCount: Int {
         lock.lock()
         defer { lock.unlock() }
         return _callCount
     }
-    var lastTranscript: String?
-    var lastPrompt: String?
-    var lastModel: String?
-    var delay: TimeInterval = 0
+    private var _lastTranscript: String?
+    var lastTranscript: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastTranscript
+    }
+    private var _lastPrompt: String?
+    var lastPrompt: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastPrompt
+    }
+    private var _lastModel: String?
+    var lastModel: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastModel
+    }
+    private var _delay: TimeInterval = 0
+    var delay: TimeInterval {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _delay
+        }
+        set {
+            lock.lock()
+            _delay = newValue
+            lock.unlock()
+        }
+    }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
         lock.lock()
         _callCount += 1
         let index = _callCount - 1
-        lastTranscript = transcript
-        lastPrompt = systemPrompt
-        lastModel = model
+        _lastTranscript = transcript
+        _lastPrompt = systemPrompt
+        _lastModel = model
+        let currentDelay = _delay
+        let resultsSnapshot = _results
         lock.unlock()
 
-        if delay > 0 {
-            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        if currentDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(currentDelay * 1_000_000_000))
         }
 
-        guard index < results.count else {
+        guard index < resultsSnapshot.count else {
             throw RewriteError.unknown("No more mock results")
         }
-        switch results[index] {
+        switch resultsSnapshot[index] {
         case .success(let text):
             return text
         case .failure(let error):

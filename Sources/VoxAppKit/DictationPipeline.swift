@@ -31,7 +31,9 @@ public final class DictationPipeline: DictationProcessing {
     }
 
     public func process(audioURL: URL) async throws -> String {
+        #if DEBUG
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
+        #endif
 
         return try await withTimeout(
             seconds: totalTimeout,
@@ -50,16 +52,17 @@ public final class DictationPipeline: DictationProcessing {
             rawTranscript = try await withTimeout(seconds: sttTimeout, stage: .stt) {
                 try await self.stt.transcribe(audioURL: audioURL)
             }
-        } catch let error as VoxError {
-            print("[Pipeline] STT failed: \(error.localizedDescription)")
-            throw error
         } catch {
+            #if DEBUG
             print("[Pipeline] STT failed: \(error.localizedDescription)")
+            #endif
             throw error
         }
 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        #if DEBUG
         print("[Pipeline] STT complete (\(transcript.count) chars)")
+        #endif
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
         return transcript
     }
@@ -81,15 +84,21 @@ public final class DictationPipeline: DictationProcessing {
                 let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                 output = decision.isAcceptable ? candidate : transcript
                 if !decision.isAcceptable {
+                    #if DEBUG
                     print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                    #endif
                 }
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as VoxError where error == .pipelineTimeout(stage: .rewrite) {
+                #if DEBUG
                 print("[Pipeline] Rewrite timed out, using raw transcript")
+                #endif
                 output = transcript
             } catch {
+                #if DEBUG
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
+                #endif
                 output = transcript
             }
         }
@@ -100,9 +109,13 @@ public final class DictationPipeline: DictationProcessing {
     }
 
     private func pasteText(_ text: String) async throws {
+        #if DEBUG
         print("[Pipeline] Pasting \(text.count) chars")
+        #endif
         try await paster.paste(text: text)
+        #if DEBUG
         print("[Pipeline] Done")
+        #endif
     }
 
     private func buildPrompt(level: ProcessingLevel, transcript: String, customContext: String) -> String {
@@ -115,12 +128,17 @@ public final class DictationPipeline: DictationProcessing {
 
 // MARK: - Timeout Helper
 
-private func withTimeout<T>(
+private func withTimeout<T: Sendable>(
     seconds: TimeInterval,
     stage: PipelineStage,
-    operation: () async throws -> T
+    operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
+    // Guard against invalid timeout values
+    guard seconds > 0, !seconds.isNaN, !seconds.isInfinite else {
+        throw VoxError.pipelineTimeout(stage: stage)
+    }
+
+    return try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask {
             try await operation()
         }
@@ -129,6 +147,7 @@ private func withTimeout<T>(
             throw VoxError.pipelineTimeout(stage: stage)
         }
         guard let result = try await group.next() else {
+            group.cancelAll()
             throw VoxError.pipelineTimeout(stage: stage)
         }
         group.cancelAll()
