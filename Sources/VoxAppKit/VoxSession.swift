@@ -45,7 +45,8 @@ public final class VoxSession: ObservableObject {
             stt: makeSTTProvider(),
             rewriter: OpenRouterClient(apiKey: openRouterKey),
             paster: ClipboardPaster(),
-            prefs: prefs
+            prefs: prefs,
+            enableRewriteCache: true
         )
     }
 

@@ -697,6 +697,67 @@ struct DictationPipelineTests {
         #expect(result == "hello world")
     }
 
+    @Test("Rewrite cache hit skips second rewrite call")
+    func process_rewriteCacheHit_skipsSecondRewriteCall() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("cache phrase one"), .success("cache phrase one")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Cache phrase one.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == "Cache phrase one.")
+        #expect(second == "Cache phrase one.")
+        #expect(stt.callCount == 2)
+        #expect(rewriter.callCount == 1)
+        #expect(paster.callCount == 2)
+    }
+
+    @Test("Rewrite cache key includes processing level/model")
+    func process_rewriteCache_levelChange_missesCache() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("cache phrase two"), .success("cache phrase two")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Hello, world!"), .success("HELLO WORLD!")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        prefs.processingLevel = .aggressive
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == "Hello, world!")
+        #expect(second == "HELLO WORLD!")
+        #expect(rewriter.callCount == 2)
+    }
+
     @Test("Model is passed correctly for each processing level")
     func process_processingLevel_passesCorrectModel() async throws {
         let testCases: [(ProcessingLevel, String)] = [
