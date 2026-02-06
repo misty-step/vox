@@ -34,12 +34,18 @@ private final class NoopPaster: TextPaster {
 }
 
 private func makeTestCAF() throws -> URL {
+    let sampleRate = 16_000.0
+    let durationMilliseconds = 200.0
+    let frameCount = AVAudioFrameCount(sampleRate * (durationMilliseconds / 1_000.0))
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
-    let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
+    guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+        throw VoxError.internalError("Failed to create test audio format")
+    }
     let file = try AVAudioFile(forWriting: url, settings: format.settings)
-    let frameCount = AVAudioFrameCount(16_000 / 5) // 200ms
-    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+        throw VoxError.internalError("Failed to create test audio buffer")
+    }
     buffer.frameLength = frameCount
     if let channelData = buffer.floatChannelData {
         for index in 0..<Int(frameCount) {

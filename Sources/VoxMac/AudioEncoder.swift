@@ -24,22 +24,16 @@ public enum AudioEncoder {
             AVEncoderBitRateKey: 48000  // 48 kbps - optimal for voice
         ]
 
-        guard let outputFormat = AVAudioFormat(settings: opusSettings) else {
-            throw VoxError.internalError("Failed to create Opus output format")
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: opusSettings)
+        guard let conversionFormat = outputFile.processingFormat.standardized else {
+            throw VoxError.internalError("Failed to derive PCM conversion format")
         }
 
-        // AVAudioPCMBuffer only supports PCM formats. Opus resolves to `.otherFormat`,
-        // and attempting to allocate PCM buffers for it throws NSException (uncatchable in Swift).
-        // Bail out so caller can safely fall back to CAF.
-        guard outputFormat.commonFormat != .otherFormat else {
-            throw VoxError.internalError("Opus conversion unavailable on this macOS runtime")
-        }
-
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+        // Convert to the output file's processing format (PCM). AVAudioFile handles
+        // encoding to the compressed Opus container during writes.
+        guard let converter = AVAudioConverter(from: inputFormat, to: conversionFormat) else {
             throw VoxError.internalError("Failed to create audio converter")
         }
-
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: opusSettings)
 
         // Convert in chunks to handle large files efficiently
         let bufferSize = 4096  // frames
@@ -54,7 +48,7 @@ public enum AudioEncoder {
             let status = try convertBuffer(
                 inputBuffer: inputBuffer,
                 converter: converter,
-                outputFormat: outputFormat
+                outputFormat: conversionFormat
             )
 
             if let outputBuffer = status.buffer {
@@ -72,10 +66,16 @@ public enum AudioEncoder {
         converter: AVAudioConverter,
         outputFormat: AVAudioFormat
     ) throws -> (buffer: AVAudioPCMBuffer?, status: AVAudioConverterOutputStatus) {
-        let outputBuffer = AVAudioPCMBuffer(
+        guard outputFormat.commonFormat != .otherFormat else {
+            throw VoxError.internalError("Conversion output format must be PCM-compatible")
+        }
+
+        guard let outputBuffer = AVAudioPCMBuffer(
             pcmFormat: outputFormat,
             frameCapacity: AVAudioFrameCount(4096)
-        )!
+        ) else {
+            throw VoxError.internalError("Failed to allocate conversion output buffer")
+        }
 
         var error: NSError?
         let status = converter.convert(
@@ -105,6 +105,9 @@ public enum AudioEncoder {
             let encodeTime = CFAbsoluteTimeGetCurrent() - startTime
             let opusAttributes = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
             let opusSize = opusAttributes?[.size] as? Int ?? 0
+            guard opusSize > 0 else {
+                throw VoxError.internalError("Opus conversion produced empty output")
+            }
             let ratio = Double(opusSize) / Double(max(cafSize, 1))
             print("[Encoder] Opus conversion: \(String(format: "%.3f", encodeTime))s, \(ratio*100)% of original")
             return (opusURL, .opus, opusSize)
