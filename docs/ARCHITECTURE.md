@@ -152,7 +152,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Area | Module | Files |
 | --- | --- | --- |
 | Entry point | VoxApp | `main.swift` |
-| App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift` |
+| App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift`, `StatusBarIconRenderer.swift` |
 | Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
 | Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
@@ -160,7 +160,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
-| Core | VoxCore | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift` |
+| Core | VoxCore | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
 
 All paths under `Sources/{VoxApp,VoxAppKit,VoxCore,VoxMac,VoxProviders}/`.
 
