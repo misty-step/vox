@@ -5,7 +5,7 @@ Thanks for your interest in Vox. This guide covers everything you need to get st
 ## Prerequisites
 
 - macOS 14 (Sonoma) or later
-- Swift 5.9+ (included with Xcode 16+)
+- Swift 5.9+ (included with Xcode 15+)
 - Git
 
 ## Setup
