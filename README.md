@@ -108,7 +108,8 @@ Sources/
   VoxCore/       # Protocols, errors, decorators (retry/fallback/timeout)
   VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
   VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
-  VoxApp/        # Main executable, UI, pipeline orchestration, settings
+  VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
+  VoxApp/        # Executable entry point (just main.swift)
 ```
 
 ### Supported Models
@@ -125,18 +126,9 @@ Available via OpenRouter:
 
 ## Contributing
 
-Contributions welcome. Please:
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
 
-1. Fork the repository
-2. Create a feature branch
-3. Enable the pre-push hook: `git config core.hooksPath .githooks`
-4. Make your changes
-5. Run `swift build -Xswiftc -warnings-as-errors` to verify
-6. Submit a pull request
-
-The pre-push hook runs a warnings-as-errors build before each push. CI enforces the same check.
-
-Keep changes focused and minimal. Match existing code style.
+Quick version: fork, branch, `swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
 
 ## License
 
