@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 import VoxAppKit
@@ -30,6 +31,29 @@ private final class StubRewriteProvider: RewriteProvider {
 private final class NoopPaster: TextPaster {
     @MainActor
     func paste(text: String) async throws {}
+}
+
+private func makeTestCAF() throws -> URL {
+    let sampleRate = 16_000.0
+    let durationMilliseconds = 200.0
+    let frameCount = AVAudioFrameCount(sampleRate * (durationMilliseconds / 1_000.0))
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
+    guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+        throw VoxError.internalError("Failed to create test audio format")
+    }
+    let file = try AVAudioFile(forWriting: url, settings: format.settings)
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+        throw VoxError.internalError("Failed to create test audio buffer")
+    }
+    buffer.frameLength = frameCount
+    if let channelData = buffer.floatChannelData {
+        for index in 0..<Int(frameCount) {
+            channelData[0][index] = 0
+        }
+    }
+    try file.write(from: buffer)
+    return url
 }
 
 @MainActor
@@ -75,8 +99,8 @@ struct DictationPipelineConcurrencyTests {
                 prefs: prefs
             )
         }
-        let audioURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
+        let audioURL = try makeTestCAF()
+        defer { SecureFileDeleter.delete(at: audioURL) }
 
         _ = try await Task.detached {
             try await pipeline.process(audioURL: audioURL)
