@@ -5,7 +5,12 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 ## Module Overview
 
 ```
-                         VoxApp (top)
+                          VoxApp (executable)
+                    ┌──────────────────────┐
+                    │ main.swift            │
+                    └──────────┬───────────┘
+                               │
+                     VoxAppKit (library)
  ┌─────────────────────────────────────────────────────────────────────┐
  │ AppDelegate • VoxSession • DictationPipeline • StatusBarController   │
  │ SettingsWindowController • PreferencesStore • ProcessingTab          │
@@ -144,19 +149,20 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 
 ## File Locations
 
-| Area | Role | Files |
+| Area | Module | Files |
 | --- | --- | --- |
-| App entry | App lifecycle, hotkey, status bar | `AppDelegate.swift`, `StatusBarController.swift`, `main.swift` |
-| Session + pipeline | State machine, dictation flow | `VoxSession.swift`, `DictationPipeline.swift` |
-| Settings | Preferences + UI | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
-| STT providers | Speech-to-text clients | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
-| STT decorators | Resilience layer | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `FallbackSTTProvider.swift` |
-| Rewrite provider | AI rewriting | `OpenRouterClient.swift`, `RewritePrompts.swift` |
-| Audio | Recording, conversion, device management | `AudioRecorder.swift`, `AudioConverter.swift`, `AudioDeviceManager.swift` |
-| macOS integration | Hotkey, HUD, paste, permissions, keychain | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
-| Core | Protocols + shared types | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift` |
+| Entry point | VoxApp | `main.swift` |
+| App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift` |
+| Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
+| Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
+| STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
+| STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `FallbackSTTProvider.swift` |
+| Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
+| Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
+| macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
+| Core | VoxCore | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift` |
 
-All paths under `Sources/{VoxApp,VoxCore,VoxMac,VoxProviders}/`.
+All paths under `Sources/{VoxApp,VoxAppKit,VoxCore,VoxMac,VoxProviders}/`.
 
 ## Quality Gate
 

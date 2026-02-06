@@ -25,6 +25,7 @@ public final class VoxSession: ObservableObject {
     private let hud: HUDDisplaying
     private let pipeline: DictationProcessing?
     private var levelTimer: Timer?
+    private var recordingStartTime: CFAbsoluteTime?
 
     public init(
         recorder: AudioRecording? = nil,
@@ -147,6 +148,7 @@ public final class VoxSession: ObservableObject {
 
         do {
             try recorder.start()
+            recordingStartTime = CFAbsoluteTimeGetCurrent()
             state = .recording
             hud.showRecording(average: 0, peak: 0)
             startLevelTimer()
@@ -161,6 +163,16 @@ public final class VoxSession: ObservableObject {
         levelTimer = nil
         state = .processing
         hud.showProcessing()
+
+        // Calculate recording duration
+        let recordingDuration: TimeInterval
+        if let startTime = recordingStartTime {
+            recordingDuration = CFAbsoluteTimeGetCurrent() - startTime
+            recordingStartTime = nil
+            print("[Vox] Recording duration: \(String(format: "%.2f", recordingDuration))s")
+        } else {
+            recordingDuration = 0
+        }
 
         let url: URL
         do {
@@ -191,9 +203,12 @@ public final class VoxSession: ObservableObject {
 
         if succeeded {
             SecureFileDeleter.delete(at: url)
+            state = .idle
+            hud.showSuccess()
+        } else {
+            state = .idle
+            hud.hide()
         }
-        state = .idle
-        hud.hide()
     }
 
     private func startLevelTimer() {

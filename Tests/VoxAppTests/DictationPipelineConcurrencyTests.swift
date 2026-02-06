@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 import VoxAppKit
@@ -32,15 +33,36 @@ private final class NoopPaster: TextPaster {
     func paste(text: String) async throws {}
 }
 
+private func makeTestCAF() throws -> URL {
+    let sampleRate = 16_000.0
+    let durationMilliseconds = 200.0
+    let frameCount = AVAudioFrameCount(sampleRate * (durationMilliseconds / 1_000.0))
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
+    guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+        throw VoxError.internalError("Failed to create test audio format")
+    }
+    let file = try AVAudioFile(forWriting: url, settings: format.settings)
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+        throw VoxError.internalError("Failed to create test audio buffer")
+    }
+    buffer.frameLength = frameCount
+    if let channelData = buffer.floatChannelData {
+        for index in 0..<Int(frameCount) {
+            channelData[0][index] = 0
+        }
+    }
+    try file.write(from: buffer)
+    return url
+}
+
 @MainActor
 private final class AccessTrackingPreferences: PreferencesReading {
     private let level: ProcessingLevel
-    private let context: String
     private var offMainAccesses = 0
 
-    init(level: ProcessingLevel, context: String) {
+    init(level: ProcessingLevel) {
         self.level = level
-        self.context = context
     }
 
     var processingLevel: ProcessingLevel {
@@ -48,11 +70,7 @@ private final class AccessTrackingPreferences: PreferencesReading {
         return level
     }
 
-    var customContext: String {
-        recordAccess()
-        return context
-    }
-
+    var customContext: String { "" }
     var selectedInputDeviceUID: String? { nil }
     var elevenLabsAPIKey: String { "" }
     var openRouterAPIKey: String { "" }
@@ -72,7 +90,7 @@ struct DictationPipelineConcurrencyTests {
     @Test("process reads preferences on main thread")
     func process_readsPreferencesOnMainThread() async throws {
         let prefs = await MainActor.run {
-            AccessTrackingPreferences(level: .light, context: "project context")
+            AccessTrackingPreferences(level: .light)
         }
         let pipeline = await MainActor.run {
             DictationPipeline(
@@ -82,8 +100,8 @@ struct DictationPipelineConcurrencyTests {
                 prefs: prefs
             )
         }
-        let audioURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
+        let audioURL = try makeTestCAF()
+        defer { SecureFileDeleter.delete(at: audioURL) }
 
         _ = try await Task.detached {
             try await pipeline.process(audioURL: audioURL)

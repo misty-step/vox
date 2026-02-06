@@ -82,6 +82,8 @@ public final class DeepgramClient: STTProvider {
             mimeType = "audio/mp4"
         case "mp3":
             mimeType = "audio/mpeg"
+        case "ogg", "opus":
+            mimeType = "audio/ogg"
         default:
             mimeType = "application/octet-stream"
         }

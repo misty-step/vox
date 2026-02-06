@@ -47,6 +47,7 @@ final class MockHUD: HUDDisplaying {
     var showRecordingCallCount = 0
     var showProcessingCallCount = 0
     var updateLevelsCallCount = 0
+    var showSuccessCallCount = 0
     var hideCallCount = 0
     var lastProcessingMessage: String?
 
@@ -63,9 +64,23 @@ final class MockHUD: HUDDisplaying {
         lastProcessingMessage = message
     }
 
+    func showSuccess() {
+        showSuccessCallCount += 1
+    }
+
     func hide() {
         hideCallCount += 1
     }
+}
+
+/// Minimal HUD conformer that does NOT override showSuccess — tests the protocol default.
+@MainActor
+final class DefaultShowSuccessHUD: HUDDisplaying {
+    var hideCallCount = 0
+    func showRecording(average: Float, peak: Float) {}
+    func updateLevels(average: Float, peak: Float) {}
+    func showProcessing(message: String) {}
+    func hide() { hideCallCount += 1 }
 }
 
 @MainActor
@@ -160,6 +175,15 @@ struct VoxSessionDITests {
         let hud = MockHUD()
         hud.showProcessing()
         #expect(hud.lastProcessingMessage == "Transcribing")
+    }
+
+    @Test("HUDDisplaying default showSuccess calls hide")
+    @MainActor func hudDefaultShowSuccess() {
+        // Verify protocol default: showSuccess() falls back to hide()
+        // MockHUD overrides showSuccess, so use a minimal conformer
+        let hud = DefaultShowSuccessHUD()
+        hud.showSuccess()
+        #expect(hud.hideCallCount == 1)
     }
 
     @Test("DictationPipeline conforms to DictationProcessing")

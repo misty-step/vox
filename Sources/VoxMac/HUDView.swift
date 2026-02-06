@@ -6,38 +6,74 @@ public enum HUDMode: Equatable {
     case idle
     case recording
     case processing
+    case success
 }
 
+/// Timing constants shared between HUDView and HUDController.
+enum HUDTiming {
+    static let successDisplayDuration: Double = 0.5
+}
+
+@MainActor
 public final class HUDState: ObservableObject {
     @Published public var mode: HUDMode = .idle
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
     @Published public var processingMessage: String = "Transcribing"
-    
+    @Published public var isVisible: Bool = false
+
     private var timer: Timer?
-    
+
     public init() {}
-    
+
+    public func show() {
+        isVisible = true
+    }
+
     public func startRecording() {
         mode = .recording
         recordingDuration = 0
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.recordingDuration += 1
+            Task { @MainActor in
+                self?.recordingDuration += 1
+            }
         }
         RunLoop.main.add(timer!, forMode: .common)
     }
-    
+
     public func startProcessing(message: String = "Transcribing") {
         mode = .processing
         processingMessage = message
         timer?.invalidate()
         timer = nil
     }
-    
+
+    public func startSuccess() {
+        mode = .success
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// Triggers fade-out, then calls completion after animation duration.
+    public func dismiss(reducedMotion: Bool, completion: @escaping () -> Void) {
+        if reducedMotion {
+            isVisible = false
+            stop()
+            completion()
+        } else {
+            isVisible = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + Design.fadeOutDuration) {
+                self.stop()
+                completion()
+            }
+        }
+    }
+
     public func stop() {
         mode = .idle
+        isVisible = false
         timer?.invalidate()
         timer = nil
         recordingDuration = 0
@@ -74,6 +110,9 @@ private enum Design {
     
     // Timing - Respecting 200ms constraint for feedback
     static let transitionDuration: Double = 0.18
+    static let fadeOutDuration: Double = 0.18
+    static let contentTransitionDuration: Double = 0.15
+    static let successDisplayDuration = HUDTiming.successDisplayDuration
     static let pulseDuration: Double = 1.2
     static let segmentUpdateDuration: Double = 0.06
     
@@ -217,20 +256,26 @@ private struct TimerDisplay: View {
 public struct HUDView: View {
     @ObservedObject var state: HUDState
     @Environment(\.reducedMotion) private var reducedMotion
-    
-    @State private var isVisible = false
-    
+
     public init(state: HUDState) {
         self.state = state
     }
-    
+
+    private var isCompact: Bool {
+        state.mode == .idle || state.mode == .success
+    }
+
     public var body: some View {
         content
-            .padding(.horizontal, state.mode == .idle ? 16 : 14)
-            .padding(.vertical, state.mode == .idle ? 8 : 11)
+            .animation(
+                reducedMotion ? nil : .easeInOut(duration: Design.contentTransitionDuration),
+                value: state.mode
+            )
+            .padding(.horizontal, isCompact ? 16 : 14)
+            .padding(.vertical, isCompact ? 8 : 11)
             .frame(
-                width: state.mode == .idle ? Design.widthIdle : Design.widthRecording,
-                height: state.mode == .idle ? Design.heightIdle : Design.heightRecording
+                width: isCompact ? Design.widthIdle : Design.widthRecording,
+                height: isCompact ? Design.heightIdle : Design.heightRecording
             )
             .background(containerBackground)
             .clipShape(RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous))
@@ -241,13 +286,12 @@ public struct HUDView: View {
                 x: 0,
                 y: Design.shadowY
             )
-            .opacity(isVisible ? 1.0 : 0.0)
-            .scaleEffect(isVisible ? 1.0 : 0.97)
-            .onAppear {
-                withAnimation(.easeOut(duration: Design.transitionDuration)) {
-                    isVisible = true
-                }
-            }
+            .opacity(state.isVisible ? 1.0 : 0.0)
+            .scaleEffect(state.isVisible ? 1.0 : 0.97)
+            .animation(
+                reducedMotion ? nil : .easeOut(duration: Design.transitionDuration),
+                value: state.isVisible
+            )
     }
     
     // MARK: - Content Views
@@ -261,6 +305,8 @@ public struct HUDView: View {
             recordingContent
         case .processing:
             processingContent
+        case .success:
+            successContent
         }
     }
     
@@ -313,6 +359,18 @@ public struct HUDView: View {
         }
     }
     
+    private var successContent: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.green.opacity(0.9))
+
+            Text("Done")
+                .font(Design.fontLabel)
+                .foregroundStyle(Design.textPrimary)
+        }
+    }
+
     // MARK: - Container Styling
     
     private var containerBackground: some View {
@@ -322,10 +380,7 @@ public struct HUDView: View {
     
     private var containerBorder: some View {
         RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
-            .stroke(
-                borderColor,
-                lineWidth: state.mode == .recording ? 1.5 : 1.0
-            )
+            .stroke(borderColor, lineWidth: state.mode == .recording ? 1.5 : 1.0)
     }
     
     private var borderColor: Color {
@@ -336,6 +391,8 @@ public struct HUDView: View {
             return Design.borderActive
         case .processing:
             return Design.textSecondary.opacity(0.4)
+        case .success:
+            return Color.green.opacity(0.4)
         }
     }
 }
@@ -345,6 +402,7 @@ public struct HUDView: View {
 #Preview("Idle") {
     let idleState = HUDState()
     idleState.mode = .idle
+    idleState.isVisible = true
     return HUDView(state: idleState)
         .padding(40)
         .background(
@@ -361,6 +419,7 @@ public struct HUDView: View {
     recordingState.mode = .recording
     recordingState.average = 0.2
     recordingState.recordingDuration = 12
+    recordingState.isVisible = true
     return HUDView(state: recordingState)
         .padding(40)
         .background(Color.gray.opacity(0.4))
@@ -371,6 +430,7 @@ public struct HUDView: View {
     recordingState.mode = .recording
     recordingState.average = 0.85
     recordingState.recordingDuration = 145
+    recordingState.isVisible = true
     return HUDView(state: recordingState)
         .padding(40)
         .background(Color.gray.opacity(0.4))
@@ -379,7 +439,17 @@ public struct HUDView: View {
 #Preview("Processing") {
     let processingState = HUDState()
     processingState.mode = .processing
+    processingState.isVisible = true
     return HUDView(state: processingState)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}
+
+#Preview("Success") {
+    let successState = HUDState()
+    successState.mode = .success
+    successState.isVisible = true
+    return HUDView(state: successState)
         .padding(40)
         .background(Color.gray.opacity(0.4))
 }
@@ -389,6 +459,7 @@ public struct HUDView: View {
     recordingState.mode = .recording
     recordingState.average = 0.5
     recordingState.recordingDuration = 67
+    recordingState.isVisible = true
     return HUDView(state: recordingState)
         .environment(\.reducedMotion, true)
         .padding(40)
