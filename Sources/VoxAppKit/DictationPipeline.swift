@@ -174,7 +174,8 @@ private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    guard seconds > 0, !seconds.isNaN, !seconds.isInfinite else {
+    let maxTimeoutSeconds = Double(UInt64.max) / 1_000_000_000
+    guard seconds > 0, seconds.isFinite, seconds <= maxTimeoutSeconds else {
         throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
     }
 
