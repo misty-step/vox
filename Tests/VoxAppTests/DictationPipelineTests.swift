@@ -540,6 +540,39 @@ struct DictationPipelineTests {
         }
     }
 
+    @Test("Invalid timeout (UInt64 boundary) throws internalError")
+    func process_uint64BoundaryTimeout_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false,
+            pipelineTimeout: Double(UInt64.max) / 1_000_000_000
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError = error {
+                // Expected
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError, got \(error)")
+        }
+    }
+
     @Test("Cancellation during rewrite propagates correctly")
     func process_cancellationDuringRewrite_propagates() async {
         let stt = MockSTTProvider()

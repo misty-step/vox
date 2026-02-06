@@ -174,17 +174,14 @@ private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    let maxTimeoutSeconds = Double(UInt64.max) / 1_000_000_000
-    guard seconds > 0, seconds.isFinite, seconds <= maxTimeoutSeconds else {
-        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
-    }
+    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds)
 
     return try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask {
             try await operation()
         }
         group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            try await Task.sleep(nanoseconds: timeoutNanoseconds)
             throw VoxError.pipelineTimeout
         }
         guard let result = try await group.next() else {
@@ -194,4 +191,18 @@ private func withPipelineTimeout<T: Sendable>(
         group.cancelAll()
         return result
     }
+}
+
+private func validatedTimeoutNanoseconds(seconds: TimeInterval) throws -> UInt64 {
+    guard seconds > 0, seconds.isFinite else {
+        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+    }
+
+    let nanoseconds = seconds * 1_000_000_000
+    // Keep conversion strict: values rounding up to 2^64 must be rejected.
+    guard nanoseconds.isFinite, nanoseconds >= 0, nanoseconds < Double(UInt64.max) else {
+        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+    }
+
+    return UInt64(nanoseconds)
 }
