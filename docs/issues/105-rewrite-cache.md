@@ -39,6 +39,7 @@ Reduce end-to-end dictation latency for repeated transcripts without changing us
 ### Cache Policy
 - Max entries: 128.
 - TTL: 600 seconds.
+- Max transcript/result length: 1,024 chars (long transcripts bypass cache).
 - Eviction: remove oldest entry when at capacity.
 
 ### Risk Controls

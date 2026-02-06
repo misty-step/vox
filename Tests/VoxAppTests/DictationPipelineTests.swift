@@ -758,6 +758,39 @@ struct DictationPipelineTests {
         #expect(rewriter.callCount == 2)
     }
 
+    @Test("Rewrite cache skips long transcripts")
+    func process_rewriteCache_longTranscript_skipsCache() async throws {
+        let transcript = String(repeating: "a", count: 1_100)
+        let rewrittenOne = String(repeating: "b", count: 1_100)
+        let rewrittenTwo = String(repeating: "c", count: 1_100)
+
+        let stt = MockSTTProvider()
+        stt.results = [.success(transcript), .success(transcript)]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success(rewrittenOne), .success(rewrittenTwo)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == rewrittenOne)
+        #expect(second == rewrittenTwo)
+        #expect(rewriter.callCount == 2)
+    }
+
     @Test("Model is passed correctly for each processing level")
     func process_processingLevel_passesCorrectModel() async throws {
         let testCases: [(ProcessingLevel, String)] = [

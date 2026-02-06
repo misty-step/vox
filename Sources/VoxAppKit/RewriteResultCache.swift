@@ -2,7 +2,7 @@ import Foundation
 import VoxCore
 
 actor RewriteResultCache {
-    static let shared = RewriteResultCache(maxEntries: 128, ttlSeconds: 600)
+    static let shared = RewriteResultCache(maxEntries: 128, ttlSeconds: 600, maxCharacterCount: 1_024)
 
     private struct CacheKey: Hashable {
         let transcript: String
@@ -17,14 +17,20 @@ actor RewriteResultCache {
 
     private let maxEntries: Int
     private let ttlSeconds: TimeInterval
+    private let maxCharacterCount: Int
     private var entries: [CacheKey: Entry] = [:]
 
-    init(maxEntries: Int, ttlSeconds: TimeInterval) {
+    init(maxEntries: Int, ttlSeconds: TimeInterval, maxCharacterCount: Int) {
         self.maxEntries = max(1, maxEntries)
         self.ttlSeconds = max(1, ttlSeconds)
+        self.maxCharacterCount = max(1, maxCharacterCount)
     }
 
     func value(for transcript: String, level: ProcessingLevel, model: String) -> String? {
+        guard transcript.count <= maxCharacterCount else {
+            return nil
+        }
+
         let now = Date()
         pruneExpiredEntries(now: now)
 
@@ -36,6 +42,10 @@ actor RewriteResultCache {
     }
 
     func store(_ value: String, for transcript: String, level: ProcessingLevel, model: String) {
+        guard transcript.count <= maxCharacterCount, value.count <= maxCharacterCount else {
+            return
+        }
+
         let now = Date()
         pruneExpiredEntries(now: now)
 
