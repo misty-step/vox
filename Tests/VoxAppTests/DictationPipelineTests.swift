@@ -9,41 +9,17 @@ final class MockSTTProvider: STTProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var _results: [Result<String, Error>] = []
     var results: [Result<String, Error>] {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _results
-        }
-        set {
-            lock.lock()
-            _results = newValue
-            lock.unlock()
-        }
+        get { lock.withLock { _results } }
+        set { lock.withLock { _results = newValue } }
     }
     private var _callCount = 0
-    var callCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _callCount
-    }
+    var callCount: Int { lock.withLock { _callCount } }
     private var _lastAudioURL: URL?
-    var lastAudioURL: URL? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _lastAudioURL
-    }
+    var lastAudioURL: URL? { lock.withLock { _lastAudioURL } }
     private var _delay: TimeInterval = 0
     var delay: TimeInterval {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _delay
-        }
-        set {
-            lock.lock()
-            _delay = newValue
-            lock.unlock()
-        }
+        get { lock.withLock { _delay } }
+        set { lock.withLock { _delay = newValue } }
     }
 
     func transcribe(audioURL: URL) async throws -> String {
@@ -74,53 +50,21 @@ final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var _results: [Result<String, Error>] = []
     var results: [Result<String, Error>] {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _results
-        }
-        set {
-            lock.lock()
-            _results = newValue
-            lock.unlock()
-        }
+        get { lock.withLock { _results } }
+        set { lock.withLock { _results = newValue } }
     }
     private var _callCount = 0
-    var callCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _callCount
-    }
+    var callCount: Int { lock.withLock { _callCount } }
     private var _lastTranscript: String?
-    var lastTranscript: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _lastTranscript
-    }
+    var lastTranscript: String? { lock.withLock { _lastTranscript } }
     private var _lastPrompt: String?
-    var lastPrompt: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _lastPrompt
-    }
+    var lastPrompt: String? { lock.withLock { _lastPrompt } }
     private var _lastModel: String?
-    var lastModel: String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _lastModel
-    }
+    var lastModel: String? { lock.withLock { _lastModel } }
     private var _delay: TimeInterval = 0
     var delay: TimeInterval {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _delay
-        }
-        set {
-            lock.lock()
-            _delay = newValue
-            lock.unlock()
-        }
+        get { lock.withLock { _delay } }
+        set { lock.withLock { _delay = newValue } }
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
@@ -152,20 +96,21 @@ final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
 final class MockTextPaster: TextPaster, @unchecked Sendable {
     private let lock = NSLock()
     private var _callCount = 0
-    var callCount: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _callCount
+    var callCount: Int { lock.withLock { _callCount } }
+    private var _lastText: String?
+    var lastText: String? { lock.withLock { _lastText } }
+    private var _shouldThrow = false
+    var shouldThrow: Bool {
+        get { lock.withLock { _shouldThrow } }
+        set { lock.withLock { _shouldThrow = newValue } }
     }
-    var lastText: String?
-    var shouldThrow = false
 
     @MainActor
     func paste(text: String) throws {
         let shouldFail = lock.withLock {
             _callCount += 1
-            lastText = text
-            return shouldThrow
+            _lastText = text
+            return _shouldThrow
         }
 
         if shouldFail {
@@ -177,7 +122,6 @@ final class MockTextPaster: TextPaster, @unchecked Sendable {
 @MainActor
 final class MockPreferences: PreferencesReading, @unchecked Sendable {
     var processingLevel: ProcessingLevel = .light
-    var customContext: String = ""
     var selectedInputDeviceUID: String? = nil
     var elevenLabsAPIKey: String = ""
     var openRouterAPIKey: String = ""
@@ -208,7 +152,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -235,7 +180,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -244,58 +190,6 @@ struct DictationPipelineTests {
         #expect(stt.callCount == 1)
         #expect(rewriter.callCount == 1)
         #expect(paster.callCount == 1)
-    }
-
-    @Test("Process with aggressive processing - rewrite succeeds")
-    func process_aggressiveRewriteSucceeds() async throws {
-        let stt = MockSTTProvider()
-        stt.results = [.success("um like hello world um")]
-
-        let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("Hello, world.")]
-
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-        prefs.processingLevel = .aggressive
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs
-        )
-
-        let result = try await pipeline.process(audioURL: audioURL)
-
-        #expect(result == "Hello, world.")
-        #expect(stt.callCount == 1)
-        #expect(rewriter.callCount == 1)
-    }
-
-    @Test("Process with enhance processing - rewrite succeeds")
-    func process_enhanceRewriteSucceeds() async throws {
-        let stt = MockSTTProvider()
-        stt.results = [.success("meeting notes")]
-
-        let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("# Meeting Notes\n\n- Key point 1\n- Key point 2")]
-
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-        prefs.processingLevel = .enhance
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs
-        )
-
-        let result = try await pipeline.process(audioURL: audioURL)
-
-        #expect(result == "# Meeting Notes\n\n- Key point 1\n- Key point 2")
-        #expect(stt.callCount == 1)
-        #expect(rewriter.callCount == 1)
     }
 
     // MARK: - Error Handling Tests
@@ -313,16 +207,17 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         do {
             _ = try await pipeline.process(audioURL: audioURL)
-            #expect(Bool(false), "Expected error to be thrown")
+            Issue.record("Expected error to be thrown")
         } catch let error as STTError {
             #expect(error == .network("connection lost"))
         } catch {
-            #expect(Bool(false), "Expected STTError, got \(error)")
+            Issue.record("Expected STTError, got \(error)")
         }
 
         #expect(stt.callCount == 1)
@@ -343,16 +238,17 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         do {
             _ = try await pipeline.process(audioURL: audioURL)
-            #expect(Bool(false), "Expected error to be thrown")
+            Issue.record("Expected error to be thrown")
         } catch let error as VoxError {
             #expect(error == .noTranscript)
         } catch {
-            #expect(Bool(false), "Expected VoxError.noTranscript, got \(error)")
+            Issue.record("Expected VoxError.noTranscript, got \(error)")
         }
     }
 
@@ -372,7 +268,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -389,7 +286,6 @@ struct DictationPipelineTests {
         stt.results = [.success("hello world")]
 
         let rewriter = MockRewriteProvider()
-        // Light processing requires 0.6 ratio, "hi" is only 0.4 of "hello world"
         rewriter.results = [.success("hi")]
 
         let paster = MockTextPaster()
@@ -400,7 +296,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -426,91 +323,27 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         do {
             _ = try await pipeline.process(audioURL: audioURL)
-            #expect(Bool(false), "Expected error to be thrown")
+            Issue.record("Expected error to be thrown")
         } catch let error as VoxError {
             #expect(error == .insertionFailed)
         } catch {
-            #expect(Bool(false), "Expected VoxError.insertionFailed, got \(error)")
+            Issue.record("Expected VoxError.insertionFailed, got \(error)")
         }
     }
 
     // MARK: - Timeout Tests
 
-    @Test("STT timeout throws pipelineTimeout")
-    func process_sttTimeout_throwsTimeout() async {
+    @Test("Pipeline timeout throws pipelineTimeout")
+    func process_pipelineTimeout_throwsTimeout() async {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
-        stt.delay = 0.5  // 500ms delay
-
-        let rewriter = MockRewriteProvider()
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs,
-            sttTimeout: 0.1,  // 100ms timeout
-            rewriteTimeout: 10,
-            totalTimeout: 60
-        )
-
-        do {
-            _ = try await pipeline.process(audioURL: audioURL)
-            #expect(Bool(false), "Expected error to be thrown")
-        } catch let error as VoxError {
-            if case .pipelineTimeout(let stage) = error {
-                #expect(stage == .stt)
-            } else {
-                #expect(Bool(false), "Expected pipelineTimeout, got \(error)")
-            }
-        } catch {
-            #expect(Bool(false), "Expected VoxError, got \(error)")
-        }
-    }
-
-    @Test("Rewrite timeout returns raw transcript")
-    func process_rewriteTimeout_returnsRawTranscript() async throws {
-        let stt = MockSTTProvider()
-        stt.results = [.success("hello world")]
-
-        let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("should not complete")]
-        rewriter.delay = 0.5  // 500ms delay
-
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-        prefs.processingLevel = .light
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs,
-            sttTimeout: 10,
-            rewriteTimeout: 0.1,  // 100ms timeout
-            totalTimeout: 60
-        )
-
-        let result = try await pipeline.process(audioURL: audioURL)
-
-        #expect(result == "hello world")
-        #expect(stt.callCount == 1)
-        #expect(rewriter.callCount == 1)
-        #expect(paster.callCount == 1)
-    }
-
-    @Test("Total pipeline timeout throws pipelineTimeout")
-    func process_totalTimeout_throwsTimeout() async {
-        let stt = MockSTTProvider()
-        stt.results = [.success("hello world")]
-        stt.delay = 0.5  // 500ms delay
+        stt.delay = 0.5
 
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
@@ -522,76 +355,18 @@ struct DictationPipelineTests {
             rewriter: rewriter,
             paster: paster,
             prefs: prefs,
-            sttTimeout: 10,
-            rewriteTimeout: 10,
-            totalTimeout: 0.1  // 100ms total timeout
+            enableOpus: false,
+            pipelineTimeout: 0.1
         )
 
         do {
             _ = try await pipeline.process(audioURL: audioURL)
-            #expect(Bool(false), "Expected error to be thrown")
+            Issue.record("Expected error to be thrown")
         } catch let error as VoxError {
-            if case .pipelineTimeout(let stage) = error {
-                #expect(stage == .fullPipeline)
-            } else {
-                #expect(Bool(false), "Expected pipelineTimeout, got \(error)")
-            }
+            #expect(error == .pipelineTimeout)
         } catch {
-            #expect(Bool(false), "Expected VoxError, got \(error)")
+            Issue.record("Expected VoxError.pipelineTimeout, got \(error)")
         }
-    }
-
-    // MARK: - Custom Context Tests
-
-    @Test("Custom context is included in prompt")
-    func process_customContext_includesInPrompt() async throws {
-        let stt = MockSTTProvider()
-        stt.results = [.success("hello world")]
-
-        let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("Hello, world!")]
-
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-        prefs.processingLevel = .light
-        prefs.customContext = "This is a formal email"
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs
-        )
-
-        _ = try await pipeline.process(audioURL: audioURL)
-
-        #expect(rewriter.lastPrompt?.contains("This is a formal email") == true)
-        #expect(rewriter.lastPrompt?.contains("Context:") == true)
-    }
-
-    @Test("Empty custom context excludes context section")
-    func process_emptyContext_excludesContextSection() async throws {
-        let stt = MockSTTProvider()
-        stt.results = [.success("hello world")]
-
-        let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("Hello, world!")]
-
-        let paster = MockTextPaster()
-        let prefs = MockPreferences()
-        prefs.processingLevel = .light
-        prefs.customContext = "   "  // whitespace only
-
-        let pipeline = DictationPipeline(
-            stt: stt,
-            rewriter: rewriter,
-            paster: paster,
-            prefs: prefs
-        )
-
-        _ = try await pipeline.process(audioURL: audioURL)
-
-        #expect(rewriter.lastPrompt?.contains("Context:") == false)
     }
 
     // MARK: - Cancellation Tests
@@ -611,22 +386,25 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let task = Task {
             try await pipeline.process(audioURL: audioURL)
         }
 
+        // Give the task time to enter the pipeline before cancelling
+        try? await Task.sleep(nanoseconds: 10_000_000)
         task.cancel()
 
         do {
             _ = try await task.value
-            #expect(Bool(false), "Expected cancellation error")
+            Issue.record("Expected cancellation error")
         } catch is CancellationError {
             // Expected
         } catch {
-            #expect(Bool(false), "Expected CancellationError, got \(error)")
+            Issue.record("Expected CancellationError, got \(error)")
         }
     }
 
@@ -648,7 +426,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -672,7 +451,8 @@ struct DictationPipelineTests {
             stt: stt,
             rewriter: rewriter,
             paster: paster,
-            prefs: prefs
+            prefs: prefs,
+            enableOpus: false
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -703,7 +483,8 @@ struct DictationPipelineTests {
                 stt: stt,
                 rewriter: rewriter,
                 paster: paster,
-                prefs: prefs
+                prefs: prefs,
+                enableOpus: false
             )
 
             _ = try await pipeline.process(audioURL: audioURL)

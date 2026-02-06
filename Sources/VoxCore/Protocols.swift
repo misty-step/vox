@@ -48,7 +48,6 @@ public protocol DictationProcessing: Sendable {
 @MainActor
 public protocol PreferencesReading: AnyObject, Sendable {
     var processingLevel: ProcessingLevel { get }
-    var customContext: String { get }
     var selectedInputDeviceUID: String? { get }
     var elevenLabsAPIKey: String { get }
     var openRouterAPIKey: String { get }

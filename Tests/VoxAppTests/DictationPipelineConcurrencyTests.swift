@@ -70,7 +70,6 @@ private final class AccessTrackingPreferences: PreferencesReading {
         return level
     }
 
-    var customContext: String { "" }
     var selectedInputDeviceUID: String? { nil }
     var elevenLabsAPIKey: String { "" }
     var openRouterAPIKey: String { "" }

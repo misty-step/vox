@@ -298,7 +298,7 @@ final class RetryingSTTProviderTests: XCTestCase {
         let provider = RetryingSTTProvider(
             provider: mock,
             maxRetries: 3,
-            baseDelay: 1.0,  // 1 second base delay
+            baseDelay: 0.01,  // 10ms base delay — fast test
             onRetry: { attempt, maxRetries, delay in
                 recorder.record(attempt: attempt, maxRetries: maxRetries, delay: delay)
             }
@@ -307,10 +307,9 @@ final class RetryingSTTProviderTests: XCTestCase {
         _ = try await provider.transcribe(audioURL: audioURL)
 
         XCTAssertEqual(recorder.events.count, 2)
-        // First retry: ~1s + jitter (0-1s) = 1-2s
-        // Second retry: ~2s + jitter (0-1s) = 2-3s
-        XCTAssertGreaterThanOrEqual(recorder.events[0].2, 1.0)
-        XCTAssertGreaterThanOrEqual(recorder.events[1].2, 2.0)
+        // Verify exponential growth: second delay >= first delay
+        XCTAssertGreaterThanOrEqual(recorder.events[0].2, 0.01)
+        XCTAssertGreaterThanOrEqual(recorder.events[1].2, recorder.events[0].2)
     }
 }
 

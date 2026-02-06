@@ -35,18 +35,8 @@ final class VoxErrorTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "Something went wrong")
     }
 
-    func test_errorDescription_pipelineTimeout_stt() {
-        let error = VoxError.pipelineTimeout(stage: .stt)
-        XCTAssertEqual(error.errorDescription, "Transcription timed out. Try again or check your connection.")
-    }
-
-    func test_errorDescription_pipelineTimeout_rewrite() {
-        let error = VoxError.pipelineTimeout(stage: .rewrite)
-        XCTAssertEqual(error.errorDescription, "Text processing timed out. Try again or check your connection.")
-    }
-
-    func test_errorDescription_pipelineTimeout_fullPipeline() {
-        let error = VoxError.pipelineTimeout(stage: .fullPipeline)
+    func test_errorDescription_pipelineTimeout() {
+        let error = VoxError.pipelineTimeout
         XCTAssertEqual(error.errorDescription, "Processing timed out. Try again or check your connection.")
     }
 
@@ -56,39 +46,9 @@ final class VoxErrorTests: XCTestCase {
         XCTAssertEqual(VoxError.noTranscript, VoxError.noTranscript)
         XCTAssertEqual(VoxError.insertionFailed, VoxError.insertionFailed)
         XCTAssertEqual(VoxError.provider("msg"), VoxError.provider("msg"))
+        XCTAssertEqual(VoxError.pipelineTimeout, VoxError.pipelineTimeout)
 
         XCTAssertNotEqual(VoxError.noTranscript, VoxError.insertionFailed)
         XCTAssertNotEqual(VoxError.provider("a"), VoxError.provider("b"))
-    }
-
-    func test_equatable_pipelineTimeout() {
-        XCTAssertEqual(
-            VoxError.pipelineTimeout(stage: .stt),
-            VoxError.pipelineTimeout(stage: .stt)
-        )
-        XCTAssertNotEqual(
-            VoxError.pipelineTimeout(stage: .stt),
-            VoxError.pipelineTimeout(stage: .rewrite)
-        )
-    }
-}
-
-// MARK: - PipelineStage Tests
-
-final class PipelineStageTests: XCTestCase {
-
-    func test_displayName() {
-        XCTAssertEqual(PipelineStage.stt.displayName, "Transcription")
-        XCTAssertEqual(PipelineStage.rewrite.displayName, "Text processing")
-        XCTAssertEqual(PipelineStage.fullPipeline.displayName, "Processing")
-    }
-
-    func test_equatable() {
-        XCTAssertEqual(PipelineStage.stt, PipelineStage.stt)
-        XCTAssertEqual(PipelineStage.rewrite, PipelineStage.rewrite)
-        XCTAssertEqual(PipelineStage.fullPipeline, PipelineStage.fullPipeline)
-
-        XCTAssertNotEqual(PipelineStage.stt, PipelineStage.rewrite)
-        XCTAssertNotEqual(PipelineStage.rewrite, PipelineStage.fullPipeline)
     }
 }

@@ -40,21 +40,12 @@ private func formatBytes(_ bytes: Int) -> String {
     return String(format: "%.1fMB", Double(bytes) / (1024 * 1024))
 }
 
-private struct PipelineResult: Sendable {
-    let text: String
-    let sttTime: TimeInterval
-    let rewriteTime: TimeInterval
-    let pasteTime: TimeInterval
-}
-
 public final class DictationPipeline: DictationProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
     private let prefs: PreferencesReading
-    private let sttTimeout: TimeInterval
-    private let rewriteTimeout: TimeInterval
-    private let totalTimeout: TimeInterval
+    private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
 
     @MainActor
@@ -64,18 +55,14 @@ public final class DictationPipeline: DictationProcessing {
         paster: TextPaster,
         prefs: PreferencesReading? = nil,
         enableOpus: Bool = true,
-        sttTimeout: TimeInterval = 15,
-        rewriteTimeout: TimeInterval = 10,
-        totalTimeout: TimeInterval = 30
+        pipelineTimeout: TimeInterval = 120
     ) {
         self.stt = stt
         self.rewriter = rewriter
         self.paster = paster
         self.prefs = prefs ?? PreferencesStore.shared
         self.enableOpus = enableOpus
-        self.sttTimeout = sttTimeout
-        self.rewriteTimeout = rewriteTimeout
-        self.totalTimeout = totalTimeout
+        self.pipelineTimeout = pipelineTimeout
     }
 
     public func process(audioURL: URL) async throws -> String {
@@ -110,33 +97,12 @@ public final class DictationPipeline: DictationProcessing {
         print("[Pipeline] Starting processing for \(audioURL.lastPathComponent)")
         #endif
 
-        let result = try await withTimeout(seconds: totalTimeout, stage: .fullPipeline) {
-            let (transcript, sttTime) = try await self.performSTT(audioURL: uploadURL)
-            let (finalText, rewriteTime) = try await self.processTranscript(transcript)
-            let pasteTime = try await self.pasteText(finalText)
-            return PipelineResult(
-                text: finalText,
-                sttTime: sttTime,
-                rewriteTime: rewriteTime,
-                pasteTime: pasteTime
-            )
-        }
-
-        timing.sttTime = result.sttTime
-        timing.rewriteTime = result.rewriteTime
-        timing.pasteTime = result.pasteTime
-        #if DEBUG
-        print(timing.summary())
-        #endif
-        return result.text
-    }
-
-    private func performSTT(audioURL: URL) async throws -> (text: String, duration: TimeInterval) {
-        let sttStart = CFAbsoluteTimeGetCurrent()
+        // STT stage
         let rawTranscript: String
+        let sttStart = CFAbsoluteTimeGetCurrent()
         do {
-            rawTranscript = try await withTimeout(seconds: sttTimeout, stage: .stt) {
-                try await self.stt.transcribe(audioURL: audioURL)
+            rawTranscript = try await withPipelineTimeout(seconds: pipelineTimeout) {
+                try await self.stt.transcribe(audioURL: uploadURL)
             }
         } catch {
             #if DEBUG
@@ -144,40 +110,26 @@ public final class DictationPipeline: DictationProcessing {
             #endif
             throw error
         }
+        timing.sttTime = CFAbsoluteTimeGetCurrent() - sttStart
 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         #if DEBUG
         print("[Pipeline] STT complete (\(transcript.count) chars)")
         #endif
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
-        return (transcript, CFAbsoluteTimeGetCurrent() - sttStart)
-    }
 
-    private func processTranscript(_ transcript: String) async throws -> (text: String, duration: TimeInterval) {
+        // Rewrite stage
         var output = transcript
-        var rewriteTime: TimeInterval = 0
-        let preferenceSnapshot = await MainActor.run {
-            (
-                processingLevel: prefs.processingLevel,
-                customContext: prefs.customContext
-            )
-        }
-        let level = preferenceSnapshot.processingLevel
+        let level = await MainActor.run { prefs.processingLevel }
         if level != .off {
             let rewriteStart = CFAbsoluteTimeGetCurrent()
             do {
-                let prompt = buildPrompt(
-                    level: level,
+                let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
+                let candidate = try await rewriter.rewrite(
                     transcript: transcript,
-                    customContext: preferenceSnapshot.customContext
+                    systemPrompt: prompt,
+                    model: level.defaultModel
                 )
-                let candidate = try await withTimeout(seconds: rewriteTimeout, stage: .rewrite) {
-                    try await self.rewriter.rewrite(
-                        transcript: transcript,
-                        systemPrompt: prompt,
-                        model: level.defaultModel
-                    )
-                }
                 let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                 output = decision.isAcceptable ? candidate : transcript
                 if !decision.isAcceptable {
@@ -187,55 +139,43 @@ public final class DictationPipeline: DictationProcessing {
                 }
             } catch is CancellationError {
                 throw CancellationError()
-            } catch let error as VoxError where error == .pipelineTimeout(stage: .rewrite) {
-                #if DEBUG
-                print("[Pipeline] Rewrite timed out, using raw transcript")
-                #endif
-                output = transcript
             } catch {
                 #if DEBUG
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
                 #endif
                 output = transcript
             }
-            rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
+            timing.rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
         }
 
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalText.isEmpty else { throw VoxError.noTranscript }
-        return (finalText, rewriteTime)
-    }
 
-    private func pasteText(_ text: String) async throws -> TimeInterval {
+        // Paste stage
         let pasteStart = CFAbsoluteTimeGetCurrent()
         #if DEBUG
-        print("[Pipeline] Pasting \(text.count) chars")
+        print("[Pipeline] Pasting \(finalText.count) chars")
         #endif
-        try await paster.paste(text: text)
-        #if DEBUG
-        print("[Pipeline] Done")
-        #endif
-        return CFAbsoluteTimeGetCurrent() - pasteStart
-    }
+        try await paster.paste(text: finalText)
+        timing.pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
-    private func buildPrompt(level: ProcessingLevel, transcript: String, customContext: String) -> String {
-        let base = RewritePrompts.prompt(for: level, transcript: transcript)
-        let trimmed = customContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return base }
-        return "\(base)\n\nContext:\n\(trimmed)"
+        #if DEBUG
+        print(timing.summary())
+        #endif
+        return finalText
     }
 }
 
 // MARK: - Timeout Helper
 
-private func withTimeout<T: Sendable>(
+/// Wraps an async operation with a deadline.
+/// Used to cap the STT fallback chain (4 providers × retries = 360s worst-case without this).
+private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
-    stage: PipelineStage,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    // Guard against invalid timeout values
     guard seconds > 0, !seconds.isNaN, !seconds.isInfinite else {
-        throw VoxError.pipelineTimeout(stage: stage)
+        throw VoxError.pipelineTimeout
     }
 
     return try await withThrowingTaskGroup(of: T.self) { group in
@@ -244,11 +184,11 @@ private func withTimeout<T: Sendable>(
         }
         group.addTask {
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            throw VoxError.pipelineTimeout(stage: stage)
+            throw VoxError.pipelineTimeout
         }
         guard let result = try await group.next() else {
             group.cancelAll()
-            throw VoxError.pipelineTimeout(stage: stage)
+            throw VoxError.pipelineTimeout
         }
         group.cancelAll()
         return result

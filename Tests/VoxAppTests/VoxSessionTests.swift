@@ -103,7 +103,6 @@ final class MockPipeline: DictationProcessing {
 @MainActor
 final class MockPreferencesStore: PreferencesReading {
     let processingLevel: ProcessingLevel = .light
-    let customContext: String = ""
     let selectedInputDeviceUID: String? = nil
     let elevenLabsAPIKey: String = ""
     let openRouterAPIKey: String = ""
