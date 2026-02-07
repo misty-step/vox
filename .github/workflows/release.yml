@@ -40,15 +40,32 @@ jobs:
           MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
-          test -n "$MACOS_CERTIFICATE_P12_BASE64"
-          test -n "$MACOS_CERTIFICATE_PASSWORD"
-          test -n "$MACOS_KEYCHAIN_PASSWORD"
-          test -n "$MACOS_SIGNING_IDENTITY"
+          require_secret() {
+            local name="$1"
+            local value="$2"
+            if [[ -z "$value" ]]; then
+              echo "Error: required secret '$name' is missing or empty." >&2
+              exit 1
+            fi
+          }
+
+          require_secret "MACOS_CERTIFICATE_P12_BASE64" "$MACOS_CERTIFICATE_P12_BASE64"
+          require_secret "MACOS_CERTIFICATE_PASSWORD" "$MACOS_CERTIFICATE_PASSWORD"
+          require_secret "MACOS_KEYCHAIN_PASSWORD" "$MACOS_KEYCHAIN_PASSWORD"
+          require_secret "MACOS_SIGNING_IDENTITY" "$MACOS_SIGNING_IDENTITY"
 
           CERT_PATH="$RUNNER_TEMP/vox-signing.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
 
-          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          if ! echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"; then
+            echo "Error: MACOS_CERTIFICATE_P12_BASE64 is not valid base64." >&2
+            exit 1
+          fi
+          if [[ ! -s "$CERT_PATH" ]]; then
+            echo "Error: decoded certificate file is empty: $CERT_PATH" >&2
+            exit 1
+          fi
+
           security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -65,9 +82,18 @@ jobs:
           MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
           MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
         run: |
-          test -n "$MACOS_NOTARY_APPLE_ID"
-          test -n "$MACOS_NOTARY_APP_PASSWORD"
-          test -n "$MACOS_TEAM_ID"
+          require_secret() {
+            local name="$1"
+            local value="$2"
+            if [[ -z "$value" ]]; then
+              echo "Error: required secret '$name' is missing or empty." >&2
+              exit 1
+            fi
+          }
+
+          require_secret "MACOS_NOTARY_APPLE_ID" "$MACOS_NOTARY_APPLE_ID"
+          require_secret "MACOS_NOTARY_APP_PASSWORD" "$MACOS_NOTARY_APP_PASSWORD"
+          require_secret "MACOS_TEAM_ID" "$MACOS_TEAM_ID"
 
           xcrun notarytool store-credentials "$VOX_NOTARY_PROFILE" \
             --apple-id "$MACOS_NOTARY_APPLE_ID" \

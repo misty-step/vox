@@ -103,6 +103,10 @@ render_plist() {
         -e "s/__VOX_APP_VERSION__/$version/g" \
         -e "s/__VOX_BUILD_NUMBER__/$build_number/g" \
         "$PLIST_TEMPLATE_PATH" >"$PLIST_OUTPUT_PATH"
+
+    if ! plutil -lint "$PLIST_OUTPUT_PATH" >/dev/null; then
+        die "generated plist is invalid: $PLIST_OUTPUT_PATH"
+    fi
 }
 
 build_binary() {
@@ -165,6 +169,7 @@ main() {
     require_command codesign
     require_command ditto
     require_command xcrun
+    require_command plutil
 
     if [[ "$SKIP_NOTARIZE" -eq 0 ]]; then
         require_command spctl
