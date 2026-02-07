@@ -136,6 +136,10 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
 struct DictationPipelineTests {
     let audioURL = URL(fileURLWithPath: "/tmp/test-audio.caf")
 
+    private func makeRewriteCache() -> RewriteResultCache {
+        RewriteResultCache(maxEntries: 16, ttlSeconds: 60, maxCharacterCount: 1_024)
+    }
+
     // MARK: - Basic Flow Tests
 
     @Test("Process with STT only - processing level off")
@@ -695,6 +699,103 @@ struct DictationPipelineTests {
         let result = try await pipeline.process(audioURL: audioURL)
 
         #expect(result == "hello world")
+    }
+
+    @Test("Rewrite cache hit skips second rewrite call")
+    func process_rewriteCacheHit_skipsSecondRewriteCall() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("cache phrase one"), .success("cache phrase one")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Cache phrase one.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == "Cache phrase one.")
+        #expect(second == "Cache phrase one.")
+        #expect(stt.callCount == 2)
+        #expect(rewriter.callCount == 1)
+        #expect(paster.callCount == 2)
+    }
+
+    @Test("Rewrite cache key includes processing level/model")
+    func process_rewriteCache_levelChange_missesCache() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("cache phrase two"), .success("cache phrase two")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Hello, world!"), .success("HELLO WORLD!")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        prefs.processingLevel = .aggressive
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == "Hello, world!")
+        #expect(second == "HELLO WORLD!")
+        #expect(rewriter.callCount == 2)
+    }
+
+    @Test("Rewrite cache skips long transcripts")
+    func process_rewriteCache_longTranscript_skipsCache() async throws {
+        let transcript = String(repeating: "a", count: 1_100)
+        let rewrittenOne = String(repeating: "b", count: 1_100)
+        let rewrittenTwo = String(repeating: "c", count: 1_100)
+
+        let stt = MockSTTProvider()
+        stt.results = [.success(transcript), .success(transcript)]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success(rewrittenOne), .success(rewrittenTwo)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(audioURL: audioURL)
+        let second = try await pipeline.process(audioURL: audioURL)
+
+        #expect(first == rewrittenOne)
+        #expect(second == rewrittenTwo)
+        #expect(rewriter.callCount == 2)
     }
 
     @Test("Model is passed correctly for each processing level")

@@ -45,15 +45,41 @@ public final class DictationPipeline: DictationProcessing {
     private let rewriter: RewriteProvider
     private let paster: TextPaster
     private let prefs: PreferencesReading
+    private let rewriteCache: RewriteResultCache
     private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
+    private let enableRewriteCache: Bool
 
     @MainActor
-    public init(
+    public convenience init(
         stt: STTProvider,
         rewriter: RewriteProvider,
         paster: TextPaster,
         prefs: PreferencesReading? = nil,
+        enableRewriteCache: Bool = false,
+        enableOpus: Bool = true,
+        pipelineTimeout: TimeInterval = 120
+    ) {
+        self.init(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: .shared,
+            enableRewriteCache: enableRewriteCache,
+            enableOpus: enableOpus,
+            pipelineTimeout: pipelineTimeout
+        )
+    }
+
+    @MainActor
+    init(
+        stt: STTProvider,
+        rewriter: RewriteProvider,
+        paster: TextPaster,
+        prefs: PreferencesReading? = nil,
+        rewriteCache: RewriteResultCache,
+        enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
         pipelineTimeout: TimeInterval = 120
     ) {
@@ -61,6 +87,8 @@ public final class DictationPipeline: DictationProcessing {
         self.rewriter = rewriter
         self.paster = paster
         self.prefs = prefs ?? PreferencesStore.shared
+        self.rewriteCache = rewriteCache
+        self.enableRewriteCache = enableRewriteCache
         self.enableOpus = enableOpus
         self.pipelineTimeout = pipelineTimeout
     }
@@ -121,17 +149,40 @@ public final class DictationPipeline: DictationProcessing {
         let level = await MainActor.run { prefs.processingLevel }
         if level != .off {
             let rewriteStart = CFAbsoluteTimeGetCurrent()
+            let model = level.defaultModel
             do {
-                let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
-                let candidate = try await rewriter.rewrite(
-                    transcript: transcript,
-                    systemPrompt: prompt,
-                    model: level.defaultModel
-                )
-                let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                output = decision.isAcceptable ? candidate : transcript
-                if !decision.isAcceptable {
-                    print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                if enableRewriteCache,
+                   let cached = await rewriteCache.value(
+                    for: transcript,
+                    level: level,
+                    model: model
+                ) {
+                    output = cached
+                    #if DEBUG
+                    print("[Pipeline] Rewrite cache hit")
+                    #endif
+                } else {
+                    let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
+                    let candidate = try await rewriter.rewrite(
+                        transcript: transcript,
+                        systemPrompt: prompt,
+                        model: model
+                    )
+                    let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
+                    if decision.isAcceptable {
+                        output = candidate
+                        if enableRewriteCache {
+                            await rewriteCache.store(
+                                candidate,
+                                for: transcript,
+                                level: level,
+                                model: model
+                            )
+                        }
+                    } else {
+                        output = transcript
+                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                    }
                 }
             } catch is CancellationError {
                 throw CancellationError()
