@@ -76,7 +76,7 @@ struct AudioEncoderTests {
         let opusSize = try FileManager.default.attributesOfItem(atPath: opusURL.path)[.size] as! Int
         #expect(opusSize < cafSize, "Opus (\(opusSize)B) should be smaller than CAF (\(cafSize)B)")
         // Expect at least 3x compression for voice-rate audio
-        #expect(opusSize * 3 < cafSize, "Expected at least 3x compression, got \(cafSize)/\(opusSize) = \(cafSize/max(opusSize,1))x")
+        #expect(opusSize * 3 < cafSize, "Expected at least 3x compression, got \(cafSize)/\(opusSize) = \(cafSize/max(opusSize, 1))x")
     }
 
     @Test("encodeForUpload returns opus format on success")

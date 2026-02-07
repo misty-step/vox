@@ -1,0 +1,26 @@
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+
+only_rules:
+  - colon
+  - comma
+  - control_statement
+  - empty_count
+  - empty_parameters
+  - force_try
+  - function_name_whitespace
+  - implicit_getter
+  - redundant_discardable_let
+  - redundant_nil_coalescing
+  - return_arrow_whitespace
+  - statement_position
+  - syntactic_sugar
+  - trailing_newline
+  - trailing_semicolon
+  - unneeded_break_in_switch
+  - unused_import
+  - vertical_whitespace

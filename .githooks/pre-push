@@ -1,5 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+echo "[pre-push] Linting..."
+if ! ./scripts/lint.sh 2>&1; then
+    echo ""
+    echo "[pre-push] FAILED: Fix lint violations before pushing."
+    exit 1
+fi
 
 echo "[pre-push] Building with warnings-as-errors..."
 if ! swift build -Xswiftc -warnings-as-errors 2>&1; then

@@ -20,6 +20,12 @@ jobs:
       - name: Show Swift version
         run: swift --version
 
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Lint
+        run: ./scripts/lint.sh
+
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
