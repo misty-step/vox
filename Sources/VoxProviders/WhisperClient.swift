@@ -70,7 +70,15 @@ public final class WhisperClient: STTProvider {
         }
     }
 
+    /// Prepare audio for upload. Opus-in-CAF files are sent directly (Whisper auto-detects codec).
+    /// PCM CAF must be converted to WAV since Whisper doesn't accept raw CAF reliably.
     private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+        // Opus-in-CAF (from AudioEncoder) — send directly, Whisper auto-detects
+        if url.lastPathComponent.hasSuffix(".opus.caf") {
+            return (url, "audio/x-caf", nil)
+        }
+
+        // PCM CAF — convert to WAV for compatibility
         if url.pathExtension.lowercased() == "caf" {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)

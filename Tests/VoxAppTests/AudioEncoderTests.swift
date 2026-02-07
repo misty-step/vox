@@ -76,7 +76,7 @@ struct AudioEncoderTests {
             }
         }
 
-        #expect(result.format == .opus)
+        #expect(result.encoded)
         #expect(result.bytes > 0)
         #expect(result.url != cafURL, "Opus URL should differ from input CAF")
     }
@@ -88,14 +88,36 @@ struct AudioEncoderTests {
 
         let result = await AudioEncoder.encodeForUpload(cafURL: bogusURL)
 
-        #expect(result.format == .caf)
+        #expect(!result.encoded)
         #expect(result.url == bogusURL)
     }
 
-    @Test("AudioFormat mimeType values are correct")
-    func audioFormat_mimeTypes() {
-        #expect(AudioFormat.opus.mimeType == "audio/x-caf")
-        #expect(AudioFormat.caf.mimeType == "audio/x-caf")
+    @Test("convertToOpus throws for corrupted input")
+    func convertToOpus_throwsForCorruptedInput() async throws {
+        let corruptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corrupt-\(UUID().uuidString).caf")
+        try Data("not audio data".utf8).write(to: corruptURL)
+        defer { SecureFileDeleter.delete(at: corruptURL) }
+
+        let opusURL = corruptURL.deletingPathExtension().appendingPathExtension("opus.caf")
+        defer { SecureFileDeleter.delete(at: opusURL) }
+
+        await #expect(throws: (any Error).self) {
+            try await AudioEncoder.convertToOpus(inputURL: corruptURL, outputURL: opusURL)
+        }
+    }
+
+    @Test("encodeForUpload falls back for corrupted input")
+    func encodeForUpload_fallsBackForCorruptedInput() async throws {
+        let corruptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corrupt-\(UUID().uuidString).caf")
+        try Data("not audio data".utf8).write(to: corruptURL)
+        defer { SecureFileDeleter.delete(at: corruptURL) }
+
+        let result = await AudioEncoder.encodeForUpload(cafURL: corruptURL)
+
+        #expect(!result.encoded)
+        #expect(result.url == corruptURL)
     }
 
     @Test("Opus output is valid CAF with Opus codec")
@@ -112,5 +134,23 @@ struct AudioEncoderTests {
         let file = try AVAudioFile(forReading: opusURL)
         let formatID = file.fileFormat.settings[AVFormatIDKey] as? UInt32 ?? 0
         #expect(formatID == kAudioFormatOpus, "Output should be Opus encoded, got format ID \(formatID)")
+    }
+
+    @Test("Opus output filename has .opus.caf extension")
+    func encodeForUpload_outputHasOpusCafExtension() async throws {
+        let cafURL = try makeTestCAF(durationSeconds: 1.0)
+        defer { SecureFileDeleter.delete(at: cafURL) }
+
+        let result = await AudioEncoder.encodeForUpload(cafURL: cafURL)
+        defer {
+            if result.url != cafURL {
+                SecureFileDeleter.delete(at: result.url)
+            }
+        }
+
+        #expect(result.url.lastPathComponent.hasSuffix(".opus.caf"),
+                "Output should have .opus.caf extension, got \(result.url.lastPathComponent)")
+        #expect(result.url.pathExtension == "caf",
+                "pathExtension should be 'caf' for provider compatibility")
     }
 }

@@ -106,7 +106,7 @@ public final class DictationPipeline: DictationProcessing {
             let encodeStart = CFAbsoluteTimeGetCurrent()
             let result = await AudioEncoder.encodeForUpload(cafURL: audioURL)
             timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
-            if result.format == .opus {
+            if result.encoded {
                 timing.encodedSizeBytes = result.bytes
             }
             uploadURL = result.url

@@ -24,28 +24,34 @@ public enum AudioEncoder {
             "-d", "opus",
             "-b", "\(opusBitrate)",
         ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            process.terminationHandler = { proc in
-                if proc.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    continuation.resume(throwing: VoxError.internalError(
-                        "Opus encoding failed (afconvert exit \(proc.terminationStatus))"
-                    ))
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                process.terminationHandler = { proc in
+                    if proc.terminationStatus == 0 {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: VoxError.internalError(
+                            "Opus encoding failed (afconvert exit \(proc.terminationStatus))"
+                        ))
+                    }
+                }
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
+        } onCancel: {
+            process.terminate()
         }
     }
 
     /// Converts CAF to Opus with fallback.
     /// Returns the Opus URL on success, or the original CAF URL on failure.
-    public static func encodeForUpload(cafURL: URL) async -> (url: URL, format: AudioFormat, bytes: Int) {
+    public static func encodeForUpload(cafURL: URL) async -> (url: URL, encoded: Bool, bytes: Int) {
         let opusURL = cafURL.deletingPathExtension().appendingPathExtension("opus.caf")
         let cafAttributes = try? FileManager.default.attributesOfItem(atPath: cafURL.path)
         let cafSize = cafAttributes?[.size] as? Int ?? 0
@@ -62,30 +68,11 @@ public enum AudioEncoder {
             let ratio = Double(opusSize) / Double(max(cafSize, 1))
             let pct = String(format: "%.0f", ratio * 100)
             print("[Encoder] Opus: \(String(format: "%.2f", encodeTime))s, \(pct)% of original")
-            return (opusURL, .opus, opusSize)
+            return (opusURL, true, opusSize)
         } catch {
             print("[Encoder] Opus failed: \(error.localizedDescription), using CAF fallback")
             SecureFileDeleter.delete(at: opusURL)
-            return (cafURL, .caf, cafSize)
-        }
-    }
-}
-
-public enum AudioFormat: Sendable {
-    case opus
-    case caf
-
-    public var mimeType: String {
-        switch self {
-        case .opus: return "audio/x-caf"
-        case .caf: return "audio/x-caf"
-        }
-    }
-
-    public var fileExtension: String {
-        switch self {
-        case .opus: return "caf"
-        case .caf: return "caf"
+            return (cafURL, false, cafSize)
         }
     }
 }
