@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import VoxCore
 
@@ -13,23 +12,23 @@ public final class DeepgramClient: STTProvider {
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.deepgram.com/v1/listen?model=nova-3")!
-        let payload = try await prepareAudioFile(for: audioURL)
+        let (uploadURL, contentType, tempURL) = try await prepareAudioFile(for: audioURL)
         defer {
-            if let tempURL = payload.tempURL {
+            if let tempURL {
                 SecureFileDeleter.delete(at: tempURL)
             }
         }
 
-        let fileSize = (try? FileManager.default.attributesOfItem(atPath: payload.fileURL.path)[.size] as? Int) ?? 0
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path)[.size] as? Int) ?? 0
         let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
-        print("[Deepgram] Transcribing \(sizeMB)MB audio (\(payload.mimeType))")
+        print("[Deepgram] Transcribing \(sizeMB)MB audio (\(contentType))")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue(payload.mimeType, forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.upload(for: request, fromFile: payload.fileURL)
+        let (data, response) = try await session.upload(for: request, fromFile: uploadURL)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
         }
@@ -60,7 +59,15 @@ public final class DeepgramClient: STTProvider {
         }
     }
 
+    /// Prepare audio for upload. Opus-in-CAF files are sent directly (Deepgram auto-detects codec).
+    /// PCM CAF must be converted to WAV since Deepgram doesn't accept raw CAF reliably.
     private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+        // Opus-in-CAF (from AudioEncoder) — send directly, Deepgram auto-detects
+        if url.lastPathComponent.hasSuffix(".opus.caf") {
+            return (url, "audio/x-caf", nil)
+        }
+
+        // PCM CAF — convert to WAV for compatibility
         if url.pathExtension.lowercased() == "caf" {
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString)
