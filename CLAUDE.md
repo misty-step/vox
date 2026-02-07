@@ -71,6 +71,8 @@ Option+Space → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optiona
 
 **API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional).
 
+**Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
+
 ## Concurrency Gotchas
 
 - `@MainActor` protocol default params can't call `@MainActor` init in default expressions — use `nil` + resolve in body
