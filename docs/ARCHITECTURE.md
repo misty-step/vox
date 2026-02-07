@@ -101,35 +101,19 @@ Note: this changes the system-wide default. See [issue #136](https://github.com/
 
 App wires concrete providers in `DictationPipeline`. Swap implementations without touching flow logic.
 
-## Extension Points for Vox Pro
+## Wrapper Integration Points
 
-From `vision.md`: "Vox is the engine; future Vox Pro wrapper adds auth/billing/sync."
-Design supports composition, not fork.
+Vox is designed for composition. Wrappers should import Vox modules and add behavior through seams, not by forking `VoxSession` or `DictationPipeline`.
 
-Injection points:
-- Wrap providers (STT / rewrite) with decorators
-- Replace `PreferencesStore` for remote config
-- Replace `KeychainHelper` for managed secrets
+Primary seams:
+- Decorate `STTProvider` / `RewriteProvider` for network policy, retries, and metering.
+- Replace `PreferencesReading` and key providers for managed configuration.
+- Implement `SessionExtension` to add:
+  - authorization before recording starts
+  - completion hooks with `DictationUsageEvent` metadata
+  - failure hooks with sanitized reason codes
 
-Recommended wrapper pattern:
-
-```swift
-public final class MeteredRewriteProvider: RewriteProvider {
-    private let base: RewriteProvider
-    private let onUsage: (Int) -> Void
-
-    public init(base: RewriteProvider, onUsage: @escaping (Int) -> Void) {
-        self.base = base
-        self.onUsage = onUsage
-    }
-
-    public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        let output = try await base.rewrite(transcript: transcript, systemPrompt: systemPrompt, model: model)
-        onUsage(output.count)
-        return output
-    }
-}
-```
+`SessionExtension` keeps a small interface while hiding session internals. The default implementation (`NoopSessionExtension`) preserves current OSS behavior.
 
 ## API Configuration
 
@@ -160,7 +144,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
-| Core | VoxCore | `Protocols.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
+| Core | VoxCore | `Protocols.swift`, `SessionExtension.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
 
 All paths under `Sources/{VoxApp,VoxAppKit,VoxCore,VoxMac,VoxProviders}/`.
 

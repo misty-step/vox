@@ -23,6 +23,9 @@ public final class VoxSession: ObservableObject {
     private let recorder: AudioRecording
     private let prefs: PreferencesReading
     private let hud: HUDDisplaying
+    private let sessionExtension: SessionExtension
+    private let requestMicrophoneAccess: () async -> Bool
+    private let errorPresenter: (String) -> Void
     private let pipeline: DictationProcessing?
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
@@ -31,12 +34,26 @@ public final class VoxSession: ObservableObject {
         recorder: AudioRecording? = nil,
         pipeline: DictationProcessing? = nil,
         hud: HUDDisplaying? = nil,
-        prefs: PreferencesReading? = nil
+        prefs: PreferencesReading? = nil,
+        sessionExtension: SessionExtension? = nil,
+        requestMicrophoneAccess: (() async -> Bool)? = nil,
+        errorPresenter: ((String) -> Void)? = nil
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
         self.hud = hud ?? HUDController()
         self.prefs = prefs ?? PreferencesStore.shared
+        self.sessionExtension = sessionExtension ?? NoopSessionExtension()
+        self.requestMicrophoneAccess = requestMicrophoneAccess ?? {
+            await PermissionManager.requestMicrophoneAccess()
+        }
+        self.errorPresenter = errorPresenter ?? { message in
+            let alert = NSAlert()
+            alert.messageText = "Vox"
+            alert.informativeText = message
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
     }
 
     private func makePipeline() -> DictationProcessing {
@@ -136,8 +153,16 @@ public final class VoxSession: ObservableObject {
     }
 
     private func startRecording() async {
-        let granted = await PermissionManager.requestMicrophoneAccess()
+        do {
+            try await sessionExtension.authorizeRecordingStart()
+        } catch {
+            presentError(error.localizedDescription)
+            return
+        }
+
+        let granted = await requestMicrophoneAccess()
         guard granted else {
+            await sessionExtension.didFailDictation(reason: "microphone_permission_denied")
             presentError("Microphone permission is required.")
             return
         }
@@ -154,6 +179,7 @@ public final class VoxSession: ObservableObject {
             hud.showRecording(average: 0, peak: 0)
             startLevelTimer()
         } catch {
+            await sessionExtension.didFailDictation(reason: "recording_start_failed")
             presentError(error.localizedDescription)
             state = .idle
         }
@@ -179,6 +205,7 @@ public final class VoxSession: ObservableObject {
         do {
             url = try recorder.stop()
         } catch {
+            await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)
             state = .idle
             hud.hide()
@@ -188,13 +215,22 @@ public final class VoxSession: ObservableObject {
         var succeeded = false
         do {
             let active = pipeline ?? makePipeline()
-            _ = try await active.process(audioURL: url)
+            let output = try await active.process(audioURL: url)
+            await sessionExtension.didCompleteDictation(
+                event: DictationUsageEvent(
+                    recordingDuration: recordingDuration,
+                    outputCharacterCount: output.count,
+                    processingLevel: prefs.processingLevel
+                )
+            )
             succeeded = true
         } catch is CancellationError {
             print("[Vox] Processing cancelled")
+            await sessionExtension.didFailDictation(reason: "processing_cancelled")
             SecureFileDeleter.delete(at: url)
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
+            await sessionExtension.didFailDictation(reason: "processing_failed")
             if let saved = preserveAudio(at: url) {
                 presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
             } else {
@@ -225,10 +261,6 @@ public final class VoxSession: ObservableObject {
     }
 
     private func presentError(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Vox"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.runModal()
+        errorPresenter(message)
     }
 }

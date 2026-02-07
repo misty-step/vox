@@ -89,14 +89,41 @@ final class MockPipeline: DictationProcessing {
     var lastAudioURL: URL?
     var result: String = "mock transcript"
     var shouldThrow = false
+    var errorToThrow: Error?
 
     func process(audioURL: URL) async throws -> String {
         processCallCount += 1
         lastAudioURL = audioURL
+        if let errorToThrow {
+            throw errorToThrow
+        }
         if shouldThrow {
             throw VoxError.noTranscript
         }
         return result
+    }
+}
+
+@MainActor
+final class MockSessionExtension: SessionExtension {
+    var authorizeCallCount = 0
+    var shouldRejectAuthorize = false
+    var completionEvents: [DictationUsageEvent] = []
+    var failureReasons: [String] = []
+
+    func authorizeRecordingStart() async throws {
+        authorizeCallCount += 1
+        if shouldRejectAuthorize {
+            throw VoxError.internalError("Not authorized")
+        }
+    }
+
+    func didCompleteDictation(event: DictationUsageEvent) async {
+        completionEvents.append(event)
+    }
+
+    func didFailDictation(reason: String) async {
+        failureReasons.append(reason)
     }
 }
 
@@ -189,5 +216,122 @@ struct VoxSessionDITests {
     func pipelineConformance() {
         // Verify at compile time that DictationPipeline conforms
         let _: DictationProcessing.Type = DictationPipeline.self
+    }
+
+    @Test("SessionExtension receives usage event on successful dictation")
+    @MainActor func sessionExtensionCompletion() async {
+        let recorder = MockRecorder()
+        let hud = MockHUD()
+        let pipeline = MockPipeline()
+        pipeline.result = "hello world"
+        let prefs = MockPreferencesStore()
+        let sessionExtension = MockSessionExtension()
+        var errors: [String] = []
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: hud,
+            prefs: prefs,
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(sessionExtension.authorizeCallCount == 1)
+        #expect(sessionExtension.completionEvents.count == 1)
+        #expect(sessionExtension.failureReasons.isEmpty)
+        #expect(errors.isEmpty)
+
+        if let event = sessionExtension.completionEvents.first {
+            #expect(event.processingLevel == .light)
+            #expect(event.outputCharacterCount == pipeline.result.count)
+            #expect(event.recordingDuration >= 0)
+        }
+    }
+
+    @Test("SessionExtension observes microphone denial")
+    @MainActor func sessionExtensionMicrophoneDenied() async {
+        let recorder = MockRecorder()
+        let sessionExtension = MockSessionExtension()
+        var errors: [String] = []
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: { false },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+
+        #expect(sessionExtension.authorizeCallCount == 1)
+        #expect(sessionExtension.failureReasons == ["microphone_permission_denied"])
+        #expect(recorder.startCallCount == 0)
+        #expect(errors.count == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("SessionExtension observes processing cancellation")
+    @MainActor func sessionExtensionProcessingCancellation() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.errorToThrow = CancellationError()
+        let sessionExtension = MockSessionExtension()
+        var errors: [String] = []
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(sessionExtension.failureReasons.contains("processing_cancelled"))
+        #expect(sessionExtension.completionEvents.isEmpty)
+        #expect(errors.isEmpty)
+        #expect(session.state == .idle)
+    }
+
+    @Test("SessionExtension can deny start before microphone request")
+    @MainActor func sessionExtensionAuthorizeFailure() async {
+        let recorder = MockRecorder()
+        let sessionExtension = MockSessionExtension()
+        sessionExtension.shouldRejectAuthorize = true
+        var errors: [String] = []
+        var permissionChecks = 0
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: {
+                permissionChecks += 1
+                return true
+            },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+
+        #expect(sessionExtension.authorizeCallCount == 1)
+        #expect(permissionChecks == 0)
+        #expect(recorder.startCallCount == 0)
+        #expect(errors.count == 1)
+        #expect(session.state == .idle)
     }
 }
