@@ -52,4 +52,6 @@ Reduce end-to-end dictation latency for repeated transcripts without changing us
 ### Test Plan
 - `process_rewriteCacheHit_skipsSecondRewriteCall`
 - `process_rewriteCache_levelChange_missesCache`
+- `process_rewriteCache_longTranscript_skipsCache`
+- `RewriteResultCacheTests` (TTL, eviction, key isolation, size guard)
 - Full strict build/test run to guard regressions.
