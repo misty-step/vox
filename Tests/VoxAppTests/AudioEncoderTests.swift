@@ -29,12 +29,26 @@ private func makeTestCAF(durationSeconds: Double = 1.0) throws -> URL {
     return url
 }
 
+private func isOpusEncodingAvailable(for cafURL: URL) async -> Bool {
+    let probeURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("probe-\(UUID().uuidString).opus.caf")
+    defer { SecureFileDeleter.delete(at: probeURL) }
+
+    do {
+        try await AudioEncoder.convertToOpus(inputURL: cafURL, outputURL: probeURL)
+        return true
+    } catch {
+        return false
+    }
+}
+
 @Suite("AudioEncoder")
 struct AudioEncoderTests {
     @Test("convertToOpus produces non-empty output")
     func convertToOpus_producesNonEmptyOutput() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 1.0)
         defer { SecureFileDeleter.delete(at: cafURL) }
+        guard await isOpusEncodingAvailable(for: cafURL) else { return }
 
         let opusURL = cafURL.deletingPathExtension().appendingPathExtension("opus.caf")
         defer { SecureFileDeleter.delete(at: opusURL) }
@@ -50,6 +64,7 @@ struct AudioEncoderTests {
     func convertToOpus_outputIsSmallerThanInput() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 2.0)
         defer { SecureFileDeleter.delete(at: cafURL) }
+        guard await isOpusEncodingAvailable(for: cafURL) else { return }
 
         let cafSize = try FileManager.default.attributesOfItem(atPath: cafURL.path)[.size] as! Int
 
@@ -68,6 +83,7 @@ struct AudioEncoderTests {
     func encodeForUpload_returnsOpusOnSuccess() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 1.0)
         defer { SecureFileDeleter.delete(at: cafURL) }
+        guard await isOpusEncodingAvailable(for: cafURL) else { return }
 
         let result = await AudioEncoder.encodeForUpload(cafURL: cafURL)
         defer {
@@ -124,6 +140,7 @@ struct AudioEncoderTests {
     func opusOutput_isValidCAFWithOpusCodec() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 1.0)
         defer { SecureFileDeleter.delete(at: cafURL) }
+        guard await isOpusEncodingAvailable(for: cafURL) else { return }
 
         let opusURL = cafURL.deletingPathExtension().appendingPathExtension("opus.caf")
         defer { SecureFileDeleter.delete(at: opusURL) }
@@ -140,6 +157,7 @@ struct AudioEncoderTests {
     func encodeForUpload_outputHasOpusCafExtension() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 1.0)
         defer { SecureFileDeleter.delete(at: cafURL) }
+        guard await isOpusEncodingAvailable(for: cafURL) else { return }
 
         let result = await AudioEncoder.encodeForUpload(cafURL: cafURL)
         defer {

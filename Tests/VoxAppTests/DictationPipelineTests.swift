@@ -129,6 +129,27 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
     var openAIAPIKey: String = ""
 }
 
+final class MockAudioConverter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _callCount = 0
+    var callCount: Int { lock.withLock { _callCount } }
+    private var _lastInputURL: URL?
+    var lastInputURL: URL? { lock.withLock { _lastInputURL } }
+    let outputURL: URL
+
+    init(outputURL: URL) {
+        self.outputURL = outputURL
+    }
+
+    func convert(_ inputURL: URL) async throws -> URL {
+        lock.withLock {
+            _callCount += 1
+            _lastInputURL = inputURL
+        }
+        return outputURL
+    }
+}
+
 // MARK: - Tests
 
 @Suite("DictationPipeline")
@@ -166,6 +187,42 @@ struct DictationPipelineTests {
         #expect(stt.callCount == 1)
         #expect(rewriter.callCount == 0)
         #expect(paster.callCount == 1)
+    }
+
+    @Test("Process converts CAF to OGG before STT")
+    func process_enableOpus_passesOggToSTT() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+        let convertedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("converted-\(UUID().uuidString)")
+            .appendingPathExtension("ogg")
+        FileManager.default.createFile(atPath: convertedURL.path, contents: Data([0x4F, 0x67, 0x67, 0x53]))
+        let converter = MockAudioConverter(outputURL: convertedURL)
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            }
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 1)
+        #expect(converter.lastInputURL == audioURL)
+        #expect(stt.callCount == 1)
+        #expect(stt.lastAudioURL == convertedURL)
+        #expect(stt.lastAudioURL?.pathExtension.lowercased() == "ogg")
     }
 
     @Test("Process with light processing - rewrite succeeds")

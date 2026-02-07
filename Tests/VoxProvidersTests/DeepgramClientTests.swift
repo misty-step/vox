@@ -3,6 +3,37 @@ import VoxProviders
 import XCTest
 
 final class DeepgramClientTests: XCTestCase {
+    override func tearDown() {
+        URLProtocolStub.requestHandler = nil
+        super.tearDown()
+    }
+
+    func test_transcribe_oggSetsAudioOggContentType() async throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("ogg")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        try Data([0x4F, 0x67, 0x67, 0x53]).write(to: fileURL)
+
+        URLProtocolStub.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "audio/ogg")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let payload = Data("""
+                {"results":{"channels":[{"alternatives":[{"transcript":"ok"}]}]}}
+                """.utf8)
+            return (response, payload)
+        }
+
+        let client = DeepgramClient(apiKey: "test-key", session: makeStubbedSession())
+        let transcript = try await client.transcribe(audioURL: fileURL)
+        XCTAssertEqual(transcript, "ok")
+    }
+
     func testTranscribeCAFFile() async throws {
         guard let apiKey = ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"], !apiKey.isEmpty else {
             throw XCTSkip("DEEPGRAM_API_KEY not set")
