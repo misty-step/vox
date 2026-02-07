@@ -69,6 +69,18 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
    .build/release/Vox
    ```
 
+### Signed Distribution (Maintainers)
+
+For a signed + notarized `Vox.app` distribution artifact:
+
+```bash
+export VOX_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export VOX_NOTARY_PROFILE="vox-notary"
+./scripts/release-macos.sh
+```
+
+See `docs/RELEASE.md` for full setup (certificate, notary credentials, CI secrets).
+
 ### Configuration
 
 API keys can be provided two ways:
@@ -98,6 +110,9 @@ swift build
 
 # Build release
 swift build -c release
+
+# Build signed + notarized release app bundle (maintainers)
+./scripts/release-macos.sh
 
 # Lint
 ./scripts/lint.sh

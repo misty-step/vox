@@ -39,6 +39,18 @@ cp .env.example .env.local  # Add your keys
 ./scripts/run.sh
 ```
 
+## Release (Maintainers)
+
+Build signed + notarized distribution artifacts:
+
+```bash
+export VOX_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export VOX_NOTARY_PROFILE="vox-notary"
+./scripts/release-macos.sh
+```
+
+Full release setup and CI secrets are documented in `docs/RELEASE.md`.
+
 ## Project Structure
 
 Five SwiftPM targets with a strict dependency hierarchy:
