@@ -6,6 +6,7 @@ Thanks for your interest in Vox. This guide covers everything you need to get st
 
 - macOS 14 (Sonoma) or later
 - Swift 5.9+ (included with Xcode 15+)
+- [SwiftLint](https://github.com/realm/SwiftLint) (`brew install swiftlint`)
 - Git
 
 ## Setup
@@ -17,13 +18,14 @@ git config core.hooksPath .githooks
 swift build
 ```
 
-The pre-push hook enforces warnings-as-errors builds — same check CI runs.
+The pre-push hook enforces lint + warnings-as-errors builds — same checks CI runs.
 
 ## Building and Testing
 
 ```bash
 swift build                                    # Debug build
 swift build -c release                         # Release build
+./scripts/lint.sh                              # SwiftLint (strict)
 swift build -Xswiftc -warnings-as-errors       # Strict build (matches CI)
 swift test                                     # Run all tests
 swift test --filter VoxCoreTests               # Run one test target
@@ -87,7 +89,7 @@ Keep commits focused. Reference issues when applicable: `feat(stt): add Opus com
 1. Fork the repository
 2. Create a feature branch (`feat/`, `fix/`, `refactor/`, `docs/`)
 3. Make your changes
-4. Verify: `swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`
+4. Verify: `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`
 5. Submit a pull request
 
 PRs should include:

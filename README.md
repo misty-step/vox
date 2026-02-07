@@ -44,6 +44,7 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 
 - macOS 14 (Sonoma) or later
 - Swift 5.9+
+- [SwiftLint](https://github.com/realm/SwiftLint) (development only, `brew install swiftlint`)
 - [ElevenLabs API key](https://elevenlabs.io) for primary transcription
 - [OpenRouter API key](https://openrouter.ai) for AI rewriting
 - [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription
@@ -98,6 +99,9 @@ swift build
 # Build release
 swift build -c release
 
+# Lint
+./scripts/lint.sh
+
 # Run with verbose output
 swift run Vox
 ```
@@ -129,7 +133,7 @@ Available via OpenRouter:
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
 
-Quick version: fork, branch, `swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
+Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
 
 ## License
 
