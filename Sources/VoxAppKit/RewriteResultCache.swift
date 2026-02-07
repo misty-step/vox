@@ -22,7 +22,7 @@ actor RewriteResultCache {
 
     init(maxEntries: Int, ttlSeconds: TimeInterval, maxCharacterCount: Int) {
         self.maxEntries = max(1, maxEntries)
-        self.ttlSeconds = max(1, ttlSeconds)
+        self.ttlSeconds = max(0.001, ttlSeconds)
         self.maxCharacterCount = max(1, maxCharacterCount)
     }
 

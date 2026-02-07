@@ -28,6 +28,7 @@ Reduce end-to-end dictation latency for repeated transcripts without changing us
 ### Design Summary
 - Add `RewriteResultCache` actor in `VoxAppKit`.
 - `DictationPipeline` consults cache before calling `RewriteProvider`.
+- `DictationPipeline` receives cache dependency via initializer (shared by default, overridable for test isolation).
 - Cache only stores quality-gate-accepted rewrite output.
 - Cache enabled explicitly by `VoxSession` (`enableRewriteCache: true`).
 

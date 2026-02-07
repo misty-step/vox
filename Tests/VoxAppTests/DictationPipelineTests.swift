@@ -136,6 +136,10 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
 struct DictationPipelineTests {
     let audioURL = URL(fileURLWithPath: "/tmp/test-audio.caf")
 
+    private func makeRewriteCache() -> RewriteResultCache {
+        RewriteResultCache(maxEntries: 16, ttlSeconds: 60, maxCharacterCount: 1_024)
+    }
+
     // MARK: - Basic Flow Tests
 
     @Test("Process with STT only - processing level off")
@@ -714,6 +718,7 @@ struct DictationPipelineTests {
             rewriter: rewriter,
             paster: paster,
             prefs: prefs,
+            rewriteCache: makeRewriteCache(),
             enableRewriteCache: true,
             enableOpus: false
         )
@@ -745,6 +750,7 @@ struct DictationPipelineTests {
             rewriter: rewriter,
             paster: paster,
             prefs: prefs,
+            rewriteCache: makeRewriteCache(),
             enableRewriteCache: true,
             enableOpus: false
         )
@@ -779,6 +785,7 @@ struct DictationPipelineTests {
             rewriter: rewriter,
             paster: paster,
             prefs: prefs,
+            rewriteCache: makeRewriteCache(),
             enableRewriteCache: true,
             enableOpus: false
         )

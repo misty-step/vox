@@ -41,18 +41,17 @@ private func formatBytes(_ bytes: Int) -> String {
 }
 
 public final class DictationPipeline: DictationProcessing {
-    private static let rewriteCache = RewriteResultCache.shared
-
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
     private let prefs: PreferencesReading
+    private let rewriteCache: RewriteResultCache
     private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
     private let enableRewriteCache: Bool
 
     @MainActor
-    public init(
+    public convenience init(
         stt: STTProvider,
         rewriter: RewriteProvider,
         paster: TextPaster,
@@ -61,10 +60,34 @@ public final class DictationPipeline: DictationProcessing {
         enableOpus: Bool = true,
         pipelineTimeout: TimeInterval = 120
     ) {
+        self.init(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: .shared,
+            enableRewriteCache: enableRewriteCache,
+            enableOpus: enableOpus,
+            pipelineTimeout: pipelineTimeout
+        )
+    }
+
+    @MainActor
+    init(
+        stt: STTProvider,
+        rewriter: RewriteProvider,
+        paster: TextPaster,
+        prefs: PreferencesReading? = nil,
+        rewriteCache: RewriteResultCache,
+        enableRewriteCache: Bool = false,
+        enableOpus: Bool = true,
+        pipelineTimeout: TimeInterval = 120
+    ) {
         self.stt = stt
         self.rewriter = rewriter
         self.paster = paster
         self.prefs = prefs ?? PreferencesStore.shared
+        self.rewriteCache = rewriteCache
         self.enableRewriteCache = enableRewriteCache
         self.enableOpus = enableOpus
         self.pipelineTimeout = pipelineTimeout
@@ -129,12 +152,15 @@ public final class DictationPipeline: DictationProcessing {
             let model = level.defaultModel
             do {
                 if enableRewriteCache,
-                   let cached = await Self.rewriteCache.value(
+                   let cached = await rewriteCache.value(
                     for: transcript,
                     level: level,
                     model: model
                 ) {
                     output = cached
+                    #if DEBUG
+                    print("[Pipeline] Rewrite cache hit")
+                    #endif
                 } else {
                     let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
                     let candidate = try await rewriter.rewrite(
@@ -143,15 +169,18 @@ public final class DictationPipeline: DictationProcessing {
                         model: model
                     )
                     let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                    output = decision.isAcceptable ? candidate : transcript
-                    if enableRewriteCache, decision.isAcceptable {
-                        await Self.rewriteCache.store(
-                            candidate,
-                            for: transcript,
-                            level: level,
-                            model: model
-                        )
+                    if decision.isAcceptable {
+                        output = candidate
+                        if enableRewriteCache {
+                            await rewriteCache.store(
+                                candidate,
+                                for: transcript,
+                                level: level,
+                                model: model
+                            )
+                        }
                     } else {
+                        output = transcript
                         print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
                     }
                 }
