@@ -1,101 +1,52 @@
-import AVFoundation
 import Foundation
 import VoxCore
 
 /// Converts audio files to Opus format for efficient upload.
-/// Opus at 48kbps provides excellent voice quality at ~8x smaller than CAF.
+/// Uses `afconvert` (macOS built-in) which reliably produces compact Opus-in-CAF files.
+/// AVAudioFile cannot write Opus to Ogg containers (ExtAudioFileWrite 'pck?' error)
+/// and produces bloated CAF files (~240KB overhead from pre-allocated packet tables).
 public enum AudioEncoder {
-    /// Converts CAF (PCM) to Opus format.
+    /// Bitrate for Opus voice encoding (24 kbps — optimal for speech).
+    static let opusBitrate = 24_000
+
+    /// Converts CAF (PCM) to Opus in a CAF container via `afconvert`.
     /// - Parameters:
-    ///   - inputURL: Source CAF file URL
-    ///   - outputURL: Destination Opus file URL (should end in .ogg for ElevenLabs compatibility)
+    ///   - inputURL: Source CAF file URL (PCM 16kHz mono expected)
+    ///   - outputURL: Destination file URL (must have `.caf` extension)
     /// - Throws: VoxError if conversion fails
     public static func convertToOpus(inputURL: URL, outputURL: URL) async throws {
-        let inputFile = try AVAudioFile(forReading: inputURL)
-        guard let inputFormat = inputFile.processingFormat.standardized else {
-            throw VoxError.internalError("Failed to get input audio format")
-        }
-
-        // Opus output format: 48kbps, mono, 48kHz (Opus native rate)
-        let opusSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatOpus,
-            AVSampleRateKey: 48000,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 48000  // 48 kbps - optimal for voice
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
+        process.arguments = [
+            inputURL.path,
+            "-o", outputURL.path,
+            "-f", "caff",
+            "-d", "opus",
+            "-b", "\(opusBitrate)",
         ]
 
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: opusSettings)
-        guard let conversionFormat = outputFile.processingFormat.standardized else {
-            throw VoxError.internalError("Failed to derive PCM conversion format")
-        }
-
-        // Convert to the output file's processing format (PCM). AVAudioFile handles
-        // encoding to the compressed Opus container during writes.
-        guard let converter = AVAudioConverter(from: inputFormat, to: conversionFormat) else {
-            throw VoxError.internalError("Failed to create audio converter")
-        }
-
-        // Convert in chunks to handle large files efficiently
-        let bufferSize = 4096  // frames
-        let inputBuffer = AVAudioPCMBuffer(
-            pcmFormat: inputFormat,
-            frameCapacity: AVAudioFrameCount(bufferSize)
-        )!
-
-        while inputFile.framePosition < inputFile.length {
-            try inputFile.read(into: inputBuffer)
-
-            let status = try convertBuffer(
-                inputBuffer: inputBuffer,
-                converter: converter,
-                outputFormat: conversionFormat
-            )
-
-            if let outputBuffer = status.buffer {
-                try outputFile.write(from: outputBuffer)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            process.terminationHandler = { proc in
+                if proc.terminationStatus == 0 {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: VoxError.internalError(
+                        "Opus encoding failed (afconvert exit \(proc.terminationStatus))"
+                    ))
+                }
             }
-
-            if status.status == .endOfStream {
-                break
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
             }
         }
-    }
-
-    private static func convertBuffer(
-        inputBuffer: AVAudioPCMBuffer,
-        converter: AVAudioConverter,
-        outputFormat: AVAudioFormat
-    ) throws -> (buffer: AVAudioPCMBuffer?, status: AVAudioConverterOutputStatus) {
-        guard outputFormat.commonFormat != .otherFormat else {
-            throw VoxError.internalError("Conversion output format must be PCM-compatible")
-        }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: outputFormat,
-            frameCapacity: AVAudioFrameCount(4096)
-        ) else {
-            throw VoxError.internalError("Failed to allocate conversion output buffer")
-        }
-
-        var error: NSError?
-        let status = converter.convert(
-            to: outputBuffer,
-            error: &error
-        ) { inNumPackets, outStatus in
-            outStatus.pointee = .haveData
-            return inputBuffer
-        }
-
-        if let error {
-            throw error
-        }
-        return (outputBuffer, status)
     }
 
     /// Converts CAF to Opus with fallback.
     /// Returns the Opus URL on success, or the original CAF URL on failure.
     public static func encodeForUpload(cafURL: URL) async -> (url: URL, format: AudioFormat, bytes: Int) {
-        let opusURL = cafURL.deletingPathExtension().appendingPathExtension("ogg")
+        let opusURL = cafURL.deletingPathExtension().appendingPathExtension("opus.caf")
         let cafAttributes = try? FileManager.default.attributesOfItem(atPath: cafURL.path)
         let cafSize = cafAttributes?[.size] as? Int ?? 0
 
@@ -109,48 +60,32 @@ public enum AudioEncoder {
                 throw VoxError.internalError("Opus conversion produced empty output")
             }
             let ratio = Double(opusSize) / Double(max(cafSize, 1))
-            print("[Encoder] Opus conversion: \(String(format: "%.3f", encodeTime))s, \(ratio*100)% of original")
+            let pct = String(format: "%.0f", ratio * 100)
+            print("[Encoder] Opus: \(String(format: "%.2f", encodeTime))s, \(pct)% of original")
             return (opusURL, .opus, opusSize)
         } catch {
-            print("[Encoder] Opus conversion failed: \(error.localizedDescription), using CAF fallback")
-            // Clean up partial output if exists
+            print("[Encoder] Opus failed: \(error.localizedDescription), using CAF fallback")
             SecureFileDeleter.delete(at: opusURL)
             return (cafURL, .caf, cafSize)
         }
     }
 }
 
-public enum AudioFormat {
+public enum AudioFormat: Sendable {
     case opus
     case caf
 
     public var mimeType: String {
         switch self {
-        case .opus: return "audio/ogg"
+        case .opus: return "audio/x-caf"
         case .caf: return "audio/x-caf"
         }
     }
 
     public var fileExtension: String {
         switch self {
-        case .opus: return "ogg"
+        case .opus: return "caf"
         case .caf: return "caf"
         }
-    }
-}
-
-// MARK: - AVAudioFormat Helpers
-
-private extension AVAudioFormat {
-    /// Returns a standardized format suitable for conversion.
-    var standardized: AVAudioFormat? {
-        guard commonFormat != .otherFormat else {
-            // For non-standard formats, create a PCM equivalent
-            return AVAudioFormat(
-                standardFormatWithSampleRate: sampleRate,
-                channels: channelCount
-            )
-        }
-        return self
     }
 }

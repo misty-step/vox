@@ -29,7 +29,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VoxAppTests",
-            dependencies: ["VoxAppKit", "VoxCore"]
+            dependencies: ["VoxAppKit", "VoxCore", "VoxMac"]
         ),
     ]
 )
