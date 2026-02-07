@@ -49,6 +49,7 @@ public final class DictationPipeline: DictationProcessing {
     private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
     private let enableRewriteCache: Bool
+    private let convertCAFToOpus: @Sendable (URL) async throws -> URL
 
     @MainActor
     public convenience init(
@@ -58,6 +59,9 @@ public final class DictationPipeline: DictationProcessing {
         prefs: PreferencesReading? = nil,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
+        convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
+            try await AudioConverter.convertCAFToOpus(from: inputURL)
+        },
         pipelineTimeout: TimeInterval = 120
     ) {
         self.init(
@@ -68,6 +72,7 @@ public final class DictationPipeline: DictationProcessing {
             rewriteCache: .shared,
             enableRewriteCache: enableRewriteCache,
             enableOpus: enableOpus,
+            convertCAFToOpus: convertCAFToOpus,
             pipelineTimeout: pipelineTimeout
         )
     }
@@ -81,6 +86,9 @@ public final class DictationPipeline: DictationProcessing {
         rewriteCache: RewriteResultCache,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
+        convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
+            try await AudioConverter.convertCAFToOpus(from: inputURL)
+        },
         pipelineTimeout: TimeInterval = 120
     ) {
         self.stt = stt
@@ -90,6 +98,7 @@ public final class DictationPipeline: DictationProcessing {
         self.rewriteCache = rewriteCache
         self.enableRewriteCache = enableRewriteCache
         self.enableOpus = enableOpus
+        self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
     }
 
@@ -102,14 +111,18 @@ public final class DictationPipeline: DictationProcessing {
 
         // Encode to Opus if enabled
         let uploadURL: URL
-        if enableOpus {
+        if enableOpus, audioURL.pathExtension.lowercased() == "caf" {
             let encodeStart = CFAbsoluteTimeGetCurrent()
-            let result = await AudioEncoder.encodeForUpload(cafURL: audioURL)
-            timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
-            if result.encoded {
-                timing.encodedSizeBytes = result.bytes
+            do {
+                let opusURL = try await convertCAFToOpus(audioURL)
+                let attrs = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
+                timing.encodedSizeBytes = attrs?[.size] as? Int ?? 0
+                uploadURL = opusURL
+            } catch {
+                print("[Pipeline] Opus conversion failed: \(error.localizedDescription), using CAF fallback")
+                uploadURL = audioURL
             }
-            uploadURL = result.url
+            timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
         } else {
             uploadURL = audioURL
         }
