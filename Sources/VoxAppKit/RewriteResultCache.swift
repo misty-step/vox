@@ -31,11 +31,14 @@ actor RewriteResultCache {
             return nil
         }
 
-        let now = Date()
-        pruneExpiredEntries(now: now)
-
         let key = CacheKey(transcript: transcript, level: level, model: model)
         guard let entry = entries[key] else {
+            return nil
+        }
+
+        let age = Date().timeIntervalSince(entry.createdAt)
+        guard age >= 0, age < ttlSeconds else {
+            entries.removeValue(forKey: key)
             return nil
         }
         return entry.value
@@ -59,7 +62,8 @@ actor RewriteResultCache {
 
     private func pruneExpiredEntries(now: Date) {
         entries = entries.filter { _, entry in
-            now.timeIntervalSince(entry.createdAt) < ttlSeconds
+            let age = now.timeIntervalSince(entry.createdAt)
+            return age >= 0 && age < ttlSeconds
         }
     }
 
