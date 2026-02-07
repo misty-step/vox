@@ -12,12 +12,8 @@ public final class DeepgramClient: STTProvider {
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.deepgram.com/v1/listen?model=nova-3")!
-        let (uploadURL, contentType, tempURL) = try await prepareAudioFile(for: audioURL)
-        defer {
-            if let tempURL {
-                SecureFileDeleter.delete(at: tempURL)
-            }
-        }
+        let uploadURL = audioURL
+        let contentType = Self.mimeType(for: audioURL)
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path)[.size] as? Int) ?? 0
         let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
@@ -59,28 +55,7 @@ public final class DeepgramClient: STTProvider {
         }
     }
 
-    /// Prepare audio for upload. Opus-in-CAF files are sent directly (Deepgram auto-detects codec).
-    /// PCM CAF must be converted to WAV since Deepgram doesn't accept raw CAF reliably.
-    private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
-        // Opus-in-CAF (from AudioEncoder) — send directly, Deepgram auto-detects
-        if url.lastPathComponent.hasSuffix(".opus.caf") {
-            return (url, "audio/x-caf", nil)
-        }
-
-        // PCM CAF — convert to WAV for compatibility
-        if url.pathExtension.lowercased() == "caf" {
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension("wav")
-
-            do {
-                try await AudioConverter.convertCAFToWAV(from: url, to: tempURL)
-            } catch {
-                throw STTError.invalidAudio
-            }
-            return (tempURL, "audio/wav", tempURL)
-        }
-
+    static func mimeType(for url: URL) -> String {
         let mimeType: String
         switch url.pathExtension.lowercased() {
         case "wav":
@@ -94,8 +69,7 @@ public final class DeepgramClient: STTProvider {
         default:
             mimeType = "application/octet-stream"
         }
-
-        return (url, mimeType, nil)
+        return mimeType
     }
 
 }

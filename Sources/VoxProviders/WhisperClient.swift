@@ -13,9 +13,8 @@ public final class WhisperClient: STTProvider {
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
 
-        // Prepare audio file (convert CAF to WAV if needed)
-        let (fileURL, mimeType, tempURL) = try await prepareAudioFile(for: audioURL)
-        defer { if let t = tempURL { SecureFileDeleter.delete(at: t) } }
+        let fileURL = audioURL
+        let mimeType = Self.mimeType(for: audioURL)
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? 0
         let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
@@ -70,28 +69,7 @@ public final class WhisperClient: STTProvider {
         }
     }
 
-    /// Prepare audio for upload. Opus-in-CAF files are sent directly (Whisper auto-detects codec).
-    /// PCM CAF must be converted to WAV since Whisper doesn't accept raw CAF reliably.
-    private func prepareAudioFile(for url: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
-        // Opus-in-CAF (from AudioEncoder) — send directly, Whisper auto-detects
-        if url.lastPathComponent.hasSuffix(".opus.caf") {
-            return (url, "audio/x-caf", nil)
-        }
-
-        // PCM CAF — convert to WAV for compatibility
-        if url.pathExtension.lowercased() == "caf" {
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension("wav")
-
-            do {
-                try await AudioConverter.convertCAFToWAV(from: url, to: tempURL)
-            } catch {
-                throw STTError.invalidAudio
-            }
-            return (tempURL, "audio/wav", tempURL)
-        }
-
+    static func mimeType(for url: URL) -> String {
         let mimeType: String
         switch url.pathExtension.lowercased() {
         case "wav":
@@ -100,13 +78,15 @@ public final class WhisperClient: STTProvider {
             mimeType = "audio/mpeg"
         case "m4a", "mp4":
             mimeType = "audio/mp4"
+        case "ogg", "opus":
+            mimeType = "audio/ogg"
         case "webm":
             mimeType = "audio/webm"
         default:
             mimeType = "application/octet-stream"
         }
 
-        return (url, mimeType, nil)
+        return mimeType
     }
 }
 
