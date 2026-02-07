@@ -34,6 +34,43 @@ final class DeepgramClientTests: XCTestCase {
         XCTAssertEqual(transcript, "ok")
     }
 
+    func test_transcribe_cafConvertsToWavAndUsesAudioWavContentType() async throws {
+        let cafURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("caf")
+        defer { try? FileManager.default.removeItem(at: cafURL) }
+        try Data([0x43, 0x41, 0x46, 0x46]).write(to: cafURL)
+
+        let wavURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("wav")
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: wavURL)
+
+        URLProtocolStub.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "audio/wav")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let payload = Data("""
+                {"results":{"channels":[{"alternatives":[{"transcript":"ok"}]}]}}
+                """.utf8)
+            return (response, payload)
+        }
+
+        let client = DeepgramClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            convertCAFToWAV: { _ in wavURL }
+        )
+        let transcript = try await client.transcribe(audioURL: cafURL)
+
+        XCTAssertEqual(transcript, "ok")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: wavURL.path))
+    }
+
     func testTranscribeCAFFile() async throws {
         guard let apiKey = ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"], !apiKey.isEmpty else {
             throw XCTSkip("DEEPGRAM_API_KEY not set")

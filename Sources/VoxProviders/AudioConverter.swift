@@ -21,19 +21,32 @@ public enum AudioConverter {
     private static let opusBitrate = 32_000
 
     public static func convertCAFToOpus(from inputURL: URL) async throws -> URL {
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vox-opus-\(UUID().uuidString)")
-            .appendingPathExtension("ogg")
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
-        process.arguments = [
+        let outputURL = temporaryOutputURL(prefix: "vox-opus", extension: "ogg")
+        let arguments = [
             inputURL.path,
             "-o", outputURL.path,
             "-f", "OggS",
             "-d", "opus",
             "-b", "\(opusBitrate)",
         ]
+        return try await runConversion(arguments: arguments, outputURL: outputURL)
+    }
+
+    public static func convertCAFToWAV(from inputURL: URL) async throws -> URL {
+        let outputURL = temporaryOutputURL(prefix: "vox-wav", extension: "wav")
+        let arguments = [
+            inputURL.path,
+            "-o", outputURL.path,
+            "-f", "WAVE",
+            "-d", "LEI16",
+        ]
+        return try await runConversion(arguments: arguments, outputURL: outputURL)
+    }
+
+    private static func runConversion(arguments: [String], outputURL: URL) async throws -> URL {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
+        process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
@@ -56,7 +69,9 @@ public enum AudioConverter {
                     }
                 }
             } onCancel: {
-                process.terminate()
+                if process.isRunning {
+                    process.terminate()
+                }
             }
 
             let attrs = try FileManager.default.attributesOfItem(atPath: outputURL.path)
@@ -69,5 +84,11 @@ public enum AudioConverter {
             try? FileManager.default.removeItem(at: outputURL)
             throw error
         }
+    }
+
+    private static func temporaryOutputURL(prefix: String, extension ext: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+            .appendingPathExtension(ext)
     }
 }

@@ -4,17 +4,29 @@ import VoxCore
 public final class WhisperClient: STTProvider {
     private let apiKey: String
     private let session: URLSession
+    private let convertCAFToWAV: @Sendable (URL) async throws -> URL
 
-    public init(apiKey: String, session: URLSession = .shared) {
+    public init(
+        apiKey: String,
+        session: URLSession = .shared,
+        convertCAFToWAV: @escaping @Sendable (URL) async throws -> URL = { inputURL in
+            try await AudioConverter.convertCAFToWAV(from: inputURL)
+        }
+    ) {
         self.apiKey = apiKey
         self.session = session
+        self.convertCAFToWAV = convertCAFToWAV
     }
 
     public func transcribe(audioURL: URL) async throws -> String {
         let url = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
 
-        let fileURL = audioURL
-        let mimeType = Self.mimeType(for: audioURL)
+        let (fileURL, mimeType, tempURL) = try await prepareAudioFile(for: audioURL)
+        defer {
+            if let tempURL {
+                SecureFileDeleter.delete(at: tempURL)
+            }
+        }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? 0
         let sizeMB = String(format: "%.1f", Double(fileSize) / 1_048_576)
@@ -69,6 +81,18 @@ public final class WhisperClient: STTProvider {
         }
     }
 
+    private func prepareAudioFile(for audioURL: URL) async throws -> (fileURL: URL, mimeType: String, tempURL: URL?) {
+        if audioURL.pathExtension.lowercased() == "caf" {
+            do {
+                let wavURL = try await convertCAFToWAV(audioURL)
+                return (wavURL, "audio/wav", wavURL)
+            } catch {
+                throw STTError.invalidAudio
+            }
+        }
+        return (audioURL, Self.mimeType(for: audioURL), nil)
+    }
+
     static func mimeType(for url: URL) -> String {
         let mimeType: String
         switch url.pathExtension.lowercased() {
@@ -80,6 +104,8 @@ public final class WhisperClient: STTProvider {
             mimeType = "audio/mp4"
         case "ogg", "opus":
             mimeType = "audio/ogg"
+        case "caf":
+            mimeType = "audio/x-caf"
         case "webm":
             mimeType = "audio/webm"
         default:
