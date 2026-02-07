@@ -135,7 +135,8 @@ codesign_app() {
 }
 
 zip_bundle() {
-    log "creating notarization archive $ZIP_PATH"
+    log "creating archive $ZIP_PATH"
+    rm -f "$ZIP_PATH"
     ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 }
 
@@ -182,6 +183,12 @@ main() {
     codesign_app
     zip_bundle
     notarize_app
+
+    # Stapling mutates the app bundle, so rebuild the distributable zip afterward.
+    if [[ "$SKIP_NOTARIZE" -eq 0 ]]; then
+        zip_bundle
+    fi
+
     print_artifacts
 }
 
