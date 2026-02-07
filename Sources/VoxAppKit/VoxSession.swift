@@ -118,7 +118,23 @@ public final class VoxSession: ObservableObject {
             }
         }
 
-        return chain
+        return ConcurrencyLimitedSTTProvider(
+            provider: chain,
+            maxConcurrent: maxConcurrentSTTRequests()
+        )
+    }
+
+    private func maxConcurrentSTTRequests() -> Int {
+        let defaultLimit = 8
+        let raw = ProcessInfo.processInfo.environment["VOX_MAX_CONCURRENT_STT"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw, !raw.isEmpty else {
+            return defaultLimit
+        }
+        guard let parsed = Int(raw), parsed > 0 else {
+            print("[Vox] Invalid VOX_MAX_CONCURRENT_STT=\(raw), using default \(defaultLimit)")
+            return defaultLimit
+        }
+        return parsed
     }
 
     public func toggleRecording() async {
