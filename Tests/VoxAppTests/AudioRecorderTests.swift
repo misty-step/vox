@@ -68,7 +68,7 @@ struct AudioRecorderComputeLevelsTests {
     }
 }
 
-@Suite("AudioRecorder conversion")
+@Suite("AudioRecorder conversion", .serialized)
 struct AudioRecorderConversionTests {
     private let outputFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
