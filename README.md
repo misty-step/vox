@@ -13,7 +13,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Press Option+Space** to start/stop recording
 - **Hedged STT racing**: Apple Speech + cloud providers run in a staggered race (ElevenLabs `0s`, Deepgram `5s`, Whisper `10s`)
 - **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
-- **Three processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite)
+- **Four processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite), Enhance (structured prompt upgrade)
 - **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
