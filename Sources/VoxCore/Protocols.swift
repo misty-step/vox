@@ -18,9 +18,13 @@ public protocol TextPaster: Sendable {
 /// Audio recording abstraction
 @MainActor
 public protocol AudioRecording: AnyObject {
-    func start() throws
+    func start(inputDeviceUID: String?) throws
     func currentLevel() -> (average: Float, peak: Float)
     func stop() throws -> URL
+}
+
+extension AudioRecording {
+    public func start() throws { try start(inputDeviceUID: nil) }
 }
 
 /// HUD display abstraction

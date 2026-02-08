@@ -14,7 +14,7 @@ final class MockRecorder: AudioRecording {
     var shouldThrowOnStop = false
     private var recordingURL: URL?
 
-    func start() throws {
+    func start(inputDeviceUID: String? = nil) throws {
         startCallCount += 1
         if shouldThrowOnStart {
             throw VoxError.internalError("Mock start failure")

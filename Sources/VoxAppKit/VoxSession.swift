@@ -190,13 +190,8 @@ public final class VoxSession: ObservableObject {
             return
         }
 
-        if let uid = prefs.selectedInputDeviceUID,
-           let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
-            AudioDeviceManager.setDefaultInputDevice(deviceID)
-        }
-
         do {
-            try recorder.start()
+            try recorder.start(inputDeviceUID: prefs.selectedInputDeviceUID)
             recordingStartTime = CFAbsoluteTimeGetCurrent()
             state = .recording
             hud.showRecording(average: 0, peak: 0)
