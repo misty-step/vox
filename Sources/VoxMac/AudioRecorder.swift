@@ -10,18 +10,23 @@ public final class AudioRecorder: AudioRecording {
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
 
+    /// Frames per tap callback; balances latency vs CPU overhead.
+    private static let tapBufferSize: AVAudioFrameCount = 4096
+
     public init() {}
 
     public func start(inputDeviceUID: String? = nil) throws {
         if engine != nil { return }
 
         let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
 
         // Per-app device routing via CoreAudio property on the engine's input AudioUnit.
         if let uid = inputDeviceUID,
            let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
-            let inputNode = engine.inputNode
-            let audioUnit = inputNode.audioUnit!
+            guard let audioUnit = inputNode.audioUnit else {
+                throw VoxError.internalError("AudioUnit unavailable on input node.")
+            }
             var id = deviceID
             let status = AudioUnitSetProperty(
                 audioUnit,
@@ -36,7 +41,6 @@ public final class AudioRecorder: AudioRecording {
             }
         }
 
-        let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
 
         // Target: 16kHz, 16-bit, mono PCM in a CAF container.
@@ -58,9 +62,9 @@ public final class AudioRecorder: AudioRecording {
             throw VoxError.internalError("Cannot convert from hardware format to 16kHz/16-bit mono.")
         }
 
-        let bufferCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms buffers
+        let bufferCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms output buffers
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: hwFormat) { [weak self] buffer, _ in
             // Compute metering from raw hardware buffer.
             let levels = Self.computeLevels(buffer: buffer)
 
@@ -75,10 +79,14 @@ public final class AudioRecorder: AudioRecording {
                 outStatus.pointee = .haveData
                 return buffer
             }
-            converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+            let convertStatus = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
 
             if let error {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
+                return
+            }
+            if convertStatus == .error {
+                print("[AudioRecorder] Converter returned error status")
                 return
             }
 
@@ -97,7 +105,12 @@ public final class AudioRecorder: AudioRecording {
             }
         }
 
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            throw error
+        }
         self.engine = engine
         self.audioFile = file
         self.currentURL = url
@@ -121,10 +134,10 @@ public final class AudioRecorder: AudioRecording {
         return url
     }
 
-    // MARK: - Private
+    // MARK: - Internal (visible for testing)
 
     /// Compute RMS average and peak from a PCM buffer, normalized to 0-1 range.
-    private static func computeLevels(buffer: AVAudioPCMBuffer) -> (average: Float, peak: Float) {
+    nonisolated static func computeLevels(buffer: AVAudioPCMBuffer) -> (average: Float, peak: Float) {
         guard let channelData = buffer.floatChannelData, buffer.frameLength > 0 else {
             return (0, 0)
         }
