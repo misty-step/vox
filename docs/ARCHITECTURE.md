@@ -73,8 +73,8 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 1) User presses Option+Space
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
-3) If a specific input device is selected, `AudioDeviceManager.setDefaultInputDevice()` applies it
-4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio
+3) `AudioRecorder` receives the selected device UID and routes via `AVAudioEngine` per-app (no system default change)
+4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio via `AVAudioEngine` tap + format conversion
 5) Health-aware STT router transcribes (dynamic order across configured providers, Apple Speech as final fallback)
 6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
 7) `RewriteQualityGate` validates output length ratio
@@ -82,14 +82,15 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 ## Input Device Selection
 
-`AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and manages the system default input. Uses stable `kAudioDevicePropertyDeviceUID` for persistence across reboots rather than volatile `AudioDeviceID`.
+`AudioRecorder` uses `AVAudioEngine` with per-app device routing via `kAudioOutputUnitProperty_CurrentDevice` on the engine's input `AudioUnit`. This avoids changing the macOS system default.
+
+`AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and resolves stable `kAudioDevicePropertyDeviceUID` to runtime `AudioDeviceID`.
 
 Behavior:
-- **System Default** (nil): Vox records from whatever macOS has selected
-- **Specific device**: set as system default before recording starts
-- **Device unplugged**: silently falls back to current system default
-
-Note: this changes the system-wide default. See [issue #136](https://github.com/misty-step/vox/issues/136) for future per-app AVAudioEngine approach.
+- **System Default** (nil UID): `AVAudioEngine` uses whatever macOS has selected
+- **Specific device**: set on engine's input AudioUnit before recording starts (per-app, no system-wide side effect)
+- **Device unplugged**: silently falls back to system default
+- **Device set failure**: logs warning, falls back to system default
 
 ## State Machine
 
