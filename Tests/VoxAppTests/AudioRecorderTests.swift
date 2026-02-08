@@ -236,3 +236,24 @@ struct AudioRecorderConversionTests {
         #expect(!AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input48))
     }
 }
+
+@Suite("AudioRecorder backend")
+struct AudioRecorderBackendSelectionTests {
+    @Test("Default backend is AVAudioRecorder for reliability")
+    func defaultBackend() {
+        let backend = AudioRecorder.selectedBackend(environment: [:])
+        #expect(backend == .avAudioRecorder)
+    }
+
+    @Test("Engine backend is opt-in via VOX_AUDIO_BACKEND")
+    func engineBackendOptIn() {
+        let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "engine"])
+        #expect(backend == .avAudioEngine)
+    }
+
+    @Test("Unknown backend values fall back to AVAudioRecorder")
+    func unknownBackendFallsBack() {
+        let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "something-else"])
+        #expect(backend == .avAudioRecorder)
+    }
+}

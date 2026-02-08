@@ -66,26 +66,36 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 1) User presses Option+Space
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
-3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts `AVAudioEngine` capture
-4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio via `AVAudioEngine` tap + format conversion
+3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
+4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioRecorder` (default backend)
 5) Hedged STT router transcribes (Apple Speech + staggered cloud hedges)
 6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
 
-## Audio Conversion Integrity Contract
+Before STT, `DictationPipeline` rejects header-only CAF payloads (≤ 4096 bytes) to fail fast on capture regressions.
 
-`AudioRecorder` owns hardware-to-upload normalization (`AVAudioEngine` input format → 16kHz/16-bit mono CAF). This module has one non-negotiable contract: **preserve spoken duration across sample-rate and device differences**.
+## Audio Capture Contract
+
+`AudioRecorder` has two backends with reliability-first defaults:
+
+- **Default (`AVAudioRecorder`)**: direct 16kHz/16-bit mono CAF capture from macOS default input route.
+- **Opt-in (`AVAudioEngine`)**: enabled only with `VOX_AUDIO_BACKEND=engine`; supports experimental per-app routing and format conversion.
+
+Non-negotiable contract: **recorded speech duration and frame payload must survive capture and conversion across device/sample-rate differences**.
 
 Runtime invariants:
-- **Drain per tap**: each input tap must drain `AVAudioConverter` output until status is no longer `.haveData`.
-- **Dynamic capacity**: output buffer capacity is derived from `inputFrames * (outputRate / inputRate)` with a 100ms minimum floor.
-- **Drain on stop**: flush uses repeated `.endOfStream` conversion calls until converter output is exhausted.
-- **Underflow guard**: recorder logs a one-time warning if per-tap output ratio drops below expected threshold (currently `0.85`).
+- **Payload guard**: pipeline rejects header-only CAF files before STT (fast failure over silent empty transcripts).
+- **Engine drain per tap**: each input tap drains `AVAudioConverter` output until status is no longer `.haveData`.
+- **Engine dynamic capacity**: output buffer capacity uses `inputFrames * (outputRate / inputRate)` with a 100ms floor.
+- **Engine drain on stop**: flush repeats `.endOfStream` conversion calls until converter output is exhausted.
+- **Engine underflow guard**: recorder logs one-time warning when per-tap output ratio drops below threshold (`0.85`).
 
 Test invariants:
+- `AudioRecorderBackendSelectionTests` enforces default backend = `AVAudioRecorder` and `engine` opt-in behavior.
 - `AudioRecorderConversionTests` validates duration preservation for common input rates (`16k`, `24k`, `44.1k`, `48k`).
 - Regression fixture explicitly checks the old truncation failure shape (`4096 @ 24k` incorrectly capped to `1600` output frames) is detected as unhealthy.
+- `DictationPipelineTests` asserts header-only CAF files fail fast before STT.
 
 ## Input Device Selection
 
@@ -93,17 +103,18 @@ Test invariants:
 
 Default behavior prioritizes reliability:
 - `VoxSession` sets the selected input as macOS default before recording starts.
-- `AudioRecorder` captures from the default route using `AVAudioEngine`.
+- `AudioRecorder` captures from the default route using `AVAudioRecorder`.
 
-Optional per-app routing is available for experiments only:
+Optional overrides:
+- set `VOX_AUDIO_BACKEND=engine` to use `AVAudioEngine` backend.
 - set `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1` to attempt `kAudioOutputUnitProperty_CurrentDevice` on the input `AudioUnit`.
 - if per-app routing is unavailable/fails, capture continues on the default route.
 
 Behavior:
-- **System Default** (nil UID): `AVAudioEngine` uses whatever macOS has selected
+- **System Default** (nil UID): recorder uses whatever macOS has selected
 - **Specific device**: Vox sets system default input to the selected UID before capture
 - **Device unplugged**: silently falls back to current system default
-- **Optional per-app mode**: guarded by `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1`
+- **Optional per-app mode**: `VOX_AUDIO_BACKEND=engine` + `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1`
 
 ## State Machine
 

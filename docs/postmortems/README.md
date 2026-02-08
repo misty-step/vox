@@ -4,4 +4,4 @@ Blameless writeups for production-impacting regressions and incidents.
 
 ## Index
 
-- [2026-02-08 Audio Capture Underflow After AVAudioEngine Migration](2026-02-08-audio-capture-underflow.md)
+- [2026-02-08 Audio Capture Regression After AVAudioEngine Migration](2026-02-08-audio-capture-underflow.md)

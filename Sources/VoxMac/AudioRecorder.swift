@@ -4,6 +4,7 @@ import Foundation
 import VoxCore
 
 public final class AudioRecorder: AudioRecording {
+    private var recorder: AVAudioRecorder?
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
@@ -15,9 +16,55 @@ public final class AudioRecorder: AudioRecording {
     private static let tapBufferSize: AVAudioFrameCount = 4096
     private static let perAppRoutingEnv = "VOX_ENABLE_PER_APP_AUDIO_ROUTING"
 
+    enum Backend {
+        case avAudioRecorder
+        case avAudioEngine
+    }
+
     public init() {}
 
     public func start(inputDeviceUID: String?) throws {
+        if recorder != nil || engine != nil { return }
+        let backend = Self.selectedBackend(environment: ProcessInfo.processInfo.environment)
+        #if DEBUG
+        print("[AudioRecorder] Backend: \(backend == .avAudioRecorder ? "AVAudioRecorder" : "AVAudioEngine")")
+        #endif
+        switch backend {
+        case .avAudioRecorder:
+            try startWithAVAudioRecorder(inputDeviceUID: inputDeviceUID)
+        case .avAudioEngine:
+            try startWithAVAudioEngine(inputDeviceUID: inputDeviceUID)
+        }
+    }
+
+    private func startWithAVAudioRecorder(inputDeviceUID: String?) throws {
+        if let uid = inputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid),
+           !AudioDeviceManager.setDefaultInputDevice(deviceID) {
+            print("[AudioRecorder] Failed to set default input device for UID \(uid), using current default")
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-\(UUID().uuidString).caf")
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let recorder = try AVAudioRecorder(url: url, settings: settings)
+        recorder.isMeteringEnabled = true
+        recorder.prepareToRecord()
+        guard recorder.record() else {
+            throw VoxError.internalError("Failed to start recording.")
+        }
+        self.recorder = recorder
+        self.currentURL = url
+    }
+
+    private func startWithAVAudioEngine(inputDeviceUID: String?) throws {
         if engine != nil { return }
 
         let engine = AVAudioEngine()
@@ -151,10 +198,26 @@ public final class AudioRecorder: AudioRecording {
     }
 
     public func currentLevel() -> (average: Float, peak: Float) {
-        (latestAverage, latestPeak)
+        if let recorder {
+            recorder.updateMeters()
+            return (
+                Self.normalizeDecibels(recorder.averagePower(forChannel: 0)),
+                Self.normalizeDecibels(recorder.peakPower(forChannel: 0))
+            )
+        }
+        return (latestAverage, latestPeak)
     }
 
     public func stop() throws -> URL {
+        if let recorder, let url = currentURL {
+            recorder.stop()
+            self.recorder = nil
+            self.currentURL = nil
+            self.latestAverage = 0
+            self.latestPeak = 0
+            return url
+        }
+
         guard let engine, let url = currentURL else {
             throw VoxError.internalError("No active recording.")
         }
@@ -191,6 +254,18 @@ public final class AudioRecorder: AudioRecording {
 
     // MARK: - Internal (visible for testing)
 
+    nonisolated static func selectedBackend(environment: [String: String]) -> Backend {
+        if environment["VOX_AUDIO_BACKEND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "engine" {
+            return .avAudioEngine
+        }
+        return .avAudioRecorder
+    }
+
+    nonisolated static func normalizeDecibels(_ value: Float, minDb: Float = -50) -> Float {
+        let clamped = max(min(value, 0), minDb)
+        return (clamped - minDb) / -minDb
+    }
+
     /// Compute RMS average and peak from a PCM buffer, normalized to 0-1 range.
     nonisolated static func computeLevels(buffer: AVAudioPCMBuffer) -> (average: Float, peak: Float) {
         guard let channelData = buffer.floatChannelData, buffer.frameLength > 0 else {
@@ -211,9 +286,7 @@ public final class AudioRecorder: AudioRecording {
         let minDb: Float = -50
         let rmsDb = rms > 0 ? 20 * log10(rms) : minDb
         let peakDb = maxSample > 0 ? 20 * log10(maxSample) : minDb
-        let avgClamped = max(min(rmsDb, 0), minDb)
-        let peakClamped = max(min(peakDb, 0), minDb)
-        return ((avgClamped - minDb) / -minDb, (peakClamped - minDb) / -minDb)
+        return (normalizeDecibels(rmsDb, minDb: minDb), normalizeDecibels(peakDb, minDb: minDb))
     }
 
     nonisolated static func outputFrameCapacity(

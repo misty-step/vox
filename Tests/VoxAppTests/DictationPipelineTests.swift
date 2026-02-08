@@ -313,6 +313,50 @@ struct DictationPipelineTests {
         }
     }
 
+    @Test("Header-only CAF fails fast before STT")
+    func process_headerOnlyCAF_throwsInternalError() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+
+        let headerOnlyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("header-only-\(UUID().uuidString).caf")
+        let created = FileManager.default.createFile(
+            atPath: headerOnlyURL.path,
+            contents: Data(count: 4096)
+        )
+        #expect(created)
+        defer { try? FileManager.default.removeItem(at: headerOnlyURL) }
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: headerOnlyURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            if case .internalError(let message) = error {
+                #expect(message.contains("No audio frames captured"))
+            } else {
+                Issue.record("Expected VoxError.internalError, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected VoxError.internalError, got \(error)")
+        }
+
+        #expect(stt.callCount == 0)
+        #expect(rewriter.callCount == 0)
+        #expect(paster.callCount == 0)
+    }
+
     @Test("Rewrite failure falls back to raw transcript")
     func process_rewriteFailure_usesRawTranscript() async throws {
         let stt = MockSTTProvider()

@@ -54,7 +54,7 @@ Providers are wrapped in composable decorators, with default routing via stagger
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioRecorder @ 16kHz/16-bit mono CAF; engine backend opt-in via `VOX_AUDIO_BACKEND=engine`) → DictationPipeline rejects header-only CAF payloads → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -93,7 +93,10 @@ Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcr
 Shared mock: `Tests/VoxCoreTests/MockSTTProvider.swift` — thread-safe with NSLock.
 
 Audio regression guardrail:
-- Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve conversion duration invariants. Keep/extend `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage) and ensure converter drain logic is tested, not assumed.
+- Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve backend reliability defaults and conversion duration invariants. Keep/extend:
+  - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioRecorder`; `engine` is opt-in)
+  - `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage; converter drain logic tested, not assumed)
+  - `DictationPipelineTests` header-only CAF fast-fail guard
 
 ## Conventions
 
