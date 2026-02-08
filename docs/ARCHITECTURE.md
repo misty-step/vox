@@ -66,24 +66,58 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 1) User presses Option+Space
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
-3) `AudioRecorder` receives the selected device UID and routes via `AVAudioEngine` per-app (no system default change)
-4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio via `AVAudioEngine` tap + format conversion
+3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
+4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioRecorder` (default backend)
 5) Hedged STT router transcribes (Apple Speech + staggered cloud hedges)
 6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
 
-## Input Device Selection
+Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioInspector` and fails fast with `VoxError.emptyCapture` when decoded frame count is zero.
 
-`AudioRecorder` uses `AVAudioEngine` with per-app device routing via `kAudioOutputUnitProperty_CurrentDevice` on the engine's input `AudioUnit`. This avoids changing the macOS system default.
+## Audio Capture Contract
+
+`AudioRecorder` has two backends with reliability-first defaults:
+
+- **Default (`AVAudioRecorder`)**: direct 16kHz/16-bit mono CAF capture from macOS default input route.
+- **Opt-in (`AVAudioEngine`)**: enabled only with `VOX_AUDIO_BACKEND=engine`; supports experimental per-app routing and format conversion.
+
+Non-negotiable contract: **recorded speech duration and frame payload must survive capture and conversion across device/sample-rate differences**.
+
+Runtime invariants:
+- **Payload guard**: pipeline validates capture payload via `CapturedAudioInspector` before STT (fast failure over silent empty transcripts).
+- **Encoded payload guard**: when Opus conversion returns an empty file, pipeline falls back to original CAF before STT.
+- **Engine drain per tap**: each input tap drains `AVAudioConverter` output until status is no longer `.haveData`.
+- **Engine dynamic capacity**: output buffer capacity uses `inputFrames * (outputRate / inputRate)` with a 100ms floor.
+- **Engine drain on stop**: flush repeats `.endOfStream` conversion calls until converter output is exhausted.
+- **Engine converter coherence**: stop-time flush reads the latest converter through lock-protected state shared with tap recovery.
+- **Engine underflow guard**: recorder logs one-time warning when per-tap output ratio drops below threshold (`0.85`).
+
+Test invariants:
+- `AudioRecorderBackendSelectionTests` enforces default backend = `AVAudioRecorder` and `engine` opt-in behavior.
+- `AudioRecorderConversionTests` validates duration preservation for common input rates (`16k`, `24k`, `44.1k`, `48k`).
+- Regression fixture explicitly checks the old truncation failure shape (`4096 @ 24k` incorrectly capped to `1600` output frames) is detected as unhealthy.
+- `CapturedAudioInspectorTests` validates payload detection across valid/empty/corrupt/missing capture files.
+- `DictationPipelineTests` asserts header-only capture payloads fail fast with `VoxError.emptyCapture` before STT.
+
+## Input Device Selection
 
 `AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and resolves stable `kAudioDevicePropertyDeviceUID` to runtime `AudioDeviceID`.
 
+Default behavior prioritizes reliability:
+- `VoxSession` sets the selected input as macOS default before recording starts.
+- `AudioRecorder` captures from the default route using `AVAudioRecorder`.
+
+Optional overrides:
+- set `VOX_AUDIO_BACKEND=engine` to use `AVAudioEngine` backend.
+- set `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1` to attempt `kAudioOutputUnitProperty_CurrentDevice` on the input `AudioUnit`.
+- if per-app routing is unavailable/fails, capture continues on the default route.
+
 Behavior:
-- **System Default** (nil UID): `AVAudioEngine` uses whatever macOS has selected
-- **Specific device**: set on engine's input AudioUnit before recording starts (per-app, no system-wide side effect)
-- **Device unplugged**: silently falls back to system default
-- **Device set failure**: logs warning, falls back to system default
+- **System Default** (nil UID): recorder uses whatever macOS has selected
+- **Specific device**: Vox sets system default input to the selected UID before capture
+- **Device unplugged**: silently falls back to current system default
+- **Optional per-app mode**: `VOX_AUDIO_BACKEND=engine` + `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1`
 
 ## State Machine
 
@@ -144,7 +178,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
-| Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
+| Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
 | Core | VoxCore | `Protocols.swift`, `SessionExtension.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
 
@@ -178,4 +212,5 @@ All modules log with bracket-prefixed tags to stdout:
 - `[STT]` — decorator-level retries, hedge launches, winner/failure transitions
 - `[Pipeline]` — processing stages
 - `[Vox]` — session-level events
+- `[AudioRecorder]` — capture backend and conversion diagnostics
 - `[Paster]` — clipboard and paste operations

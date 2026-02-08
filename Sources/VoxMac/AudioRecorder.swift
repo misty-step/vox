@@ -1,45 +1,100 @@
 import AudioToolbox
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import VoxCore
 
 public final class AudioRecorder: AudioRecording {
+    private var recorder: AVAudioRecorder?
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
+    private let converterStateLock = NSLock()
     private var currentURL: URL?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
 
     /// Frames per tap callback; balances latency vs CPU overhead.
     private static let tapBufferSize: AVAudioFrameCount = 4096
+    private static let perAppRoutingEnv = "VOX_ENABLE_PER_APP_AUDIO_ROUTING"
+
+    enum Backend {
+        case avAudioRecorder
+        case avAudioEngine
+    }
 
     public init() {}
 
     public func start(inputDeviceUID: String?) throws {
+        if recorder != nil || engine != nil { return }
+        let backend = Self.selectedBackend(environment: ProcessInfo.processInfo.environment)
+        #if DEBUG
+        print("[AudioRecorder] Backend: \(backend == .avAudioRecorder ? "AVAudioRecorder" : "AVAudioEngine")")
+        #endif
+        switch backend {
+        case .avAudioRecorder:
+            try startWithAVAudioRecorder(inputDeviceUID: inputDeviceUID)
+        case .avAudioEngine:
+            try startWithAVAudioEngine(inputDeviceUID: inputDeviceUID)
+        }
+    }
+
+    private func startWithAVAudioRecorder(inputDeviceUID: String?) throws {
+        if let uid = inputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid),
+           !AudioDeviceManager.setDefaultInputDevice(deviceID) {
+            print("[AudioRecorder] Failed to set default input device for UID \(uid), using current default")
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-\(UUID().uuidString).caf")
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let recorder = try AVAudioRecorder(url: url, settings: settings)
+        recorder.isMeteringEnabled = true
+        recorder.prepareToRecord()
+        guard recorder.record() else {
+            throw VoxError.internalError("Failed to start recording.")
+        }
+        self.recorder = recorder
+        self.currentURL = url
+    }
+
+    private func startWithAVAudioEngine(inputDeviceUID: String?) throws {
         if engine != nil { return }
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
-        // Per-app device routing via CoreAudio property on the engine's input AudioUnit.
-        if let uid = inputDeviceUID,
+        // Per-app routing can be flaky on some Bluetooth routes.
+        // Keep it opt-in and rely on system-default routing by default.
+        let usePerAppRouting = ProcessInfo.processInfo.environment[Self.perAppRoutingEnv] == "1"
+        if usePerAppRouting,
+           let uid = inputDeviceUID,
            let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
-            guard let audioUnit = inputNode.audioUnit else {
-                throw VoxError.internalError("AudioUnit unavailable on input node.")
+            if let audioUnit = inputNode.audioUnit {
+                var id = deviceID
+                let status = AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &id,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+                if status != noErr {
+                    print("[AudioRecorder] Failed per-app input routing (status \(status)), using default input")
+                }
+            } else {
+                print("[AudioRecorder] Input AudioUnit unavailable for per-app routing, using default input")
             }
-            var id = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
-            if status != noErr {
-                print("[AudioRecorder] Failed to set input device (status \(status)), using default")
-            }
+        } else if inputDeviceUID != nil {
+            print("[AudioRecorder] Per-app routing disabled; using system default input")
         }
 
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -63,46 +118,63 @@ public final class AudioRecorder: AudioRecording {
             throw VoxError.internalError("Cannot convert from hardware format to 16kHz/16-bit mono.")
         }
 
-        let bufferCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms output buffers
+        let minimumOutputFrameCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms floor
+        var didLogConversionUnderflow = false
+        var tapConverter = converter
+        setConverter(converter)
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: hwFormat) { [weak self] buffer, _ in
             // Compute metering from raw hardware buffer.
             let levels = Self.computeLevels(buffer: buffer)
 
             // Convert to target format and write to file.
-            guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: bufferCapacity
-            ) else { return }
-
-            var error: NSError?
-            var hasData = true
-            let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-                if hasData {
-                    hasData = false
-                    outStatus.pointee = .haveData
-                    return buffer
-                }
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            let convertStatus = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-            if let error {
-                print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
-                return
-            }
-            if convertStatus == .error {
-                print("[AudioRecorder] Converter returned error status")
-                return
-            }
-
-            if outputBuffer.frameLength > 0 {
-                do {
+            var convertedFrames: AVAudioFrameCount = 0
+            do {
+                let conversion = try Self.convertInputBufferRecoveringFormat(
+                    converter: tapConverter,
+                    inputBuffer: buffer,
+                    outputFormat: targetFormat,
+                    minimumOutputFrameCapacity: minimumOutputFrameCapacity
+                ) { outputBuffer in
                     try file.write(from: outputBuffer)
-                } catch {
-                    print("[AudioRecorder] Write error: \(error.localizedDescription)")
                 }
+                convertedFrames = conversion.frames
+                tapConverter = conversion.converter
+                if conversion.didRebuild {
+                    print(
+                        "[AudioRecorder] Rebuilt converter for input format " +
+                        "\(Int(buffer.format.sampleRate))Hz/\(buffer.format.channelCount)ch"
+                    )
+                    self?.setConverter(conversion.converter)
+                }
+            } catch {
+                print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
+            }
+
+            if !didLogConversionUnderflow,
+               !Self.isConversionHealthy(
+                   inputFrames: buffer.frameLength,
+                   outputFrames: convertedFrames,
+                   inputSampleRate: buffer.format.sampleRate,
+                   outputSampleRate: targetFormat.sampleRate
+               ) {
+                didLogConversionUnderflow = true
+                let expectedFrames = Self.expectedOutputFrames(
+                    inputFrames: buffer.frameLength,
+                    inputSampleRate: buffer.format.sampleRate,
+                    outputSampleRate: targetFormat.sampleRate
+                )
+                let ratio = Self.conversionHealthRatio(
+                    inputFrames: buffer.frameLength,
+                    outputFrames: convertedFrames,
+                    inputSampleRate: buffer.format.sampleRate,
+                    outputSampleRate: targetFormat.sampleRate
+                )
+                print(
+                    "[AudioRecorder] Conversion underflow detected: " +
+                    "output \(convertedFrames) < expected \(expectedFrames) " +
+                    "(ratio \(String(format: "%.2f", ratio)))"
+                )
             }
 
             // Dispatch metering to MainActor.
@@ -120,15 +192,31 @@ public final class AudioRecorder: AudioRecording {
         }
         self.engine = engine
         self.audioFile = file
-        self.converter = converter
         self.currentURL = url
     }
 
     public func currentLevel() -> (average: Float, peak: Float) {
-        (latestAverage, latestPeak)
+        if let recorder {
+            recorder.updateMeters()
+            return (
+                Self.normalizeDecibels(recorder.averagePower(forChannel: 0)),
+                Self.normalizeDecibels(recorder.peakPower(forChannel: 0))
+            )
+        }
+        return (latestAverage, latestPeak)
     }
 
     public func stop() throws -> URL {
+        if let recorder, let url = currentURL {
+            recorder.stop()
+            self.recorder = nil
+            setConverter(nil)
+            self.currentURL = nil
+            self.latestAverage = 0
+            self.latestPeak = 0
+            return url
+        }
+
         guard let engine, let url = currentURL else {
             throw VoxError.internalError("No active recording.")
         }
@@ -136,13 +224,13 @@ public final class AudioRecorder: AudioRecording {
         engine.stop()
 
         // Flush any samples buffered inside the converter's resampler.
-        if let converter, let file = audioFile {
+        if let converter = currentConverter(), let file = audioFile {
             flushConverter(converter, to: file)
         }
 
         self.engine = nil
         self.audioFile = nil
-        self.converter = nil
+        setConverter(nil)
         self.currentURL = nil
         self.latestAverage = 0
         self.latestPeak = 0
@@ -151,28 +239,43 @@ public final class AudioRecorder: AudioRecording {
 
     /// Drain remaining samples from the converter by signaling end-of-stream.
     private func flushConverter(_ converter: AVAudioConverter, to file: AVAudioFile) {
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: converter.outputFormat,
-            frameCapacity: AVAudioFrameCount(converter.outputFormat.sampleRate * 0.1)
-        ) else { return }
-
-        var error: NSError?
-        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            outStatus.pointee = .endOfStream
-            return nil
-        }
-        let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-        if status == .endOfStream || status == .haveData, outputBuffer.frameLength > 0 {
-            do {
+        do {
+            _ = try Self.flushConverterOutput(
+                converter: converter,
+                minimumOutputFrameCapacity: AVAudioFrameCount(converter.outputFormat.sampleRate * 0.1)
+            ) { outputBuffer in
                 try file.write(from: outputBuffer)
-            } catch {
-                print("[AudioRecorder] Flush write error: \(error.localizedDescription)")
             }
+        } catch {
+            print("[AudioRecorder] Flush conversion error: \(error.localizedDescription)")
         }
     }
 
+    private func setConverter(_ converter: AVAudioConverter?) {
+        converterStateLock.lock()
+        self.converter = converter
+        converterStateLock.unlock()
+    }
+
+    private func currentConverter() -> AVAudioConverter? {
+        converterStateLock.lock()
+        defer { converterStateLock.unlock() }
+        return converter
+    }
+
     // MARK: - Internal (visible for testing)
+
+    nonisolated static func selectedBackend(environment: [String: String]) -> Backend {
+        if environment["VOX_AUDIO_BACKEND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "engine" {
+            return .avAudioEngine
+        }
+        return .avAudioRecorder
+    }
+
+    nonisolated static func normalizeDecibels(_ value: Float, minDb: Float = -50) -> Float {
+        let clamped = max(min(value, 0), minDb)
+        return (clamped - minDb) / -minDb
+    }
 
     /// Compute RMS average and peak from a PCM buffer, normalized to 0-1 range.
     nonisolated static func computeLevels(buffer: AVAudioPCMBuffer) -> (average: Float, peak: Float) {
@@ -194,8 +297,209 @@ public final class AudioRecorder: AudioRecording {
         let minDb: Float = -50
         let rmsDb = rms > 0 ? 20 * log10(rms) : minDb
         let peakDb = maxSample > 0 ? 20 * log10(maxSample) : minDb
-        let avgClamped = max(min(rmsDb, 0), minDb)
-        let peakClamped = max(min(peakDb, 0), minDb)
-        return ((avgClamped - minDb) / -minDb, (peakClamped - minDb) / -minDb)
+        return (normalizeDecibels(rmsDb, minDb: minDb), normalizeDecibels(peakDb, minDb: minDb))
+    }
+
+    nonisolated static func outputFrameCapacity(
+        for inputBuffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        minimumOutputFrameCapacity: AVAudioFrameCount
+    ) -> AVAudioFrameCount {
+        guard inputBuffer.frameLength > 0 else {
+            return minimumOutputFrameCapacity
+        }
+        let estimated = expectedOutputFrames(
+            inputFrames: inputBuffer.frameLength,
+            inputSampleRate: inputBuffer.format.sampleRate,
+            outputSampleRate: outputFormat.sampleRate
+        ) + 64
+        return max(minimumOutputFrameCapacity, estimated)
+    }
+
+    nonisolated static func expectedOutputFrames(
+        inputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double
+    ) -> AVAudioFrameCount {
+        guard inputFrames > 0, inputSampleRate > 0, outputSampleRate > 0 else {
+            return 0
+        }
+        let ratio = outputSampleRate / inputSampleRate
+        return AVAudioFrameCount(ceil(Double(inputFrames) * ratio))
+    }
+
+    nonisolated static func conversionHealthRatio(
+        inputFrames: AVAudioFrameCount,
+        outputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double
+    ) -> Double {
+        let expected = expectedOutputFrames(
+            inputFrames: inputFrames,
+            inputSampleRate: inputSampleRate,
+            outputSampleRate: outputSampleRate
+        )
+        guard expected > 0 else { return 1 }
+        return Double(outputFrames) / Double(expected)
+    }
+
+    nonisolated static func isConversionHealthy(
+        inputFrames: AVAudioFrameCount,
+        outputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double,
+        minimumRatio: Double = 0.85
+    ) -> Bool {
+        conversionHealthRatio(
+            inputFrames: inputFrames,
+            outputFrames: outputFrames,
+            inputSampleRate: inputSampleRate,
+            outputSampleRate: outputSampleRate
+        ) >= minimumRatio
+    }
+
+    nonisolated static func convertInputBuffer(
+        converter: AVAudioConverter,
+        inputBuffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        minimumOutputFrameCapacity: AVAudioFrameCount,
+        write: (AVAudioPCMBuffer) throws -> Void
+    ) throws -> AVAudioFrameCount {
+        var didProvideInput = false
+        var iterations = 0
+        var totalOutputFrames: AVAudioFrameCount = 0
+
+        while true {
+            iterations += 1
+            if iterations > 32 {
+                throw VoxError.internalError("Audio converter did not drain output.")
+            }
+
+            let frameCapacity = outputFrameCapacity(
+                for: inputBuffer,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: minimumOutputFrameCapacity
+            )
+            guard let outputBuffer = AVAudioPCMBuffer(
+                pcmFormat: outputFormat,
+                frameCapacity: frameCapacity
+            ) else {
+                throw VoxError.internalError("Failed to allocate output audio buffer.")
+            }
+
+            var error: NSError?
+            let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                if didProvideInput {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                didProvideInput = true
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+
+            if let error {
+                throw error
+            }
+            if status == .error {
+                throw VoxError.internalError("Audio converter returned error status.")
+            }
+            if outputBuffer.frameLength > 0 {
+                totalOutputFrames += outputBuffer.frameLength
+                try write(outputBuffer)
+            }
+            if status != .haveData {
+                return totalOutputFrames
+            }
+        }
+    }
+
+    nonisolated static func convertInputBufferRecoveringFormat(
+        converter: AVAudioConverter,
+        inputBuffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        minimumOutputFrameCapacity: AVAudioFrameCount,
+        write: (AVAudioPCMBuffer) throws -> Void
+    ) throws -> (frames: AVAudioFrameCount, converter: AVAudioConverter, didRebuild: Bool) {
+        do {
+            let frames = try convertInputBuffer(
+                converter: converter,
+                inputBuffer: inputBuffer,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: minimumOutputFrameCapacity,
+                write: write
+            )
+            return (frames, converter, false)
+        } catch {
+            guard !isInputFormatCompatible(converter: converter, inputBuffer: inputBuffer) else {
+                throw error
+            }
+            guard let rebuilt = AVAudioConverter(from: inputBuffer.format, to: outputFormat) else {
+                throw VoxError.internalError("Cannot rebuild audio converter for input format.")
+            }
+            let frames = try convertInputBuffer(
+                converter: rebuilt,
+                inputBuffer: inputBuffer,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: minimumOutputFrameCapacity,
+                write: write
+            )
+            return (frames, rebuilt, true)
+        }
+    }
+
+    nonisolated static func isInputFormatCompatible(
+        converter: AVAudioConverter,
+        inputBuffer: AVAudioPCMBuffer
+    ) -> Bool {
+        let converterFormat = converter.inputFormat
+        let inputFormat = inputBuffer.format
+        return converterFormat.sampleRate == inputFormat.sampleRate &&
+            converterFormat.channelCount == inputFormat.channelCount &&
+            converterFormat.commonFormat == inputFormat.commonFormat &&
+            converterFormat.isInterleaved == inputFormat.isInterleaved
+    }
+
+    nonisolated static func flushConverterOutput(
+        converter: AVAudioConverter,
+        minimumOutputFrameCapacity: AVAudioFrameCount,
+        write: (AVAudioPCMBuffer) throws -> Void
+    ) throws -> AVAudioFrameCount {
+        var iterations = 0
+        var totalOutputFrames: AVAudioFrameCount = 0
+
+        while true {
+            iterations += 1
+            if iterations > 32 {
+                throw VoxError.internalError("Audio converter flush did not complete.")
+            }
+
+            guard let outputBuffer = AVAudioPCMBuffer(
+                pcmFormat: converter.outputFormat,
+                frameCapacity: minimumOutputFrameCapacity
+            ) else {
+                throw VoxError.internalError("Failed to allocate flush output buffer.")
+            }
+
+            var error: NSError?
+            let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+                outStatus.pointee = .endOfStream
+                return nil
+            }
+
+            if let error {
+                throw error
+            }
+            if status == .error {
+                throw VoxError.internalError("Audio converter returned error status during flush.")
+            }
+            if outputBuffer.frameLength > 0 {
+                totalOutputFrames += outputBuffer.frameLength
+                try write(outputBuffer)
+            }
+            if status != .haveData {
+                return totalOutputFrames
+            }
+        }
     }
 }

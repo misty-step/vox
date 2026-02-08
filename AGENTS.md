@@ -18,6 +18,7 @@
 - `swift test`: run all tests.
 - `swift build -Xswiftc -warnings-as-errors`: strict build (matches pre-push and CI).
 - `swift test -Xswiftc -warnings-as-errors`: strict test run (matches CI).
+- `./scripts/test-audio-guardrails.sh`: audio capture regression contract tests.
 - `./scripts/run.sh`: launch debug binary with keys from `.env.local`.
 
 ## Coding Style & Naming Conventions
@@ -25,7 +26,7 @@
 - Naming: `UpperCamelCase` for types, `lowerCamelCase` for methods/properties, enum cases in `lowerCamelCase`.
 - Keep module boundaries clean: contracts in `VoxCore`, platform/network details in edge modules.
 - Prefer composition/decorators over special-case branches for provider behavior.
-- Keep logs consistent with existing bracket tags (example: `[Pipeline]`, `[STT]`, `[Vox]`).
+- Keep logs consistent with existing bracket tags (example: `[Pipeline]`, `[STT]`, `[Vox]`, `[AudioRecorder]`).
 
 ## Testing Guidelines
 - Framework: XCTest (`async` tests are standard where relevant).

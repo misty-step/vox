@@ -225,6 +225,41 @@ struct DictationPipelineTests {
         #expect(stt.lastAudioURL?.pathExtension.lowercased() == "ogg")
     }
 
+    @Test("Process falls back to CAF when Opus output is empty")
+    func process_enableOpus_emptyOutput_fallsBackToCAF() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+        let convertedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("converted-empty-\(UUID().uuidString)")
+            .appendingPathExtension("ogg")
+        FileManager.default.createFile(atPath: convertedURL.path, contents: Data())
+        let converter = MockAudioConverter(outputURL: convertedURL)
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            }
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 1)
+        #expect(stt.callCount == 1)
+        #expect(stt.lastAudioURL == audioURL)
+        #expect(!FileManager.default.fileExists(atPath: convertedURL.path))
+    }
+
     @Test("Process with light processing - rewrite succeeds")
     func process_lightRewriteSucceeds() async throws {
         let stt = MockSTTProvider()
@@ -311,6 +346,46 @@ struct DictationPipelineTests {
         } catch {
             Issue.record("Expected VoxError.noTranscript, got \(error)")
         }
+    }
+
+    @Test("Header-only CAF fails fast before STT")
+    func process_headerOnlyCAF_throwsEmptyCapture() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+
+        let headerOnlyURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("header-only-\(UUID().uuidString).caf")
+        let created = FileManager.default.createFile(
+            atPath: headerOnlyURL.path,
+            contents: Data(count: 4096)
+        )
+        #expect(created)
+        defer { try? FileManager.default.removeItem(at: headerOnlyURL) }
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: headerOnlyURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            #expect(error == .emptyCapture)
+        } catch {
+            Issue.record("Expected VoxError.emptyCapture, got \(error)")
+        }
+
+        #expect(stt.callCount == 0)
+        #expect(rewriter.callCount == 0)
+        #expect(paster.callCount == 0)
     }
 
     @Test("Rewrite failure falls back to raw transcript")

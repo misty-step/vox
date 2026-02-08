@@ -108,6 +108,7 @@ public final class DictationPipeline: DictationProcessing {
         // Capture original size BEFORE encoding
         let originalAttributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
         timing.originalSizeBytes = originalAttributes?[.size] as? Int ?? 0
+        try CapturedAudioInspector.ensureHasAudioFrames(at: audioURL)
 
         // Encode to Opus if enabled
         let uploadURL: URL
@@ -117,7 +118,13 @@ public final class DictationPipeline: DictationProcessing {
                 let opusURL = try await convertCAFToOpus(audioURL)
                 let attrs = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
                 timing.encodedSizeBytes = attrs?[.size] as? Int ?? 0
-                uploadURL = opusURL
+                if timing.encodedSizeBytes > 0 {
+                    uploadURL = opusURL
+                } else {
+                    print("[Pipeline] Opus conversion produced empty output, using CAF fallback")
+                    uploadURL = audioURL
+                    SecureFileDeleter.delete(at: opusURL)
+                }
             } catch {
                 print("[Pipeline] Opus conversion failed: \(error.localizedDescription), using CAF fallback")
                 uploadURL = audioURL
@@ -222,6 +229,7 @@ public final class DictationPipeline: DictationProcessing {
         #endif
         return finalText
     }
+
 }
 
 // MARK: - Timeout Helper

@@ -152,6 +152,12 @@ Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, cod
 
 Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
 
+## Docs
+
+- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- ADRs: [docs/adr/](docs/adr/)
+- Postmortems: [docs/postmortems/](docs/postmortems/)
+
 ## License
 
 MIT

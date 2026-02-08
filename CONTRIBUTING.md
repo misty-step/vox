@@ -18,7 +18,7 @@ git config core.hooksPath .githooks
 swift build
 ```
 
-The pre-push hook enforces lint + warnings-as-errors builds — same checks CI runs.
+The pre-push hook enforces lint + warnings-as-errors build + warnings-as-errors tests — same checks CI runs.
 
 ## Building and Testing
 

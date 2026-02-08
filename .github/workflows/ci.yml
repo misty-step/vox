@@ -29,6 +29,9 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
+      - name: Run audio guardrail tests
+        run: ./scripts/test-audio-guardrails.sh
+
       - name: Run tests
         run: swift test -Xswiftc -warnings-as-errors
         env:
