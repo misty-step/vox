@@ -1,0 +1,117 @@
+name: macOS Release Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_notarize:
+        description: "Skip notarization (uses ad-hoc signing)"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  macos-release:
+    name: Build signed macOS artifact
+    runs-on: macos-14
+    env:
+      VOX_NOTARY_PROFILE: vox-ci-notary
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Configure ad-hoc signing for smoke release
+        if: ${{ inputs.skip_notarize }}
+        run: echo "VOX_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
+      - name: Configure signing keychain
+        if: ${{ !inputs.skip_notarize }}
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          require_secret() {
+            local name="$1"
+            local value="$2"
+            if [[ -z "$value" ]]; then
+              echo "Error: required secret '$name' is missing or empty." >&2
+              exit 1
+            fi
+          }
+
+          require_secret "MACOS_CERTIFICATE_P12_BASE64" "$MACOS_CERTIFICATE_P12_BASE64"
+          require_secret "MACOS_CERTIFICATE_PASSWORD" "$MACOS_CERTIFICATE_PASSWORD"
+          require_secret "MACOS_KEYCHAIN_PASSWORD" "$MACOS_KEYCHAIN_PASSWORD"
+          require_secret "MACOS_SIGNING_IDENTITY" "$MACOS_SIGNING_IDENTITY"
+
+          CERT_PATH="$RUNNER_TEMP/vox-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+
+          if ! echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"; then
+            echo "Error: MACOS_CERTIFICATE_P12_BASE64 is not valid base64." >&2
+            exit 1
+          fi
+          if [[ ! -s "$CERT_PATH" ]]; then
+            echo "Error: decoded certificate file is empty: $CERT_PATH" >&2
+            exit 1
+          fi
+
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+          echo "VOX_SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Configure notary profile
+        if: ${{ !inputs.skip_notarize }}
+        env:
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          require_secret() {
+            local name="$1"
+            local value="$2"
+            if [[ -z "$value" ]]; then
+              echo "Error: required secret '$name' is missing or empty." >&2
+              exit 1
+            fi
+          }
+
+          require_secret "MACOS_NOTARY_APPLE_ID" "$MACOS_NOTARY_APPLE_ID"
+          require_secret "MACOS_NOTARY_APP_PASSWORD" "$MACOS_NOTARY_APP_PASSWORD"
+          require_secret "MACOS_TEAM_ID" "$MACOS_TEAM_ID"
+
+          xcrun notarytool store-credentials "$VOX_NOTARY_PROFILE" \
+            --apple-id "$MACOS_NOTARY_APPLE_ID" \
+            --team-id "$MACOS_TEAM_ID" \
+            --password "$MACOS_NOTARY_APP_PASSWORD"
+
+      - name: Build release artifact
+        env:
+          SKIP_NOTARIZE_INPUT: ${{ inputs.skip_notarize }}
+        run: |
+          if [ "$SKIP_NOTARIZE_INPUT" = "true" ]; then
+            ./scripts/release-macos.sh --skip-notarize
+          else
+            ./scripts/release-macos.sh
+          fi
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vox-macos-release
+          path: dist/
