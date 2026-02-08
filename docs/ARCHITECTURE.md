@@ -66,7 +66,7 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 1) User presses Option+Space
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
-3) `AudioRecorder` receives the selected device UID and routes via `AVAudioEngine` per-app (no system default change)
+3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts `AVAudioEngine` capture
 4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio via `AVAudioEngine` tap + format conversion
 5) Hedged STT router transcribes (Apple Speech + staggered cloud hedges)
 6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
@@ -89,15 +89,21 @@ Test invariants:
 
 ## Input Device Selection
 
-`AudioRecorder` uses `AVAudioEngine` with per-app device routing via `kAudioOutputUnitProperty_CurrentDevice` on the engine's input `AudioUnit`. This avoids changing the macOS system default.
-
 `AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and resolves stable `kAudioDevicePropertyDeviceUID` to runtime `AudioDeviceID`.
+
+Default behavior prioritizes reliability:
+- `VoxSession` sets the selected input as macOS default before recording starts.
+- `AudioRecorder` captures from the default route using `AVAudioEngine`.
+
+Optional per-app routing is available for experiments only:
+- set `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1` to attempt `kAudioOutputUnitProperty_CurrentDevice` on the input `AudioUnit`.
+- if per-app routing is unavailable/fails, capture continues on the default route.
 
 Behavior:
 - **System Default** (nil UID): `AVAudioEngine` uses whatever macOS has selected
-- **Specific device**: set on engine's input AudioUnit before recording starts (per-app, no system-wide side effect)
-- **Device unplugged**: silently falls back to system default
-- **Device set failure**: logs warning, falls back to system default
+- **Specific device**: Vox sets system default input to the selected UID before capture
+- **Device unplugged**: silently falls back to current system default
+- **Optional per-app mode**: guarded by `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1`
 
 ## State Machine
 

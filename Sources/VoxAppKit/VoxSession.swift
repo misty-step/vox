@@ -194,6 +194,15 @@ public final class VoxSession: ObservableObject {
             return
         }
 
+        // Compatibility fallback: set system default input before starting capture.
+        // This was the pre-AVAudioEngine behavior and remains the most reliable path
+        // for some Bluetooth devices (for example certain AirPods routing states).
+        if let uid = prefs.selectedInputDeviceUID,
+           let deviceID = AudioDeviceManager.deviceID(forUID: uid),
+           !AudioDeviceManager.setDefaultInputDevice(deviceID) {
+            print("[Vox] Failed to set default input device for UID \(uid), continuing")
+        }
+
         do {
             try recorder.start(inputDeviceUID: prefs.selectedInputDeviceUID)
             recordingStartTime = CFAbsoluteTimeGetCurrent()

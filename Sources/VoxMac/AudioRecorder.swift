@@ -13,6 +13,7 @@ public final class AudioRecorder: AudioRecording {
 
     /// Frames per tap callback; balances latency vs CPU overhead.
     private static let tapBufferSize: AVAudioFrameCount = 4096
+    private static let perAppRoutingEnv = "VOX_ENABLE_PER_APP_AUDIO_ROUTING"
 
     public init() {}
 
@@ -22,8 +23,11 @@ public final class AudioRecorder: AudioRecording {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
-        // Per-app device routing via CoreAudio property on the engine's input AudioUnit.
-        if let uid = inputDeviceUID,
+        // Per-app routing can be flaky on some Bluetooth routes.
+        // Keep it opt-in and rely on system-default routing by default.
+        let usePerAppRouting = ProcessInfo.processInfo.environment[Self.perAppRoutingEnv] == "1"
+        if usePerAppRouting,
+           let uid = inputDeviceUID,
            let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
             if let audioUnit = inputNode.audioUnit {
                 var id = deviceID
@@ -36,11 +40,13 @@ public final class AudioRecorder: AudioRecording {
                     UInt32(MemoryLayout<AudioDeviceID>.size)
                 )
                 if status != noErr {
-                    print("[AudioRecorder] Failed to set input device (status \(status)), using default")
+                    print("[AudioRecorder] Failed per-app input routing (status \(status)), using default input")
                 }
             } else {
-                print("[AudioRecorder] Input AudioUnit unavailable, using default input device")
+                print("[AudioRecorder] Input AudioUnit unavailable for per-app routing, using default input")
             }
+        } else if inputDeviceUID != nil {
+            print("[AudioRecorder] Per-app routing disabled; using system default input")
         }
 
         let hwFormat = inputNode.outputFormat(forBus: 0)

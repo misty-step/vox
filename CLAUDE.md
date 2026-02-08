@@ -54,7 +54,7 @@ Providers are wrapped in composable decorators, with default routing via stagger
 
 ### Data Flow
 
-Option+Space → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
