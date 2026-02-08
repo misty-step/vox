@@ -12,6 +12,7 @@ final class MockRecorder: AudioRecording {
     var levelCallCount = 0
     var shouldThrowOnStart = false
     var shouldThrowOnStop = false
+    var stopError: Error?
     private var recordingURL: URL?
 
     func start(inputDeviceUID: String? = nil) throws {
@@ -31,6 +32,9 @@ final class MockRecorder: AudioRecording {
 
     func stop() throws -> URL {
         stopCallCount += 1
+        if let stopError {
+            throw stopError
+        }
         if shouldThrowOnStop {
             throw VoxError.internalError("Mock stop failure")
         }
@@ -302,6 +306,34 @@ struct VoxSessionDITests {
         #expect(sessionExtension.failureReasons.contains("processing_cancelled"))
         #expect(sessionExtension.completionEvents.isEmpty)
         #expect(errors.isEmpty)
+        #expect(session.state == .idle)
+    }
+
+    @Test("SessionExtension observes recording tap failure separately")
+    @MainActor func sessionExtensionRecordingTapFailure() async {
+        let recorder = MockRecorder()
+        recorder.stopError = VoxError.audioCaptureFailed("Audio capture failed: tap conversion/write error")
+        let pipeline = MockPipeline()
+        let sessionExtension = MockSessionExtension()
+        var errors: [String] = []
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(sessionExtension.failureReasons.contains("recording_tap_failed"))
+        #expect(!sessionExtension.failureReasons.contains("recording_stop_failed"))
+        #expect(errors.count == 1)
+        #expect(pipeline.processCallCount == 0)
         #expect(session.state == .idle)
     }
 
