@@ -64,7 +64,7 @@ Result: on affected route/device combinations, tap callbacks produced no payload
 
 1. **Deep module boundary restored**: `AudioRecorder` exposes one stable interface while backend complexity is internal. Default is reliability-first (`AVAudioRecorder`); experimental path is explicit opt-in.
 2. **Information hiding improved**: per-app routing complexity is no longer on the default path.
-3. **Invariant at module boundary**: `DictationPipeline` now rejects header-only CAF payloads before STT (`No audio frames captured...`) to fail fast.
+3. **Invariant at module boundary**: `DictationPipeline` now rejects zero-frame capture payloads before STT (`VoxError.emptyCapture`) to fail fast.
 4. **Contract tests added**:
    - backend-selection contract (`AudioRecorderBackendSelectionTests`)
    - conversion-duration contract (`AudioRecorderConversionTests`)
