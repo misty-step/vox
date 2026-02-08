@@ -146,6 +146,12 @@ Available via OpenRouter:
 - moonshotai/kimi-k2.5
 - google/gemini-3-flash-preview
 
+## Product Standards
+
+- **Version/build in-app**: shown in Settings footer (with deterministic debug fallback values).
+- **Attribution**: Vox by Misty Step.
+- **Contact/help**: open a support issue at https://github.com/misty-step/vox/issues.
+
 ## Contributing
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
