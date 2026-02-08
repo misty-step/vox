@@ -41,8 +41,6 @@ private func formatBytes(_ bytes: Int) -> String {
 }
 
 public final class DictationPipeline: DictationProcessing {
-    private static let cafHeaderBytes = 4096
-
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
@@ -110,7 +108,7 @@ public final class DictationPipeline: DictationProcessing {
         // Capture original size BEFORE encoding
         let originalAttributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
         timing.originalSizeBytes = originalAttributes?[.size] as? Int ?? 0
-        try Self.validateCapturedAudioIfPresent(audioURL: audioURL, byteCount: timing.originalSizeBytes)
+        try CapturedAudioInspector.ensureHasAudioFrames(at: audioURL)
 
         // Encode to Opus if enabled
         let uploadURL: URL
@@ -226,12 +224,6 @@ public final class DictationPipeline: DictationProcessing {
         return finalText
     }
 
-    private static func validateCapturedAudioIfPresent(audioURL: URL, byteCount: Int) throws {
-        guard audioURL.pathExtension.lowercased() == "caf" else { return }
-        guard FileManager.default.fileExists(atPath: audioURL.path) else { return }
-        guard byteCount <= Self.cafHeaderBytes else { return }
-        throw VoxError.internalError("No audio frames captured. Check input device routing and retry.")
-    }
 }
 
 // MARK: - Timeout Helper

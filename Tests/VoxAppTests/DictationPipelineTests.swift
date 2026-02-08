@@ -314,7 +314,7 @@ struct DictationPipelineTests {
     }
 
     @Test("Header-only CAF fails fast before STT")
-    func process_headerOnlyCAF_throwsInternalError() async {
+    func process_headerOnlyCAF_throwsEmptyCapture() async {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
@@ -343,13 +343,9 @@ struct DictationPipelineTests {
             _ = try await pipeline.process(audioURL: headerOnlyURL)
             Issue.record("Expected error to be thrown")
         } catch let error as VoxError {
-            if case .internalError(let message) = error {
-                #expect(message.contains("No audio frames captured"))
-            } else {
-                Issue.record("Expected VoxError.internalError, got \(error)")
-            }
+            #expect(error == .emptyCapture)
         } catch {
-            Issue.record("Expected VoxError.internalError, got \(error)")
+            Issue.record("Expected VoxError.emptyCapture, got \(error)")
         }
 
         #expect(stt.callCount == 0)

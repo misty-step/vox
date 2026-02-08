@@ -18,6 +18,7 @@
 - `swift test`: run all tests.
 - `swift build -Xswiftc -warnings-as-errors`: strict build (matches pre-push and CI).
 - `swift test -Xswiftc -warnings-as-errors`: strict test run (matches CI).
+- `./scripts/test-audio-guardrails.sh`: audio capture regression contract tests.
 - `./scripts/run.sh`: launch debug binary with keys from `.env.local`.
 
 ## Coding Style & Naming Conventions

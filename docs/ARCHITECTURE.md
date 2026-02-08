@@ -73,7 +73,7 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
 
-Before STT, `DictationPipeline` rejects header-only CAF payloads (≤ 4096 bytes) to fail fast on capture regressions.
+Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioInspector` and fails fast with `VoxError.emptyCapture` when decoded frame count is zero.
 
 ## Audio Capture Contract
 
@@ -85,7 +85,7 @@ Before STT, `DictationPipeline` rejects header-only CAF payloads (≤ 4096 bytes
 Non-negotiable contract: **recorded speech duration and frame payload must survive capture and conversion across device/sample-rate differences**.
 
 Runtime invariants:
-- **Payload guard**: pipeline rejects header-only CAF files before STT (fast failure over silent empty transcripts).
+- **Payload guard**: pipeline validates capture payload via `CapturedAudioInspector` before STT (fast failure over silent empty transcripts).
 - **Engine drain per tap**: each input tap drains `AVAudioConverter` output until status is no longer `.haveData`.
 - **Engine dynamic capacity**: output buffer capacity uses `inputFrames * (outputRate / inputRate)` with a 100ms floor.
 - **Engine drain on stop**: flush repeats `.endOfStream` conversion calls until converter output is exhausted.
@@ -95,7 +95,8 @@ Test invariants:
 - `AudioRecorderBackendSelectionTests` enforces default backend = `AVAudioRecorder` and `engine` opt-in behavior.
 - `AudioRecorderConversionTests` validates duration preservation for common input rates (`16k`, `24k`, `44.1k`, `48k`).
 - Regression fixture explicitly checks the old truncation failure shape (`4096 @ 24k` incorrectly capped to `1600` output frames) is detected as unhealthy.
-- `DictationPipelineTests` asserts header-only CAF files fail fast before STT.
+- `CapturedAudioInspectorTests` validates payload detection across valid/empty/corrupt/missing capture files.
+- `DictationPipelineTests` asserts header-only capture payloads fail fast with `VoxError.emptyCapture` before STT.
 
 ## Input Device Selection
 
@@ -175,7 +176,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
-| Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
+| Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
 | Core | VoxCore | `Protocols.swift`, `SessionExtension.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
 

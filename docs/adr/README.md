@@ -53,3 +53,4 @@ Examples:
 |-----|-------|--------|
 | [0001](0001-simplicity-first-design.md) | Simplicity-First Design | Accepted |
 | [0002](0002-session-extension-seam.md) | Session Extension Seam for Wrappers | Accepted |
+| [0003](0003-audio-capture-reliability-first-backend-policy.md) | Audio Capture Reliability-First Backend Policy | Accepted |

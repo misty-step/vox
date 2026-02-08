@@ -97,6 +97,7 @@ public enum VoxError: Error, Sendable, Equatable, LocalizedError {
     case permissionDenied(String)
     case noFocusedElement
     case noTranscript
+    case emptyCapture
     case insertionFailed
     case provider(String)
     case internalError(String)
@@ -110,6 +111,8 @@ public enum VoxError: Error, Sendable, Equatable, LocalizedError {
             return "No text field focused."
         case .noTranscript:
             return "No transcript returned."
+        case .emptyCapture:
+            return "No audio captured. Check input device routing and retry."
         case .insertionFailed:
             return "Failed to insert text."
         case .provider(let msg):
