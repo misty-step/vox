@@ -45,6 +45,23 @@ public enum STTError: Error, Sendable, Equatable, LocalizedError {
             return true
         }
     }
+
+    /// Health scoring semantics for provider routing.
+    /// Transient failures should not permanently penalize a provider.
+    public var isTransientForHealthScoring: Bool {
+        guard isFallbackEligible else {
+            return false
+        }
+        if isRetryable {
+            return true
+        }
+        switch self {
+        case .unknown:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 public enum RewriteError: Error, Sendable, Equatable, LocalizedError {

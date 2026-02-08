@@ -33,26 +33,29 @@ VoxAppKit was extracted from VoxApp so tests can import it — SwiftPM executabl
 
 ### STT Resilience Chain
 
-Providers are wrapped in composable decorators, each an `STTProvider` wrapping another:
+Providers are wrapped in composable decorators, with dynamic routing via provider health:
 
-```
+```text
                          ConcurrencyLimit(8 default)
                                    │
                                    ▼
-ElevenLabs → Timeout → Retry(3x) ─┐
-                                    ├→ Fallback
-Deepgram   → Timeout → Retry(2x) ─┤     ├→ Fallback
-                                    │     │     ├→ Fallback → Final result
-Whisper    → Timeout → Retry(2x) ──┘     │     │
-                                          │     │
-Apple Speech (on-device, always available) ┘     │
+                            FallbackSTTProvider
+                              primary │ fallback
+                                      └── Apple Speech (on-device, always available fallback)
+                             
+                              HealthAwareSTTProvider(window: 20 attempts)
+                                         │
+                           dynamic cloud-provider ordering per request
+                                         │
+        ElevenLabs(Timeout+Retry) • Deepgram(Timeout+Retry) • Whisper(Timeout+Retry)
 ```
 
 - **TimeoutSTTProvider**: dynamic deadline — `baseTimeout + fileSizeMB * secondsPerMB`
 - **RetryingSTTProvider**: exponential backoff + jitter on `STTError.isRetryable` errors
+- **HealthAwareSTTProvider**: rolling health metrics (`successRate`, `averageLatency`, transient/permanent failures) drive provider ordering
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT transcribes and queues overflow
 - **FallbackSTTProvider**: catches `STTError.isFallbackEligible`, invokes callback, tries next
-- Both retry and fallback decorators have catch-all for non-STTError types (URLError, NSError)
+- Retry/fallback logic treats non-STTError failures as fallback-eligible network/transient failures
 - `CancellationError` must propagate cleanly through all decorators
 
 ### Data Flow
@@ -65,11 +68,11 @@ Option+Space → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optiona
 
 ## Key Patterns
 
-**Decorator composition**: Add cross-cutting concerns (timeout, retry, fallback) by wrapping `STTProvider`. Never add special-case branches inside providers.
+**Decorator composition**: Add cross-cutting concerns (timeout, retry, health-aware routing, fallback) by wrapping `STTProvider`. Never add special-case branches inside providers.
 
 **DI via constructor injection**: `VoxSession` accepts optional `AudioRecording`, `DictationProcessing`, `HUDDisplaying`, `PreferencesReading`. Pass `nil` for defaults. Protocols live in `VoxCore/Protocols.swift`.
 
-**Error classification**: `STTError.isRetryable` and `.isFallbackEligible` centralize which errors trigger which decorator behavior.
+**Error classification**: `STTError.isRetryable`, `.isFallbackEligible`, and `.isTransientForHealthScoring` centralize error semantics across retry/fallback/routing.
 
 **Quality gate**: `RewriteQualityGate` compares candidate/raw character count ratio. Falls back to raw transcript if below threshold (light: 0.6, aggressive: 0.3, enhance: 0.2).
 

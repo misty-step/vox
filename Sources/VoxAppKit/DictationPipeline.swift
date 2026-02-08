@@ -227,7 +227,7 @@ public final class DictationPipeline: DictationProcessing {
 // MARK: - Timeout Helper
 
 /// Wraps an async operation with a deadline.
-/// Used to cap the STT fallback chain (4 providers × retries = 360s worst-case without this).
+/// Used to cap total multi-provider STT attempts (4 providers × retries = 360s worst-case without this).
 private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T

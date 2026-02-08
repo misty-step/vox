@@ -24,6 +24,17 @@ final class STTErrorTests: XCTestCase {
         XCTAssertFalse(STTError.invalidAudio.isFallbackEligible)
     }
 
+    func test_isTransientForHealthScoring() {
+        XCTAssertTrue(STTError.throttled.isTransientForHealthScoring)
+        XCTAssertTrue(STTError.network("offline").isTransientForHealthScoring)
+        XCTAssertTrue(STTError.unknown("oops").isTransientForHealthScoring)
+
+        XCTAssertFalse(STTError.auth.isTransientForHealthScoring)
+        XCTAssertFalse(STTError.quotaExceeded.isTransientForHealthScoring)
+        XCTAssertFalse(STTError.sessionLimit.isTransientForHealthScoring)
+        XCTAssertFalse(STTError.invalidAudio.isTransientForHealthScoring)
+    }
+
     // MARK: - Error Description Tests
 
     func test_errorDescription() {

@@ -68,33 +68,9 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeSTTProvider() -> STTProvider {
-        // Build chain bottom-up: last fallback first
-        var chain: STTProvider = AppleSpeechClient()
+        var cloudProviders: [HealthAwareSTTProvider.ProviderEntry] = []
 
-        // Optional: Whisper (OpenAI)
-        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !openAIKey.isEmpty {
-            let whisper = WhisperClient(apiKey: openAIKey)
-            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Whisper") { [weak self] in
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
-            }
-        }
-
-        // Optional: Deepgram
-        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !deepgramKey.isEmpty {
-            let deepgram = DeepgramClient(apiKey: deepgramKey)
-            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Deepgram") { [weak self] in
-                let next = openAIKey.isEmpty ? "Apple Speech" : "Whisper"
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
-            }
-        }
-
-        // Optional: ElevenLabs (primary if configured)
+        // Optional: ElevenLabs (highest preference if configured)
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
@@ -105,16 +81,47 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "ElevenLabs") { [weak self] in
-                let next: String
-                if !deepgramKey.isEmpty {
-                    next = "Deepgram"
-                } else if !openAIKey.isEmpty {
-                    next = "Whisper"
-                } else {
-                    next = "Apple Speech"
+            cloudProviders.append(.init(name: "ElevenLabs", provider: retried))
+        }
+
+        // Optional: Deepgram
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !deepgramKey.isEmpty {
+            let deepgram = DeepgramClient(apiKey: deepgramKey)
+            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram") { [weak self] attempt, maxRetries, delay in
+                let delayStr = String(format: "%.1fs", delay)
+                Task { @MainActor in
+                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
+            }
+            cloudProviders.append(.init(name: "Deepgram", provider: retried))
+        }
+
+        // Optional: Whisper (OpenAI)
+        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !openAIKey.isEmpty {
+            let whisper = WhisperClient(apiKey: openAIKey)
+            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper") { [weak self] attempt, maxRetries, delay in
+                let delayStr = String(format: "%.1fs", delay)
+                Task { @MainActor in
+                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
+                }
+            }
+            cloudProviders.append(.init(name: "Whisper", provider: retried))
+        }
+
+        let appleSpeech = AppleSpeechClient()
+        let chain: STTProvider
+        if cloudProviders.isEmpty {
+            chain = appleSpeech
+        } else {
+            let healthAware = HealthAwareSTTProvider(providers: cloudProviders) { [weak self] _, next in
                 Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
+            }
+            chain = FallbackSTTProvider(primary: healthAware, fallback: appleSpeech, primaryName: "Cloud STT") { [weak self] in
+                Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
             }
         }
 

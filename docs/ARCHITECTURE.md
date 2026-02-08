@@ -34,7 +34,7 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
  ┌─────────────────────────────────────────────────────────────────────┐
  │ Protocols: STTProvider • RewriteProvider • TextPaster                │
  │ Decorators: TimeoutSTTProvider • RetryingSTTProvider                 │
- │             ConcurrencyLimitedSTTProvider                             │
+ │             HealthAwareSTTProvider • ConcurrencyLimitedSTTProvider   │
  │             FallbackSTTProvider                                      │
  │ ProcessingLevel • RewriteQualityGate • Errors • MultipartFormData    │
  └─────────────────────────────────────────────────────────────────────┘
@@ -42,30 +42,32 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 
 ## STT Resilience Chain
 
-Providers are wrapped in decorators and composed bottom-up:
+Providers are wrapped in decorators. `HealthAwareSTTProvider` tracks rolling health and reorders attempts per request.
 
-```
-                                         ConcurrencyLimit(8 default)
-                                                   │
-                                                   ▼
-ElevenLabs ─► Timeout(15s) ─► Retry(3x) ─┐
-                                           ├─► Fallback
-Deepgram ──► Timeout(20s) ─► Retry(2x) ──┤    ├─► Fallback
-                                           │    │    ├─► Fallback
-Whisper ───► Timeout(20s) ─► Retry(2x) ───┘    │    │
-                                                 │    │
-Apple Speech (on-device, no timeout) ────────────┘    │
-                                                      │
-                                              Final result
+```text
+                                 ConcurrencyLimit(8 default)
+                                           │
+                                           ▼
+                                    FallbackSTTProvider
+                                      primary │ fallback
+                                              │
+                                              └── Apple Speech (on-device, final fallback)
+                                             
+                                      HealthAwareSTTProvider(window: 20 attempts)
+                                              │
+                            dynamically ordered cloud-provider attempts
+                                              │
+      ElevenLabs(Timeout+Retry) • Deepgram(Timeout+Retry) • Whisper(Timeout+Retry)
 ```
 
-Each decorator is a `STTProvider` wrapping another `STTProvider`:
+Each decorator is a `STTProvider`:
 - **TimeoutSTTProvider**: races transcription against a deadline
 - **RetryingSTTProvider**: retries on `.isRetryable` errors with exponential backoff + jitter
+- **HealthAwareSTTProvider**: tracks rolling success/latency/error-class metrics and reorders providers by health
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT requests and queues overflow
 - **FallbackSTTProvider**: catches `.isFallbackEligible` errors and tries the next provider
 
-Error classification is centralized in `STTError.isRetryable` and `STTError.isFallbackEligible`.
+Error classification is centralized in `STTError.isRetryable`, `STTError.isFallbackEligible`, and `STTError.isTransientForHealthScoring`.
 
 ## Data Flow (Dictation Pipeline)
 
@@ -73,7 +75,7 @@ Error classification is centralized in `STTError.isRetryable` and `STTError.isFa
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
 3) If a specific input device is selected, `AudioDeviceManager.setDefaultInputDevice()` applies it
 4) `AudioRecorder` captures 16kHz/16-bit mono CAF audio
-5) STT chain transcribes (ElevenLabs → Deepgram → Whisper → Apple Speech)
+5) Health-aware STT router transcribes (dynamic order across configured providers, Apple Speech as final fallback)
 6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
@@ -146,7 +148,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
 | Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
-| STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `FallbackSTTProvider.swift` |
+| STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
