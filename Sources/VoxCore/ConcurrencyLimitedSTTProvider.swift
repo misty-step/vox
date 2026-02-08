@@ -5,8 +5,9 @@ public struct ConcurrencyLimitedSTTProvider: STTProvider {
     private let semaphore: AsyncSemaphore
 
     public init(provider: STTProvider, maxConcurrent: Int) {
+        let limit = max(1, maxConcurrent)
         self.provider = provider
-        self.semaphore = AsyncSemaphore(maxConcurrent: max(1, maxConcurrent))
+        self.semaphore = AsyncSemaphorePool.semaphore(maxConcurrent: limit)
     }
 
     public func transcribe(audioURL: URL) async throws -> String {
@@ -14,6 +15,22 @@ public struct ConcurrencyLimitedSTTProvider: STTProvider {
         defer { semaphore.signal() }
         try Task.checkCancellation()
         return try await provider.transcribe(audioURL: audioURL)
+    }
+}
+
+private enum AsyncSemaphorePool {
+    private static let lock = NSLock()
+    private static var semaphores: [Int: AsyncSemaphore] = [:]
+
+    static func semaphore(maxConcurrent: Int) -> AsyncSemaphore {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = semaphores[maxConcurrent] {
+            return existing
+        }
+        let created = AsyncSemaphore(maxConcurrent: maxConcurrent)
+        semaphores[maxConcurrent] = created
+        return created
     }
 }
 

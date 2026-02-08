@@ -78,6 +78,31 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         XCTAssertEqual(gate.maxInFlight, 1)
     }
 
+    func test_transcribe_sharesLimitAcrossProviderInstances() async throws {
+        let firstBase = GateSTTProvider()
+        let secondBase = GateSTTProvider()
+        let first = ConcurrencyLimitedSTTProvider(provider: firstBase, maxConcurrent: 1)
+        let second = ConcurrencyLimitedSTTProvider(provider: secondBase, maxConcurrent: 1)
+
+        let firstTask = Task { try await first.transcribe(audioURL: audioURL) }
+        try await waitUntil { firstBase.callCount == 1 }
+
+        let secondTask = Task { try await second.transcribe(audioURL: audioURL) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(secondBase.callCount, 0)
+
+        firstBase.resumeNext(with: .success("first"))
+        let firstResult = try await firstTask.value
+        XCTAssertEqual(firstResult, "first")
+
+        try await waitUntil { secondBase.callCount == 1 }
+        secondBase.resumeNext(with: .success("second"))
+        let secondResult = try await secondTask.value
+        XCTAssertEqual(secondResult, "second")
+        XCTAssertEqual(firstBase.maxInFlight, 1)
+        XCTAssertEqual(secondBase.maxInFlight, 1)
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1.0,
         condition: @escaping () -> Bool
