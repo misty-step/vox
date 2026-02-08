@@ -235,6 +235,17 @@ public final class VoxSession: ObservableObject {
         let url: URL
         do {
             url = try recorder.stop()
+        } catch let error as VoxError {
+            switch error {
+            case .audioCaptureFailed:
+                await sessionExtension.didFailDictation(reason: "recording_tap_failed")
+            default:
+                await sessionExtension.didFailDictation(reason: "recording_stop_failed")
+            }
+            presentError(error.localizedDescription)
+            state = .idle
+            hud.hide()
+            return
         } catch {
             await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)

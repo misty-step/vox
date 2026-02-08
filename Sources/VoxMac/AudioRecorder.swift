@@ -9,6 +9,8 @@ public final class AudioRecorder: AudioRecording {
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
     private let converterStateLock = NSLock()
+    private let captureIntegrityLock = NSLock()
+    private var captureIntegrityFailure: VoxError?
     private var currentURL: URL?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
@@ -26,6 +28,7 @@ public final class AudioRecorder: AudioRecording {
 
     public func start(inputDeviceUID: String?) throws {
         if recorder != nil || engine != nil { return }
+        clearCaptureIntegrityFailure()
         let backend = Self.selectedBackend(environment: ProcessInfo.processInfo.environment)
         #if DEBUG
         print("[AudioRecorder] Backend: \(backend == .avAudioRecorder ? "AVAudioRecorder" : "AVAudioEngine")")
@@ -149,6 +152,9 @@ public final class AudioRecorder: AudioRecording {
                 }
             } catch {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
+                self?.recordCaptureIntegrityFailure(
+                    message: "Audio capture failed: tap conversion/write error (\(error.localizedDescription))"
+                )
             }
 
             if !didLogConversionUnderflow,
@@ -214,6 +220,7 @@ public final class AudioRecorder: AudioRecording {
             self.currentURL = nil
             self.latestAverage = 0
             self.latestPeak = 0
+            try throwCaptureIntegrityFailureIfPresent()
             return url
         }
 
@@ -234,6 +241,7 @@ public final class AudioRecorder: AudioRecording {
         self.currentURL = nil
         self.latestAverage = 0
         self.latestPeak = 0
+        try throwCaptureIntegrityFailureIfPresent()
         return url
     }
 
@@ -248,6 +256,9 @@ public final class AudioRecorder: AudioRecording {
             }
         } catch {
             print("[AudioRecorder] Flush conversion error: \(error.localizedDescription)")
+            recordCaptureIntegrityFailure(
+                message: "Audio capture failed: converter flush error (\(error.localizedDescription))"
+            )
         }
     }
 
@@ -261,6 +272,33 @@ public final class AudioRecorder: AudioRecording {
         converterStateLock.lock()
         defer { converterStateLock.unlock() }
         return converter
+    }
+
+    private func recordCaptureIntegrityFailure(message: String) {
+        captureIntegrityLock.lock()
+        if captureIntegrityFailure == nil {
+            captureIntegrityFailure = .audioCaptureFailed(message)
+        }
+        captureIntegrityLock.unlock()
+    }
+
+    private func clearCaptureIntegrityFailure() {
+        captureIntegrityLock.lock()
+        captureIntegrityFailure = nil
+        captureIntegrityLock.unlock()
+    }
+
+    private func popCaptureIntegrityFailure() -> VoxError? {
+        captureIntegrityLock.lock()
+        defer { captureIntegrityLock.unlock() }
+        let failure = captureIntegrityFailure
+        captureIntegrityFailure = nil
+        return failure
+    }
+
+    private func throwCaptureIntegrityFailureIfPresent() throws {
+        guard let failure = popCaptureIntegrityFailure() else { return }
+        throw failure
     }
 
     // MARK: - Internal (visible for testing)

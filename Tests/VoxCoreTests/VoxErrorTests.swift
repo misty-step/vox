@@ -25,6 +25,11 @@ final class VoxErrorTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "No audio captured. Check input device routing and retry.")
     }
 
+    func test_errorDescription_audioCaptureFailed() {
+        let error = VoxError.audioCaptureFailed("Tap write failed")
+        XCTAssertEqual(error.errorDescription, "Tap write failed")
+    }
+
     func test_errorDescription_insertionFailed() {
         let error = VoxError.insertionFailed
         XCTAssertEqual(error.errorDescription, "Failed to insert text.")
@@ -50,12 +55,14 @@ final class VoxErrorTests: XCTestCase {
     func test_equatable() {
         XCTAssertEqual(VoxError.noTranscript, VoxError.noTranscript)
         XCTAssertEqual(VoxError.emptyCapture, VoxError.emptyCapture)
+        XCTAssertEqual(VoxError.audioCaptureFailed("tap"), VoxError.audioCaptureFailed("tap"))
         XCTAssertEqual(VoxError.insertionFailed, VoxError.insertionFailed)
         XCTAssertEqual(VoxError.provider("msg"), VoxError.provider("msg"))
         XCTAssertEqual(VoxError.pipelineTimeout, VoxError.pipelineTimeout)
 
         XCTAssertNotEqual(VoxError.noTranscript, VoxError.insertionFailed)
         XCTAssertNotEqual(VoxError.emptyCapture, VoxError.noTranscript)
+        XCTAssertNotEqual(VoxError.audioCaptureFailed("a"), VoxError.audioCaptureFailed("b"))
         XCTAssertNotEqual(VoxError.provider("a"), VoxError.provider("b"))
     }
 }
