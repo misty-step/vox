@@ -68,7 +68,10 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeSTTProvider() -> STTProvider {
-        var cloudProviders: [HealthAwareSTTProvider.ProviderEntry] = []
+        let appleSpeech = AppleSpeechClient()
+        var hedgedEntries: [HedgedSTTProvider.Entry] = [
+            .init(name: "Apple Speech", provider: appleSpeech, delay: 0),
+        ]
 
         // Optional: ElevenLabs (highest preference if configured)
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -81,7 +84,7 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            cloudProviders.append(.init(name: "ElevenLabs", provider: retried))
+            hedgedEntries.append(.init(name: "ElevenLabs", provider: retried, delay: 0))
         }
 
         // Optional: Deepgram
@@ -95,7 +98,7 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            cloudProviders.append(.init(name: "Deepgram", provider: retried))
+            hedgedEntries.append(.init(name: "Deepgram", provider: retried, delay: 5))
         }
 
         // Optional: Whisper (OpenAI)
@@ -109,19 +112,20 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            cloudProviders.append(.init(name: "Whisper", provider: retried))
+            hedgedEntries.append(.init(name: "Whisper", provider: retried, delay: 10))
         }
 
-        let appleSpeech = AppleSpeechClient()
         let chain: STTProvider
-        if cloudProviders.isEmpty {
+        if hedgedEntries.count == 1 {
             chain = appleSpeech
         } else {
-            let healthAware = HealthAwareSTTProvider(providers: cloudProviders) { [weak self] _, next in
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
-            }
-            chain = FallbackSTTProvider(primary: healthAware, fallback: appleSpeech, primaryName: "Cloud STT") { [weak self] in
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
+            chain = HedgedSTTProvider(entries: hedgedEntries) { [weak self] providerName in
+                guard providerName == "Deepgram" || providerName == "Whisper" else {
+                    return
+                }
+                Task { @MainActor in
+                    self?.hud.showProcessing(message: "Racing \(providerName)")
+                }
             }
         }
 
