@@ -6,6 +6,7 @@ import VoxCore
 public final class AudioRecorder: AudioRecording {
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
+    private var converter: AVAudioConverter?
     private var currentURL: URL?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
@@ -15,7 +16,7 @@ public final class AudioRecorder: AudioRecording {
 
     public init() {}
 
-    public func start(inputDeviceUID: String? = nil) throws {
+    public func start(inputDeviceUID: String?) throws {
         if engine != nil { return }
 
         let engine = AVAudioEngine()
@@ -119,6 +120,7 @@ public final class AudioRecorder: AudioRecording {
         }
         self.engine = engine
         self.audioFile = file
+        self.converter = converter
         self.currentURL = url
     }
 
@@ -132,12 +134,42 @@ public final class AudioRecorder: AudioRecording {
         }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+
+        // Flush any samples buffered inside the converter's resampler.
+        if let converter, let file = audioFile {
+            flushConverter(converter, to: file)
+        }
+
         self.engine = nil
         self.audioFile = nil
+        self.converter = nil
         self.currentURL = nil
         self.latestAverage = 0
         self.latestPeak = 0
         return url
+    }
+
+    /// Drain remaining samples from the converter by signaling end-of-stream.
+    private func flushConverter(_ converter: AVAudioConverter, to file: AVAudioFile) {
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: converter.outputFormat,
+            frameCapacity: AVAudioFrameCount(converter.outputFormat.sampleRate * 0.1)
+        ) else { return }
+
+        var error: NSError?
+        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
+            outStatus.pointee = .endOfStream
+            return nil
+        }
+        let status = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+
+        if status == .endOfStream || status == .haveData, outputBuffer.frameLength > 0 {
+            do {
+                try file.write(from: outputBuffer)
+            } catch {
+                print("[AudioRecorder] Flush write error: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Internal (visible for testing)
