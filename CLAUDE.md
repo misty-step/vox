@@ -36,6 +36,9 @@ VoxAppKit was extracted from VoxApp so tests can import it — SwiftPM executabl
 Providers are wrapped in composable decorators, each an `STTProvider` wrapping another:
 
 ```
+                         ConcurrencyLimit(8 default)
+                                   │
+                                   ▼
 ElevenLabs → Timeout → Retry(3x) ─┐
                                     ├→ Fallback
 Deepgram   → Timeout → Retry(2x) ─┤     ├→ Fallback
@@ -47,6 +50,7 @@ Apple Speech (on-device, always available) ┘     │
 
 - **TimeoutSTTProvider**: dynamic deadline — `baseTimeout + fileSizeMB * secondsPerMB`
 - **RetryingSTTProvider**: exponential backoff + jitter on `STTError.isRetryable` errors
+- **ConcurrencyLimitedSTTProvider**: bounds in-flight STT transcribes and queues overflow
 - **FallbackSTTProvider**: catches `STTError.isFallbackEligible`, invokes callback, tries next
 - Both retry and fallback decorators have catch-all for non-STTError types (URLError, NSError)
 - `CancellationError` must propagate cleanly through all decorators
@@ -69,7 +73,7 @@ Option+Space → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optiona
 
 **Quality gate**: `RewriteQualityGate` compares candidate/raw character count ratio. Falls back to raw transcript if below threshold (light: 0.6, aggressive: 0.3, enhance: 0.2).
 
-**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional).
+**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`).
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 

@@ -12,6 +12,7 @@ SuperWhisper alternative that's simpler and smarter.
 
 - **Press Option+Space** to start/stop recording
 - **Resilient STT chain**: ElevenLabs → Deepgram → Whisper → Apple Speech (on-device fallback)
+- **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
 - **Three processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite)
 - **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
@@ -91,6 +92,7 @@ export ELEVENLABS_API_KEY=your-key
 export OPENROUTER_API_KEY=your-key
 export DEEPGRAM_API_KEY=your-key  # optional fallback
 export OPENAI_API_KEY=your-key    # optional Whisper fallback
+export VOX_MAX_CONCURRENT_STT=8   # optional global STT in-flight limit
 ```
 
 **Settings window** (persisted in Keychain):
@@ -125,7 +127,7 @@ swift run Vox
 
 ```
 Sources/
-  VoxCore/       # Protocols, errors, decorators (retry/fallback/timeout)
+  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/fallback)
   VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
   VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
   VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
