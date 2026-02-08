@@ -225,6 +225,41 @@ struct DictationPipelineTests {
         #expect(stt.lastAudioURL?.pathExtension.lowercased() == "ogg")
     }
 
+    @Test("Process falls back to CAF when Opus output is empty")
+    func process_enableOpus_emptyOutput_fallsBackToCAF() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+        let convertedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("converted-empty-\(UUID().uuidString)")
+            .appendingPathExtension("ogg")
+        FileManager.default.createFile(atPath: convertedURL.path, contents: Data())
+        let converter = MockAudioConverter(outputURL: convertedURL)
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            }
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 1)
+        #expect(stt.callCount == 1)
+        #expect(stt.lastAudioURL == audioURL)
+        #expect(!FileManager.default.fileExists(atPath: convertedURL.path))
+    }
+
     @Test("Process with light processing - rewrite succeeds")
     func process_lightRewriteSucceeds() async throws {
         let stt = MockSTTProvider()

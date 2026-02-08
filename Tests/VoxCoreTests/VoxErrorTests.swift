@@ -20,7 +20,7 @@ final class VoxErrorTests: XCTestCase {
         XCTAssertEqual(error.errorDescription, "No transcript returned.")
     }
 
-    func test_errorDescription_emptyCapture() {
+    func test_errorDescription_returnsMessageWhenEmptyCapture() {
         let error = VoxError.emptyCapture
         XCTAssertEqual(error.errorDescription, "No audio captured. Check input device routing and retry.")
     }

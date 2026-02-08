@@ -1,75 +1,79 @@
 import AVFoundation
-import Testing
+import XCTest
 @testable import VoxMac
 
-@Suite("AudioRecorder.computeLevels")
-struct AudioRecorderComputeLevelsTests {
-
+final class AudioRecorderComputeLevelsTests: XCTestCase {
     private func makeBuffer(samples: [Float]) -> AVAudioPCMBuffer {
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))!
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+        let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(samples.count)
+        )!
         buffer.frameLength = AVAudioFrameCount(samples.count)
         let channel = buffer.floatChannelData![0]
-        for (i, s) in samples.enumerated() {
-            channel[i] = s
+        for (index, sample) in samples.enumerated() {
+            channel[index] = sample
         }
         return buffer
     }
 
-    @Test("Silence returns (0, 0)")
-    func silence() {
+    func test_computeLevels_returnsZeroesWhenSilence() {
         let buffer = makeBuffer(samples: [0, 0, 0, 0])
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.average == 0)
-        #expect(levels.peak == 0)
+        XCTAssertEqual(levels.average, 0)
+        XCTAssertEqual(levels.peak, 0)
     }
 
-    @Test("Full-scale signal returns (1, 1)")
-    func fullScale() {
+    func test_computeLevels_returnsUnityWhenFullScale() {
         let buffer = makeBuffer(samples: [1.0, -1.0, 1.0, -1.0])
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.average == 1.0)
-        #expect(levels.peak == 1.0)
+        XCTAssertEqual(levels.average, 1.0)
+        XCTAssertEqual(levels.peak, 1.0)
     }
 
-    @Test("Empty buffer returns (0, 0)")
-    func emptyBuffer() {
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
+    func test_computeLevels_returnsZeroesWhenBufferEmpty() {
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16)!
         buffer.frameLength = 0
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.average == 0)
-        #expect(levels.peak == 0)
+        XCTAssertEqual(levels.average, 0)
+        XCTAssertEqual(levels.peak, 0)
     }
 
-    @Test("Levels are clamped to 0-1 range")
-    func clampedRange() {
-        // -40dB signal: 0.01 amplitude → should be in range (0, 1)
+    func test_computeLevels_clampsLevelsToUnitInterval() {
         let buffer = makeBuffer(samples: [0.01, -0.01, 0.01, -0.01])
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.average >= 0 && levels.average <= 1)
-        #expect(levels.peak >= 0 && levels.peak <= 1)
+        XCTAssertGreaterThanOrEqual(levels.average, 0)
+        XCTAssertLessThanOrEqual(levels.average, 1)
+        XCTAssertGreaterThanOrEqual(levels.peak, 0)
+        XCTAssertLessThanOrEqual(levels.peak, 1)
     }
 
-    @Test("Peak >= average for mixed-amplitude signal")
-    func peakGreaterThanAverage() {
+    func test_computeLevels_peakIsGreaterThanOrEqualToAverageForMixedAmplitude() {
         let buffer = makeBuffer(samples: [0.1, 0.9, 0.1, 0.1])
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.peak >= levels.average)
+        XCTAssertGreaterThanOrEqual(levels.peak, levels.average)
     }
 
-    @Test("Very quiet signal (-60dB) clamps to floor")
-    func quietSignalClampsToFloor() {
-        // 0.001 amplitude ≈ -60dB, below the -50dB floor
+    func test_computeLevels_clampsQuietSignalToFloor() {
         let buffer = makeBuffer(samples: [0.001, 0.001, 0.001, 0.001])
         let levels = AudioRecorder.computeLevels(buffer: buffer)
-        #expect(levels.average == 0)
-        #expect(levels.peak == 0)
+        XCTAssertEqual(levels.average, 0)
+        XCTAssertEqual(levels.peak, 0)
     }
 }
 
-@Suite("AudioRecorder conversion", .serialized)
-struct AudioRecorderConversionTests {
+final class AudioRecorderConversionTests: XCTestCase {
     private let outputFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
         sampleRate: 16_000,
@@ -87,14 +91,13 @@ struct AudioRecorderConversionTests {
         let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount)!
         buffer.frameLength = frameCount
         let channel = buffer.floatChannelData![0]
-        for i in 0..<Int(frameCount) {
-            channel[i] = sin(Float(i) * 0.01)
+        for index in 0..<Int(frameCount) {
+            channel[index] = sin(Float(index) * 0.01)
         }
         return buffer
     }
 
-    @Test("Output frame capacity scales for Bluetooth-rate input")
-    func outputCapacityScalesForLowSampleRateInput() {
+    func test_outputFrameCapacity_scalesForLowSampleRateInput() {
         let input = makeInputBuffer(sampleRate: 24_000, frameCount: 4_096)
         let capacity = AudioRecorder.outputFrameCapacity(
             for: input,
@@ -102,15 +105,14 @@ struct AudioRecorderConversionTests {
             minimumOutputFrameCapacity: 1_600
         )
 
-        #expect(capacity > 1_600)
-        #expect(capacity >= 2_700)
+        XCTAssertGreaterThan(capacity, 1_600)
+        XCTAssertGreaterThanOrEqual(capacity, 2_700)
     }
 
-    @Test("Conversion drains full 24k chunk instead of truncating to 100ms")
-    func conversionDrainsFullChunk() throws {
+    func test_convertInputBuffer_drainsFullChunk() throws {
         let input = makeInputBuffer(sampleRate: 24_000, frameCount: 4_096)
         guard let converter = AVAudioConverter(from: input.format, to: outputFormat) else {
-            Issue.record("Failed to create AVAudioConverter for test")
+            XCTFail("Failed to create AVAudioConverter for test")
             return
         }
 
@@ -127,14 +129,11 @@ struct AudioRecorderConversionTests {
 
         let writtenFrames = convertedFrames + flushedFrames
         let expected = Int((Double(input.frameLength) * outputFormat.sampleRate / input.format.sampleRate).rounded())
-        #expect(abs(Int(writtenFrames) - expected) <= 4)
-        #expect(writtenFrames > 1_600)
+        XCTAssertLessThanOrEqual(abs(Int(writtenFrames) - expected), 4)
+        XCTAssertGreaterThan(writtenFrames, 1_600)
     }
 
-    @Test("Conversion recovers from stale converter input format")
-    func conversionRecoversFromStaleConverterFormat() throws {
-        // GitHub macOS runners intermittently crash in CoreAudio for this stale-format path (signal 11).
-        // Keep coverage in local/pre-push runs; skip in CI until runner/runtime issue is resolved.
+    func test_convertInputBufferRecoveringFormat_rebuildsConverterForStaleInputFormat() throws {
         if ProcessInfo.processInfo.environment["CI"] == "true" {
             return
         }
@@ -146,7 +145,7 @@ struct AudioRecorderConversionTests {
             interleaved: false
         )!
         guard let staleConverter = AVAudioConverter(from: staleInputFormat, to: outputFormat) else {
-            Issue.record("Failed to create stale AVAudioConverter for test")
+            XCTFail("Failed to create stale AVAudioConverter for test")
             return
         }
 
@@ -162,16 +161,15 @@ struct AudioRecorderConversionTests {
             minimumOutputFrameCapacity: 1_600
         ) { _ in }
 
-        #expect(conversion.didRebuild)
-        #expect(conversion.converter.inputFormat.sampleRate == actualInput.format.sampleRate)
-        #expect(conversion.converter.inputFormat.channelCount == actualInput.format.channelCount)
+        XCTAssertTrue(conversion.didRebuild)
+        XCTAssertEqual(conversion.converter.inputFormat.sampleRate, actualInput.format.sampleRate)
+        XCTAssertEqual(conversion.converter.inputFormat.channelCount, actualInput.format.channelCount)
 
         let expected = Int((Double(actualInput.frameLength) * outputFormat.sampleRate / actualInput.format.sampleRate).rounded())
-        #expect(abs(Int(conversion.frames + flushed) - expected) <= 4)
+        XCTAssertLessThanOrEqual(abs(Int(conversion.frames + flushed) - expected), 4)
     }
 
-    @Test("Repeated chunks preserve duration across common hardware rates")
-    func repeatedChunksPreserveDurationAcrossRates() throws {
+    func test_conversionAcrossRates_preservesDurationForCommonHardwareRates() throws {
         let sampleRates: [Double] = [16_000, 24_000, 44_100, 48_000]
         let chunkCount = 20
         let frameCount: AVAudioFrameCount = 4_096
@@ -179,7 +177,7 @@ struct AudioRecorderConversionTests {
         for sampleRate in sampleRates {
             let inputTemplate = makeInputBuffer(sampleRate: sampleRate, frameCount: frameCount)
             guard let converter = AVAudioConverter(from: inputTemplate.format, to: outputFormat) else {
-                Issue.record("Failed to create AVAudioConverter for test")
+                XCTFail("Failed to create AVAudioConverter for test")
                 return
             }
 
@@ -206,19 +204,18 @@ struct AudioRecorderConversionTests {
                     outputSampleRate: outputFormat.sampleRate
                 )
             )
-            #expect(abs(Int(writtenFrames) - expected) <= 12)
+            XCTAssertLessThanOrEqual(abs(Int(writtenFrames) - expected), 12)
         }
     }
 
-    @Test("Conversion health check flags underflow regression")
-    func conversionHealthCheckFlagsUnderflow() {
+    func test_isConversionHealthy_flagsUnderflowRegression() {
         let underflow = AudioRecorder.isConversionHealthy(
             inputFrames: 4_096,
             outputFrames: 1_600,
             inputSampleRate: 24_000,
             outputSampleRate: 16_000
         )
-        #expect(!underflow)
+        XCTAssertFalse(underflow)
 
         let healthy = AudioRecorder.isConversionHealthy(
             inputFrames: 4_096,
@@ -226,40 +223,35 @@ struct AudioRecorderConversionTests {
             inputSampleRate: 24_000,
             outputSampleRate: 16_000
         )
-        #expect(healthy)
+        XCTAssertTrue(healthy)
     }
 
-    @Test("Input format compatibility detects mismatch and match")
-    func inputFormatCompatibilityCheck() {
+    func test_isInputFormatCompatible_detectsMismatchAndMatch() {
         let input24 = makeInputBuffer(sampleRate: 24_000, frameCount: 128)
         let input48 = makeInputBuffer(sampleRate: 48_000, frameCount: 128)
         guard let converter24 = AVAudioConverter(from: input24.format, to: outputFormat) else {
-            Issue.record("Failed to create AVAudioConverter for compatibility test")
+            XCTFail("Failed to create AVAudioConverter for compatibility test")
             return
         }
 
-        #expect(AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input24))
-        #expect(!AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input48))
+        XCTAssertTrue(AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input24))
+        XCTAssertFalse(AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input48))
     }
 }
 
-@Suite("AudioRecorder backend")
-struct AudioRecorderBackendSelectionTests {
-    @Test("Default backend is AVAudioRecorder for reliability")
-    func defaultBackend() {
+final class AudioRecorderBackendSelectionTests: XCTestCase {
+    func test_selectedBackend_defaultsToAVAudioRecorder() {
         let backend = AudioRecorder.selectedBackend(environment: [:])
-        #expect(backend == .avAudioRecorder)
+        XCTAssertEqual(backend, .avAudioRecorder)
     }
 
-    @Test("Engine backend is opt-in via VOX_AUDIO_BACKEND")
-    func engineBackendOptIn() {
+    func test_selectedBackend_usesEngineWhenEnvSet() {
         let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "engine"])
-        #expect(backend == .avAudioEngine)
+        XCTAssertEqual(backend, .avAudioEngine)
     }
 
-    @Test("Unknown backend values fall back to AVAudioRecorder")
-    func unknownBackendFallsBack() {
+    func test_selectedBackend_fallsBackForUnknownValues() {
         let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "something-else"])
-        #expect(backend == .avAudioRecorder)
+        XCTAssertEqual(backend, .avAudioRecorder)
     }
 }

@@ -55,7 +55,7 @@ Providers are wrapped in composable decorators, with default routing via stagger
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioRecorder @ 16kHz/16-bit mono CAF; engine backend opt-in via `VOX_AUDIO_BACKEND=engine`) → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioRecorder @ 16kHz/16-bit mono CAF; engine backend opt-in via `VOX_AUDIO_BACKEND=engine`) → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -98,14 +98,14 @@ Audio regression guardrail:
   - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioRecorder`; `engine` is opt-in)
   - `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage; converter drain logic tested, not assumed)
   - `CapturedAudioInspectorTests` (valid/empty/corrupt/missing payload detection)
-  - `DictationPipelineTests` empty-capture fast-fail guard (`VoxError.emptyCapture`)
+  - `DictationPipelineTests` empty-capture fast-fail guard (`VoxError.emptyCapture`) and Opus-empty fallback contract
   - `scripts/test-audio-guardrails.sh` as CI/pre-push gate entrypoint
 
 ## Conventions
 
 - **Commits**: Conventional Commits — `feat(scope):`, `fix(security):`, `refactor(di):`, `docs:`
 - **Branches**: `feat/`, `fix/`, `refactor/`, `docs/`
-- **Logging**: bracket-prefixed tags — `[ElevenLabs]`, `[STT]`, `[Pipeline]`, `[Vox]`, `[Paster]`
+- **Logging**: bracket-prefixed tags — `[ElevenLabs]`, `[STT]`, `[Pipeline]`, `[Vox]`, `[Paster]`, `[AudioRecorder]`
 - **Security**: no transcript content in logs (char counts only); debug logs gated behind `#if DEBUG`
 - **Audio cleanup**: `SecureFileDeleter` — relies on FileVault; `preserveAudio()` returns `URL?` for error recovery dialog
 - **Simplicity gate** ([ADR-0001](docs/adr/0001-simplicity-first-design.md)): no new user-facing settings without ADR justification; no advanced tabs, threshold tuning, or model selection UI; defaults over options; no dark features (stored prefs without UI)

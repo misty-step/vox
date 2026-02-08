@@ -8,6 +8,7 @@ public final class AudioRecorder: AudioRecording {
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
+    private let converterStateLock = NSLock()
     private var currentURL: URL?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
@@ -120,6 +121,7 @@ public final class AudioRecorder: AudioRecording {
         let minimumOutputFrameCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms floor
         var didLogConversionUnderflow = false
         var tapConverter = converter
+        setConverter(converter)
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: hwFormat) { [weak self] buffer, _ in
             // Compute metering from raw hardware buffer.
@@ -143,10 +145,7 @@ public final class AudioRecorder: AudioRecording {
                         "[AudioRecorder] Rebuilt converter for input format " +
                         "\(Int(buffer.format.sampleRate))Hz/\(buffer.format.channelCount)ch"
                     )
-                    let rebuiltConverter = conversion.converter
-                    DispatchQueue.main.async { [weak self] in
-                        self?.converter = rebuiltConverter
-                    }
+                    self?.setConverter(conversion.converter)
                 }
             } catch {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
@@ -193,7 +192,6 @@ public final class AudioRecorder: AudioRecording {
         }
         self.engine = engine
         self.audioFile = file
-        self.converter = converter
         self.currentURL = url
     }
 
@@ -212,6 +210,7 @@ public final class AudioRecorder: AudioRecording {
         if let recorder, let url = currentURL {
             recorder.stop()
             self.recorder = nil
+            setConverter(nil)
             self.currentURL = nil
             self.latestAverage = 0
             self.latestPeak = 0
@@ -225,13 +224,13 @@ public final class AudioRecorder: AudioRecording {
         engine.stop()
 
         // Flush any samples buffered inside the converter's resampler.
-        if let converter, let file = audioFile {
+        if let converter = currentConverter(), let file = audioFile {
             flushConverter(converter, to: file)
         }
 
         self.engine = nil
         self.audioFile = nil
-        self.converter = nil
+        setConverter(nil)
         self.currentURL = nil
         self.latestAverage = 0
         self.latestPeak = 0
@@ -250,6 +249,18 @@ public final class AudioRecorder: AudioRecording {
         } catch {
             print("[AudioRecorder] Flush conversion error: \(error.localizedDescription)")
         }
+    }
+
+    private func setConverter(_ converter: AVAudioConverter?) {
+        converterStateLock.lock()
+        self.converter = converter
+        converterStateLock.unlock()
+    }
+
+    private func currentConverter() -> AVAudioConverter? {
+        converterStateLock.lock()
+        defer { converterStateLock.unlock() }
+        return converter
     }
 
     // MARK: - Internal (visible for testing)

@@ -1,11 +1,10 @@
 import AVFoundation
 import Foundation
-import Testing
+import XCTest
 @testable import VoxCore
 @testable import VoxMac
 
-@Suite("CapturedAudioInspector")
-struct CapturedAudioInspectorTests {
+final class CapturedAudioInspectorTests: XCTestCase {
     private func makeCAF(frameCount: AVAudioFrameCount) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("capture-\(UUID().uuidString).caf")
@@ -26,72 +25,56 @@ struct CapturedAudioInspectorTests {
         return url
     }
 
-    @Test("Valid CAF passes capture validation")
-    func validCAFPasses() throws {
+    func test_ensureHasAudioFrames_passesForValidCAF() throws {
         let url = try makeCAF(frameCount: 1_600)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        try CapturedAudioInspector.ensureHasAudioFrames(at: url)
+        XCTAssertNoThrow(try CapturedAudioInspector.ensureHasAudioFrames(at: url))
     }
 
-    @Test("Header-only CAF throws emptyCapture")
-    func headerOnlyCAFThrows() {
+    func test_ensureHasAudioFrames_throwsEmptyCaptureForHeaderOnlyCAF() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("header-only-\(UUID().uuidString).caf")
         let created = FileManager.default.createFile(atPath: url.path, contents: Data(count: 4096))
-        #expect(created)
+        XCTAssertTrue(created)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        do {
-            try CapturedAudioInspector.ensureHasAudioFrames(at: url)
-            Issue.record("Expected VoxError.emptyCapture")
-        } catch let error as VoxError {
-            #expect(error == .emptyCapture)
-        } catch {
-            Issue.record("Expected VoxError.emptyCapture, got \(error)")
+        XCTAssertThrowsError(try CapturedAudioInspector.ensureHasAudioFrames(at: url)) { error in
+            XCTAssertEqual(error as? VoxError, .emptyCapture)
         }
     }
 
-    @Test("Unreadable CAF throws emptyCapture")
-    func unreadableCAFThrows() {
+    func test_ensureHasAudioFrames_throwsEmptyCaptureForUnreadableCAF() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("corrupt-\(UUID().uuidString).caf")
         let created = FileManager.default.createFile(atPath: url.path, contents: Data("not-caf".utf8))
-        #expect(created)
+        XCTAssertTrue(created)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        do {
-            try CapturedAudioInspector.ensureHasAudioFrames(at: url)
-            Issue.record("Expected VoxError.emptyCapture")
-        } catch let error as VoxError {
-            #expect(error == .emptyCapture)
-        } catch {
-            Issue.record("Expected VoxError.emptyCapture, got \(error)")
+        XCTAssertThrowsError(try CapturedAudioInspector.ensureHasAudioFrames(at: url)) { error in
+            XCTAssertEqual(error as? VoxError, .emptyCapture)
         }
     }
 
-    @Test("Missing file is ignored")
-    func missingFileIgnored() throws {
+    func test_ensureHasAudioFrames_ignoresMissingFile() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("missing-\(UUID().uuidString).caf")
-        try CapturedAudioInspector.ensureHasAudioFrames(at: url)
+        XCTAssertNoThrow(try CapturedAudioInspector.ensureHasAudioFrames(at: url))
     }
 
-    @Test("Non-CAF file is ignored")
-    func nonCafFileIgnored() throws {
+    func test_ensureHasAudioFrames_ignoresNonCAFFile() {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("sample-\(UUID().uuidString).ogg")
         let created = FileManager.default.createFile(atPath: url.path, contents: Data("ogg".utf8))
-        #expect(created)
+        XCTAssertTrue(created)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        try CapturedAudioInspector.ensureHasAudioFrames(at: url)
+        XCTAssertNoThrow(try CapturedAudioInspector.ensureHasAudioFrames(at: url))
     }
 
-    @Test("Validation applies only to CAF")
-    func shouldValidateCAFOnly() {
-        #expect(CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.caf")))
-        #expect(!CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.ogg")))
-        #expect(!CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.wav")))
+    func test_shouldValidate_appliesOnlyToCAF() {
+        XCTAssertTrue(CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.caf")))
+        XCTAssertFalse(CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.ogg")))
+        XCTAssertFalse(CapturedAudioInspector.shouldValidate(url: URL(fileURLWithPath: "/tmp/a.wav")))
     }
 }

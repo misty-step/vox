@@ -26,7 +26,7 @@
 - Naming: `UpperCamelCase` for types, `lowerCamelCase` for methods/properties, enum cases in `lowerCamelCase`.
 - Keep module boundaries clean: contracts in `VoxCore`, platform/network details in edge modules.
 - Prefer composition/decorators over special-case branches for provider behavior.
-- Keep logs consistent with existing bracket tags (example: `[Pipeline]`, `[STT]`, `[Vox]`).
+- Keep logs consistent with existing bracket tags (example: `[Pipeline]`, `[STT]`, `[Vox]`, `[AudioRecorder]`).
 
 ## Testing Guidelines
 - Framework: XCTest (`async` tests are standard where relevant).

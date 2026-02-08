@@ -14,6 +14,18 @@ public enum CapturedAudioInspector {
             guard file.length > 0 else {
                 throw VoxError.emptyCapture
             }
+            let frameCount = AVAudioFrameCount(min(file.length, 512))
+            guard frameCount > 0,
+                  let buffer = AVAudioPCMBuffer(
+                    pcmFormat: file.processingFormat,
+                    frameCapacity: frameCount
+                  ) else {
+                throw VoxError.emptyCapture
+            }
+            try file.read(into: buffer, frameCount: frameCount)
+            guard buffer.frameLength > 0 else {
+                throw VoxError.emptyCapture
+            }
         } catch let error as VoxError {
             throw error
         } catch {

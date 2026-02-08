@@ -8,6 +8,7 @@ Two issues existed:
 
 - A real converter underflow bug in the new AVAudioEngine path (fixed first).
 - A broader capture reliability regression from switching the default backend from `AVAudioRecorder` to `AVAudioEngine` (root production impact).
+- A stop/flush race where converter rebuild could update asynchronously after stop began (fixed with lock-protected converter state).
 
 Final fix: restore `AVAudioRecorder` as default capture backend, keep `AVAudioEngine` behind explicit opt-in (`VOX_AUDIO_BACKEND=engine`), and add a pipeline invariant that rejects header-only CAFs before STT.
 
@@ -65,12 +66,14 @@ Result: on affected route/device combinations, tap callbacks produced no payload
 1. **Deep module boundary restored**: `AudioRecorder` exposes one stable interface while backend complexity is internal. Default is reliability-first (`AVAudioRecorder`); experimental path is explicit opt-in.
 2. **Information hiding improved**: per-app routing complexity is no longer on the default path.
 3. **Invariant at module boundary**: `DictationPipeline` now rejects zero-frame capture payloads before STT (`VoxError.emptyCapture`) to fail fast.
-4. **Contract tests added**:
+4. **Invariant after encoding**: pipeline rejects empty Opus output and falls back to original CAF before STT.
+5. **Thread-safety boundary restored**: engine converter state is lock-protected so stop-time flush always sees the latest rebuilt converter.
+6. **Contract tests added**:
    - backend-selection contract (`AudioRecorderBackendSelectionTests`)
    - conversion-duration contract (`AudioRecorderConversionTests`)
    - payload-inspection contract (`CapturedAudioInspectorTests`)
-   - pipeline empty-capture guard (`DictationPipelineTests`)
-5. **Process hardening**:
+   - pipeline empty-capture + empty-Opus fallback guards (`DictationPipelineTests`)
+7. **Process hardening**:
    - architecture doc updated with backend + payload invariants
    - CLAUDE guardrail updated for audio changes
    - PR checklist updated to require backend + conversion + fast-fail test coverage
@@ -82,4 +85,6 @@ Result: on affected route/device combinations, tap callbacks produced no payload
 3. **Done** — Payload validation moved to dedicated module (`CapturedAudioInspector`) with typed failure (`VoxError.emptyCapture`).
 4. **Done** — Pipeline fast-fail on empty capture before STT.
 5. **Done** — Documentation and PR/test guardrails updated.
-6. **Done** — ADR-0003 recorded reliability-first backend policy and payload contract.
+6. **Done** — Stop/flush race removed with lock-protected converter state in `AudioRecorder`.
+7. **Done** — Pipeline now falls back when Opus conversion returns empty output.
+8. **Done** — ADR-0003 recorded reliability-first backend policy and payload contract.

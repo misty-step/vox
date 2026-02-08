@@ -86,9 +86,11 @@ Non-negotiable contract: **recorded speech duration and frame payload must survi
 
 Runtime invariants:
 - **Payload guard**: pipeline validates capture payload via `CapturedAudioInspector` before STT (fast failure over silent empty transcripts).
+- **Encoded payload guard**: when Opus conversion returns an empty file, pipeline falls back to original CAF before STT.
 - **Engine drain per tap**: each input tap drains `AVAudioConverter` output until status is no longer `.haveData`.
 - **Engine dynamic capacity**: output buffer capacity uses `inputFrames * (outputRate / inputRate)` with a 100ms floor.
 - **Engine drain on stop**: flush repeats `.endOfStream` conversion calls until converter output is exhausted.
+- **Engine converter coherence**: stop-time flush reads the latest converter through lock-protected state shared with tap recovery.
 - **Engine underflow guard**: recorder logs one-time warning when per-tap output ratio drops below threshold (`0.85`).
 
 Test invariants:
@@ -210,4 +212,5 @@ All modules log with bracket-prefixed tags to stdout:
 - `[STT]` — decorator-level retries, hedge launches, winner/failure transitions
 - `[Pipeline]` — processing stages
 - `[Vox]` — session-level events
+- `[AudioRecorder]` — capture backend and conversion diagnostics
 - `[Paster]` — clipboard and paste operations
