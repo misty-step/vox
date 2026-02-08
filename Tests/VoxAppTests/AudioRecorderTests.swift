@@ -67,3 +67,105 @@ struct AudioRecorderComputeLevelsTests {
         #expect(levels.peak == 0)
     }
 }
+
+@Suite("AudioRecorder conversion")
+struct AudioRecorderConversionTests {
+    private let outputFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: 16_000,
+        channels: 1,
+        interleaved: true
+    )!
+
+    private func makeInputBuffer(sampleRate: Double, frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer {
+        let inputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        )!
+        let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount)!
+        buffer.frameLength = frameCount
+        let channel = buffer.floatChannelData![0]
+        for i in 0..<Int(frameCount) {
+            channel[i] = sin(Float(i) * 0.01)
+        }
+        return buffer
+    }
+
+    @Test("Output frame capacity scales for Bluetooth-rate input")
+    func outputCapacityScalesForLowSampleRateInput() {
+        let input = makeInputBuffer(sampleRate: 24_000, frameCount: 4_096)
+        let capacity = AudioRecorder.outputFrameCapacity(
+            for: input,
+            outputFormat: outputFormat,
+            minimumOutputFrameCapacity: 1_600
+        )
+
+        #expect(capacity > 1_600)
+        #expect(capacity >= 2_700)
+    }
+
+    @Test("Conversion drains full 24k chunk instead of truncating to 100ms")
+    func conversionDrainsFullChunk() throws {
+        let input = makeInputBuffer(sampleRate: 24_000, frameCount: 4_096)
+        guard let converter = AVAudioConverter(from: input.format, to: outputFormat) else {
+            Issue.record("Failed to create AVAudioConverter for test")
+            return
+        }
+
+        var writtenFrames: AVAudioFrameCount = 0
+        try AudioRecorder.convertInputBuffer(
+            converter: converter,
+            inputBuffer: input,
+            outputFormat: outputFormat,
+            minimumOutputFrameCapacity: 1_600
+        ) { output in
+            writtenFrames += output.frameLength
+        }
+        try AudioRecorder.flushConverterOutput(
+            converter: converter,
+            minimumOutputFrameCapacity: 1_600
+        ) { output in
+            writtenFrames += output.frameLength
+        }
+
+        let expected = Int((Double(input.frameLength) * outputFormat.sampleRate / input.format.sampleRate).rounded())
+        #expect(abs(Int(writtenFrames) - expected) <= 4)
+        #expect(writtenFrames > 1_600)
+    }
+
+    @Test("Repeated 24k chunks preserve duration across many taps")
+    func repeatedChunksPreserveDuration() throws {
+        let chunkCount = 20
+        let frameCount: AVAudioFrameCount = 4_096
+        let inputTemplate = makeInputBuffer(sampleRate: 24_000, frameCount: frameCount)
+
+        guard let converter = AVAudioConverter(from: inputTemplate.format, to: outputFormat) else {
+            Issue.record("Failed to create AVAudioConverter for test")
+            return
+        }
+
+        var writtenFrames: AVAudioFrameCount = 0
+        for _ in 0..<chunkCount {
+            let chunk = makeInputBuffer(sampleRate: 24_000, frameCount: frameCount)
+            try AudioRecorder.convertInputBuffer(
+                converter: converter,
+                inputBuffer: chunk,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: 1_600
+            ) { output in
+                writtenFrames += output.frameLength
+            }
+        }
+        try AudioRecorder.flushConverterOutput(
+            converter: converter,
+            minimumOutputFrameCapacity: 1_600
+        ) { output in
+            writtenFrames += output.frameLength
+        }
+
+        let expected = Int(Double(chunkCount) * Double(frameCount) * outputFormat.sampleRate / inputTemplate.format.sampleRate)
+        #expect(abs(Int(writtenFrames) - expected) <= 8)
+    }
+}
