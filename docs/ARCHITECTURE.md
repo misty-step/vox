@@ -73,6 +73,20 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
 
+## Audio Conversion Integrity Contract
+
+`AudioRecorder` owns hardware-to-upload normalization (`AVAudioEngine` input format → 16kHz/16-bit mono CAF). This module has one non-negotiable contract: **preserve spoken duration across sample-rate and device differences**.
+
+Runtime invariants:
+- **Drain per tap**: each input tap must drain `AVAudioConverter` output until status is no longer `.haveData`.
+- **Dynamic capacity**: output buffer capacity is derived from `inputFrames * (outputRate / inputRate)` with a 100ms minimum floor.
+- **Drain on stop**: flush uses repeated `.endOfStream` conversion calls until converter output is exhausted.
+- **Underflow guard**: recorder logs a one-time warning if per-tap output ratio drops below expected threshold (currently `0.85`).
+
+Test invariants:
+- `AudioRecorderConversionTests` validates duration preservation for common input rates (`16k`, `24k`, `44.1k`, `48k`).
+- Regression fixture explicitly checks the old truncation failure shape (`4096 @ 24k` incorrectly capped to `1600` output frames) is detected as unhealthy.
+
 ## Input Device Selection
 
 `AudioRecorder` uses `AVAudioEngine` with per-app device routing via `kAudioOutputUnitProperty_CurrentDevice` on the engine's input `AudioUnit`. This avoids changing the macOS system default.

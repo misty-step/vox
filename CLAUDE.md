@@ -92,6 +92,9 @@ Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcr
 
 Shared mock: `Tests/VoxCoreTests/MockSTTProvider.swift` — thread-safe with NSLock.
 
+Audio regression guardrail:
+- Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve conversion duration invariants. Keep/extend `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage) and ensure converter drain logic is tested, not assumed.
+
 ## Conventions
 
 - **Commits**: Conventional Commits — `feat(scope):`, `fix(security):`, `refactor(di):`, `docs:`

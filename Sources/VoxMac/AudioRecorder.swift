@@ -64,14 +64,16 @@ public final class AudioRecorder: AudioRecording {
         }
 
         let minimumOutputFrameCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms floor
+        var didLogConversionUnderflow = false
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: hwFormat) { [weak self] buffer, _ in
             // Compute metering from raw hardware buffer.
             let levels = Self.computeLevels(buffer: buffer)
 
             // Convert to target format and write to file.
+            var convertedFrames: AVAudioFrameCount = 0
             do {
-                try Self.convertInputBuffer(
+                convertedFrames = try Self.convertInputBuffer(
                     converter: converter,
                     inputBuffer: buffer,
                     outputFormat: targetFormat,
@@ -81,6 +83,32 @@ public final class AudioRecorder: AudioRecording {
                 }
             } catch {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
+            }
+
+            if !didLogConversionUnderflow,
+               !Self.isConversionHealthy(
+                   inputFrames: buffer.frameLength,
+                   outputFrames: convertedFrames,
+                   inputSampleRate: buffer.format.sampleRate,
+                   outputSampleRate: targetFormat.sampleRate
+               ) {
+                didLogConversionUnderflow = true
+                let expectedFrames = Self.expectedOutputFrames(
+                    inputFrames: buffer.frameLength,
+                    inputSampleRate: buffer.format.sampleRate,
+                    outputSampleRate: targetFormat.sampleRate
+                )
+                let ratio = Self.conversionHealthRatio(
+                    inputFrames: buffer.frameLength,
+                    outputFrames: convertedFrames,
+                    inputSampleRate: buffer.format.sampleRate,
+                    outputSampleRate: targetFormat.sampleRate
+                )
+                print(
+                    "[AudioRecorder] Conversion underflow detected: " +
+                    "output \(convertedFrames) < expected \(expectedFrames) " +
+                    "(ratio \(String(format: "%.2f", ratio)))"
+                )
             }
 
             // Dispatch metering to MainActor.
@@ -130,7 +158,7 @@ public final class AudioRecorder: AudioRecording {
     /// Drain remaining samples from the converter by signaling end-of-stream.
     private func flushConverter(_ converter: AVAudioConverter, to file: AVAudioFile) {
         do {
-            try Self.flushConverterOutput(
+            _ = try Self.flushConverterOutput(
                 converter: converter,
                 minimumOutputFrameCapacity: AVAudioFrameCount(converter.outputFormat.sampleRate * 0.1)
             ) { outputBuffer in
@@ -176,9 +204,54 @@ public final class AudioRecorder: AudioRecording {
         guard inputBuffer.frameLength > 0 else {
             return minimumOutputFrameCapacity
         }
-        let ratio = outputFormat.sampleRate / max(inputBuffer.format.sampleRate, 1)
-        let estimated = AVAudioFrameCount(ceil(Double(inputBuffer.frameLength) * ratio)) + 64
+        let estimated = expectedOutputFrames(
+            inputFrames: inputBuffer.frameLength,
+            inputSampleRate: inputBuffer.format.sampleRate,
+            outputSampleRate: outputFormat.sampleRate
+        ) + 64
         return max(minimumOutputFrameCapacity, estimated)
+    }
+
+    nonisolated static func expectedOutputFrames(
+        inputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double
+    ) -> AVAudioFrameCount {
+        guard inputFrames > 0, inputSampleRate > 0, outputSampleRate > 0 else {
+            return 0
+        }
+        let ratio = outputSampleRate / inputSampleRate
+        return AVAudioFrameCount(ceil(Double(inputFrames) * ratio))
+    }
+
+    nonisolated static func conversionHealthRatio(
+        inputFrames: AVAudioFrameCount,
+        outputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double
+    ) -> Double {
+        let expected = expectedOutputFrames(
+            inputFrames: inputFrames,
+            inputSampleRate: inputSampleRate,
+            outputSampleRate: outputSampleRate
+        )
+        guard expected > 0 else { return 1 }
+        return Double(outputFrames) / Double(expected)
+    }
+
+    nonisolated static func isConversionHealthy(
+        inputFrames: AVAudioFrameCount,
+        outputFrames: AVAudioFrameCount,
+        inputSampleRate: Double,
+        outputSampleRate: Double,
+        minimumRatio: Double = 0.85
+    ) -> Bool {
+        conversionHealthRatio(
+            inputFrames: inputFrames,
+            outputFrames: outputFrames,
+            inputSampleRate: inputSampleRate,
+            outputSampleRate: outputSampleRate
+        ) >= minimumRatio
     }
 
     nonisolated static func convertInputBuffer(
@@ -187,9 +260,10 @@ public final class AudioRecorder: AudioRecording {
         outputFormat: AVAudioFormat,
         minimumOutputFrameCapacity: AVAudioFrameCount,
         write: (AVAudioPCMBuffer) throws -> Void
-    ) throws {
+    ) throws -> AVAudioFrameCount {
         var didProvideInput = false
         var iterations = 0
+        var totalOutputFrames: AVAudioFrameCount = 0
 
         while true {
             iterations += 1
@@ -227,10 +301,11 @@ public final class AudioRecorder: AudioRecording {
                 throw VoxError.internalError("Audio converter returned error status.")
             }
             if outputBuffer.frameLength > 0 {
+                totalOutputFrames += outputBuffer.frameLength
                 try write(outputBuffer)
             }
             if status != .haveData {
-                return
+                return totalOutputFrames
             }
         }
     }
@@ -239,8 +314,9 @@ public final class AudioRecorder: AudioRecording {
         converter: AVAudioConverter,
         minimumOutputFrameCapacity: AVAudioFrameCount,
         write: (AVAudioPCMBuffer) throws -> Void
-    ) throws {
+    ) throws -> AVAudioFrameCount {
         var iterations = 0
+        var totalOutputFrames: AVAudioFrameCount = 0
 
         while true {
             iterations += 1
@@ -268,10 +344,11 @@ public final class AudioRecorder: AudioRecording {
                 throw VoxError.internalError("Audio converter returned error status during flush.")
             }
             if outputBuffer.frameLength > 0 {
+                totalOutputFrames += outputBuffer.frameLength
                 try write(outputBuffer)
             }
             if status != .haveData {
-                return
+                return totalOutputFrames
             }
         }
     }
