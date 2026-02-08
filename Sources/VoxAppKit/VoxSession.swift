@@ -68,33 +68,9 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeSTTProvider() -> STTProvider {
-        // Build chain bottom-up: last fallback first
-        var chain: STTProvider = AppleSpeechClient()
+        var providers: [HealthAwareSTTProvider.ProviderEntry] = []
 
-        // Optional: Whisper (OpenAI)
-        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !openAIKey.isEmpty {
-            let whisper = WhisperClient(apiKey: openAIKey)
-            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Whisper") { [weak self] in
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to Apple Speech") }
-            }
-        }
-
-        // Optional: Deepgram
-        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !deepgramKey.isEmpty {
-            let deepgram = DeepgramClient(apiKey: deepgramKey)
-            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "Deepgram") { [weak self] in
-                let next = openAIKey.isEmpty ? "Apple Speech" : "Whisper"
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
-            }
-        }
-
-        // Optional: ElevenLabs (primary if configured)
+        // Optional: ElevenLabs (highest preference if configured)
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
@@ -105,21 +81,36 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            chain = FallbackSTTProvider(primary: retried, fallback: chain, primaryName: "ElevenLabs") { [weak self] in
-                let next: String
-                if !deepgramKey.isEmpty {
-                    next = "Deepgram"
-                } else if !openAIKey.isEmpty {
-                    next = "Whisper"
-                } else {
-                    next = "Apple Speech"
-                }
-                Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
-            }
+            providers.append(.init(name: "ElevenLabs", provider: retried))
+        }
+
+        // Optional: Deepgram
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !deepgramKey.isEmpty {
+            let deepgram = DeepgramClient(apiKey: deepgramKey)
+            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
+            providers.append(.init(name: "Deepgram", provider: retried))
+        }
+
+        // Optional: Whisper (OpenAI)
+        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !openAIKey.isEmpty {
+            let whisper = WhisperClient(apiKey: openAIKey)
+            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
+            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
+            providers.append(.init(name: "Whisper", provider: retried))
+        }
+
+        // Apple Speech is always available as final fallback.
+        providers.append(.init(name: "Apple Speech", provider: AppleSpeechClient()))
+
+        let healthAware = HealthAwareSTTProvider(providers: providers) { [weak self] _, next in
+            Task { @MainActor in self?.hud.showProcessing(message: "Switching to \(next)") }
         }
 
         return ConcurrencyLimitedSTTProvider(
-            provider: chain,
+            provider: healthAware,
             maxConcurrent: maxConcurrentSTTRequests()
         )
     }
