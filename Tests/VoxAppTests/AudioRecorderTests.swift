@@ -131,6 +131,39 @@ struct AudioRecorderConversionTests {
         #expect(writtenFrames > 1_600)
     }
 
+    @Test("Conversion recovers from stale converter input format")
+    func conversionRecoversFromStaleConverterFormat() throws {
+        let staleInputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        )!
+        guard let staleConverter = AVAudioConverter(from: staleInputFormat, to: outputFormat) else {
+            Issue.record("Failed to create stale AVAudioConverter for test")
+            return
+        }
+
+        let actualInput = makeInputBuffer(sampleRate: 24_000, frameCount: 4_096)
+        let conversion = try AudioRecorder.convertInputBufferRecoveringFormat(
+            converter: staleConverter,
+            inputBuffer: actualInput,
+            outputFormat: outputFormat,
+            minimumOutputFrameCapacity: 1_600
+        ) { _ in }
+        let flushed = try AudioRecorder.flushConverterOutput(
+            converter: conversion.converter,
+            minimumOutputFrameCapacity: 1_600
+        ) { _ in }
+
+        #expect(conversion.didRebuild)
+        #expect(conversion.converter.inputFormat.sampleRate == actualInput.format.sampleRate)
+        #expect(conversion.converter.inputFormat.channelCount == actualInput.format.channelCount)
+
+        let expected = Int((Double(actualInput.frameLength) * outputFormat.sampleRate / actualInput.format.sampleRate).rounded())
+        #expect(abs(Int(conversion.frames + flushed) - expected) <= 4)
+    }
+
     @Test("Repeated chunks preserve duration across common hardware rates")
     func repeatedChunksPreserveDurationAcrossRates() throws {
         let sampleRates: [Double] = [16_000, 24_000, 44_100, 48_000]
@@ -188,5 +221,18 @@ struct AudioRecorderConversionTests {
             outputSampleRate: 16_000
         )
         #expect(healthy)
+    }
+
+    @Test("Input format compatibility detects mismatch and match")
+    func inputFormatCompatibilityCheck() {
+        let input24 = makeInputBuffer(sampleRate: 24_000, frameCount: 128)
+        let input48 = makeInputBuffer(sampleRate: 48_000, frameCount: 128)
+        guard let converter24 = AVAudioConverter(from: input24.format, to: outputFormat) else {
+            Issue.record("Failed to create AVAudioConverter for compatibility test")
+            return
+        }
+
+        #expect(AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input24))
+        #expect(!AudioRecorder.isInputFormatCompatible(converter: converter24, inputBuffer: input48))
     }
 }

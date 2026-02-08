@@ -25,20 +25,21 @@ public final class AudioRecorder: AudioRecording {
         // Per-app device routing via CoreAudio property on the engine's input AudioUnit.
         if let uid = inputDeviceUID,
            let deviceID = AudioDeviceManager.deviceID(forUID: uid) {
-            guard let audioUnit = inputNode.audioUnit else {
-                throw VoxError.internalError("AudioUnit unavailable on input node.")
-            }
-            var id = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
-            if status != noErr {
-                print("[AudioRecorder] Failed to set input device (status \(status)), using default")
+            if let audioUnit = inputNode.audioUnit {
+                var id = deviceID
+                let status = AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &id,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+                if status != noErr {
+                    print("[AudioRecorder] Failed to set input device (status \(status)), using default")
+                }
+            } else {
+                print("[AudioRecorder] Input AudioUnit unavailable, using default input device")
             }
         }
 
@@ -65,6 +66,7 @@ public final class AudioRecorder: AudioRecording {
 
         let minimumOutputFrameCapacity = AVAudioFrameCount(targetFormat.sampleRate * 0.1) // 100ms floor
         var didLogConversionUnderflow = false
+        var tapConverter = converter
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: hwFormat) { [weak self] buffer, _ in
             // Compute metering from raw hardware buffer.
@@ -73,13 +75,25 @@ public final class AudioRecorder: AudioRecording {
             // Convert to target format and write to file.
             var convertedFrames: AVAudioFrameCount = 0
             do {
-                convertedFrames = try Self.convertInputBuffer(
-                    converter: converter,
+                let conversion = try Self.convertInputBufferRecoveringFormat(
+                    converter: tapConverter,
                     inputBuffer: buffer,
                     outputFormat: targetFormat,
                     minimumOutputFrameCapacity: minimumOutputFrameCapacity
                 ) { outputBuffer in
                     try file.write(from: outputBuffer)
+                }
+                convertedFrames = conversion.frames
+                tapConverter = conversion.converter
+                if conversion.didRebuild {
+                    print(
+                        "[AudioRecorder] Rebuilt converter for input format " +
+                        "\(Int(buffer.format.sampleRate))Hz/\(buffer.format.channelCount)ch"
+                    )
+                    let rebuiltConverter = conversion.converter
+                    DispatchQueue.main.async { [weak self] in
+                        self?.converter = rebuiltConverter
+                    }
                 }
             } catch {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
@@ -308,6 +322,52 @@ public final class AudioRecorder: AudioRecording {
                 return totalOutputFrames
             }
         }
+    }
+
+    nonisolated static func convertInputBufferRecoveringFormat(
+        converter: AVAudioConverter,
+        inputBuffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        minimumOutputFrameCapacity: AVAudioFrameCount,
+        write: (AVAudioPCMBuffer) throws -> Void
+    ) throws -> (frames: AVAudioFrameCount, converter: AVAudioConverter, didRebuild: Bool) {
+        do {
+            let frames = try convertInputBuffer(
+                converter: converter,
+                inputBuffer: inputBuffer,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: minimumOutputFrameCapacity,
+                write: write
+            )
+            return (frames, converter, false)
+        } catch {
+            guard !isInputFormatCompatible(converter: converter, inputBuffer: inputBuffer) else {
+                throw error
+            }
+            guard let rebuilt = AVAudioConverter(from: inputBuffer.format, to: outputFormat) else {
+                throw VoxError.internalError("Cannot rebuild audio converter for input format.")
+            }
+            let frames = try convertInputBuffer(
+                converter: rebuilt,
+                inputBuffer: inputBuffer,
+                outputFormat: outputFormat,
+                minimumOutputFrameCapacity: minimumOutputFrameCapacity,
+                write: write
+            )
+            return (frames, rebuilt, true)
+        }
+    }
+
+    nonisolated static func isInputFormatCompatible(
+        converter: AVAudioConverter,
+        inputBuffer: AVAudioPCMBuffer
+    ) -> Bool {
+        let converterFormat = converter.inputFormat
+        let inputFormat = inputBuffer.format
+        return converterFormat.sampleRate == inputFormat.sampleRate &&
+            converterFormat.channelCount == inputFormat.channelCount &&
+            converterFormat.commonFormat == inputFormat.commonFormat &&
+            converterFormat.isInterleaved == inputFormat.isInterleaved
     }
 
     nonisolated static func flushConverterOutput(
