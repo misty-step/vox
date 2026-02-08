@@ -44,17 +44,20 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 
 Providers are wrapped in decorators. `HealthAwareSTTProvider` tracks rolling health and reorders attempts per request.
 
-```
+```text
                                  ConcurrencyLimit(8 default)
                                            │
                                            ▼
-                     HealthAwareSTTProvider(window: 20 attempts)
-                                           │
-                         dynamically ordered provider attempts
-                                           │
+                                    FallbackSTTProvider
+                                      primary │ fallback
+                                              │
+                                              └── Apple Speech (on-device, final fallback)
+                                             
+                                      HealthAwareSTTProvider(window: 20 attempts)
+                                              │
+                            dynamically ordered cloud-provider attempts
+                                              │
       ElevenLabs(Timeout+Retry) • Deepgram(Timeout+Retry) • Whisper(Timeout+Retry)
-                                           │
-                          Apple Speech (on-device, final fallback)
 ```
 
 Each decorator is a `STTProvider`:
@@ -64,7 +67,7 @@ Each decorator is a `STTProvider`:
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT requests and queues overflow
 - **FallbackSTTProvider**: catches `.isFallbackEligible` errors and tries the next provider
 
-Error classification is centralized in `STTError.isRetryable` and `STTError.isFallbackEligible`, plus health bucketing (`transient` vs `permanent`) in `HealthAwareSTTProvider`.
+Error classification is centralized in `STTError.isRetryable`, `STTError.isFallbackEligible`, and `STTError.isTransientForHealthScoring`.
 
 ## Data Flow (Dictation Pipeline)
 

@@ -123,17 +123,13 @@ public struct HealthAwareSTTProvider: STTProvider {
         guard let sttError = error as? STTError else {
             return .transient
         }
-
-        switch sttError {
-        case .throttled, .network, .unknown:
-            return .transient
-        case .auth, .quotaExceeded, .sessionLimit, .invalidAudio:
-            return .permanent
-        }
+        return sttError.isTransientForHealthScoring ? .transient : .permanent
     }
 }
 
 private actor HealthStore {
+    private static let latencyComparisonEpsilon: TimeInterval = 0.000_001
+
     private struct Sample: Sendable {
         let success: Bool
         let latency: TimeInterval
@@ -200,7 +196,7 @@ private actor HealthStore {
         var samples = samplesByProviderName[providerName, default: []]
         samples.append(sample)
         if samples.count > windowSize {
-            samples.removeFirst(samples.count - windowSize)
+            samples.removeFirst()
         }
         samplesByProviderName[providerName] = samples
     }
@@ -219,9 +215,11 @@ private actor HealthStore {
             return left.transientFailures < right.transientFailures
         }
 
-        let latencyDelta = abs(left.averageLatency - right.averageLatency)
-        if latencyDelta > 0.000_001 {
-            return left.averageLatency < right.averageLatency
+        if left.sampleCount > 0, right.sampleCount > 0 {
+            let latencyDelta = abs(left.averageLatency - right.averageLatency)
+            if latencyDelta > Self.latencyComparisonEpsilon {
+                return left.averageLatency < right.averageLatency
+            }
         }
 
         return (indexByProviderName[lhs] ?? .max) < (indexByProviderName[rhs] ?? .max)

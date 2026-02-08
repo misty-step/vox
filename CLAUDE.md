@@ -35,17 +35,19 @@ VoxAppKit was extracted from VoxApp so tests can import it — SwiftPM executabl
 
 Providers are wrapped in composable decorators, with dynamic routing via provider health:
 
-```
+```text
                          ConcurrencyLimit(8 default)
                                    │
                                    ▼
-               HealthAwareSTTProvider(window: 20 attempts)
-                                    │
-                       dynamic provider ordering per request
-                                    │
-    ElevenLabs(Timeout+Retry) • Deepgram(Timeout+Retry) • Whisper(Timeout+Retry)
-                                    │
-              Apple Speech (on-device, always available fallback)
+                            FallbackSTTProvider
+                              primary │ fallback
+                                      └── Apple Speech (on-device, always available fallback)
+                             
+                              HealthAwareSTTProvider(window: 20 attempts)
+                                         │
+                           dynamic cloud-provider ordering per request
+                                         │
+        ElevenLabs(Timeout+Retry) • Deepgram(Timeout+Retry) • Whisper(Timeout+Retry)
 ```
 
 - **TimeoutSTTProvider**: dynamic deadline — `baseTimeout + fileSizeMB * secondsPerMB`
@@ -70,7 +72,7 @@ Option+Space → AudioRecorder (16kHz/16-bit mono CAF) → STT chain → optiona
 
 **DI via constructor injection**: `VoxSession` accepts optional `AudioRecording`, `DictationProcessing`, `HUDDisplaying`, `PreferencesReading`. Pass `nil` for defaults. Protocols live in `VoxCore/Protocols.swift`.
 
-**Error classification**: `STTError.isRetryable` and `.isFallbackEligible` centralize which errors trigger which decorator behavior.
+**Error classification**: `STTError.isRetryable`, `.isFallbackEligible`, and `.isTransientForHealthScoring` centralize error semantics across retry/fallback/routing.
 
 **Quality gate**: `RewriteQualityGate` compares candidate/raw character count ratio. Falls back to raw transcript if below threshold (light: 0.6, aggressive: 0.3, enhance: 0.2).
 

@@ -60,6 +60,30 @@ final class HealthAwareSTTProviderTests: XCTestCase {
         XCTAssertGreaterThan(soloHealth.averageLatency, 0)
     }
 
+    func test_transcribe_keepsConfiguredOrderWhenCompetitorHasNoSamples() async throws {
+        let primary = ScriptedSTTProvider(steps: [
+            .success("primary-1", delay: 0.02),
+            .success("primary-2"),
+        ])
+        let backup = ScriptedSTTProvider(steps: [
+            .success("backup-1"),
+        ])
+        let provider = HealthAwareSTTProvider(
+            providers: [
+                .init(name: "primary", provider: primary),
+                .init(name: "backup", provider: backup),
+            ]
+        )
+
+        let first = try await provider.transcribe(audioURL: audioURL)
+        let second = try await provider.transcribe(audioURL: audioURL)
+
+        XCTAssertEqual(first, "primary-1")
+        XCTAssertEqual(second, "primary-2")
+        XCTAssertEqual(primary.callCount, 2)
+        XCTAssertEqual(backup.callCount, 0)
+    }
+
     func test_healthSnapshot_usesRollingWindow() async throws {
         let solo = ScriptedSTTProvider(steps: [
             .success("one"),
