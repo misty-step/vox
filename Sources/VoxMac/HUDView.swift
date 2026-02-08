@@ -28,6 +28,18 @@ public final class HUDState: ObservableObject {
 
     public init() {}
 
+    public var accessibilityLabel: String {
+        HUDAccessibility.label
+    }
+
+    public var accessibilityValue: String {
+        HUDAccessibility.value(
+            for: mode,
+            recordingDuration: recordingDuration,
+            processingMessage: processingMessage
+        )
+    }
+
     public func show() {
         isVisible = true
     }
@@ -297,6 +309,10 @@ public struct HUDView: View {
                 reducedMotion ? nil : .easeOut(duration: Design.transitionDuration),
                 value: state.isVisible
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(state.accessibilityLabel))
+            .accessibilityValue(Text(state.accessibilityValue))
+            .accessibilityHidden(!state.isVisible)
     }
     
     // MARK: - Content Views

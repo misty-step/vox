@@ -18,6 +18,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
 - **State-aware visual identity**: consistent menu icon + HUD language for ready/recording/processing
+- **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
 - **BYOK** (Bring Your Own Keys) for complete control over costs
 - **Secure storage** via macOS Keychain
 
