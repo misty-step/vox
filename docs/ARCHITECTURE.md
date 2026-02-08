@@ -32,7 +32,8 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
                                │
                         VoxCore (foundation)
  ┌─────────────────────────────────────────────────────────────────────┐
- │ Protocols: STTProvider • RewriteProvider • TextPaster                │
+ │ Protocols: STTProvider • RewriteProvider • TextPaster • AudioRecording │
+ │            HUDDisplaying • DictationProcessing • PreferencesReading    │
  │ Decorators: TimeoutSTTProvider • RetryingSTTProvider                 │
  │             HedgedSTTProvider • ConcurrencyLimitedSTTProvider        │
  │             HealthAwareSTTProvider • FallbackSTTProvider             │
@@ -54,7 +55,7 @@ Providers are wrapped in decorators. The default runtime path uses `HedgedSTTPro
 ```
 
 Each decorator is a `STTProvider`:
-- **TimeoutSTTProvider**: races transcription against a deadline
+- **TimeoutSTTProvider**: races transcription against a dynamic deadline (`max(baseTimeout, baseTimeout + fileSizeMB * secondsPerMB)`); current cloud wiring uses `baseTimeout: 30`, `secondsPerMB: 2`
 - **RetryingSTTProvider**: retries on `.isRetryable` errors with exponential backoff + jitter
 - **HedgedSTTProvider**: launches providers with stagger delays and returns first success
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT requests and queues overflow
@@ -69,7 +70,7 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
 4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioRecorder` (default backend)
 5) Hedged STT router transcribes (Apple Speech + staggered cloud hedges)
-6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive)
+6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive/enhance)
 7) `RewriteQualityGate` validates output length ratio
 8) Result → `ClipboardPaster` → text insertion
 
@@ -133,6 +134,10 @@ Behavior:
 - `STTProvider`: async transcription from audio URL
 - `RewriteProvider`: async rewrite with prompt + model
 - `TextPaster`: async main-actor text insertion
+- `AudioRecording`: start/level/stop recording contract
+- `HUDDisplaying`: recording + processing + completion HUD updates
+- `DictationProcessing`: pipeline abstraction for processing captured audio
+- `PreferencesReading`: read-only app settings + API key access for DI
 
 App wires concrete providers in `DictationPipeline`. Swap implementations without touching flow logic.
 
@@ -196,8 +201,12 @@ Minimum ratios:
 - `off`: 0 (rewrite skipped)
 - `light`: 0.6
 - `aggressive`: 0.3
+- `enhance`: 0.2
 
-If below min, pipeline falls back to raw transcript.
+Maximum ratios:
+- `enhance`: 15.0 (other levels uncapped)
+
+If below min (or above max when defined), pipeline falls back to raw transcript.
 
 ## macOS Permissions
 
