@@ -11,7 +11,7 @@ SuperWhisper alternative that's simpler and smarter.
 ## Features
 
 - **Press Option+Space** to start/stop recording
-- **Health-aware STT routing**: dynamically prefers healthier providers (ElevenLabs/Deepgram/Whisper) with Apple Speech as final on-device fallback
+- **Hedged STT racing**: Apple Speech + cloud providers run in a staggered race (ElevenLabs `0s`, Deepgram `5s`, Whisper `10s`)
 - **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
 - **Three processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite)
 - **Microphone selection**: choose input device from Settings
@@ -48,9 +48,9 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 - [SwiftLint](https://github.com/realm/SwiftLint) (development only, `brew install swiftlint`)
 - [ElevenLabs API key](https://elevenlabs.io) for primary transcription
 - [OpenRouter API key](https://openrouter.ai) for AI rewriting
-- [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription
-- [OpenAI API key](https://platform.openai.com) (optional) for Whisper fallback transcription
-- Apple Speech is always available as a final on-device fallback (no key needed)
+- [Deepgram API key](https://console.deepgram.com) (optional) for hedged cloud transcription
+- [OpenAI API key](https://platform.openai.com) (optional) for Whisper hedged cloud transcription
+- Apple Speech is always available and launches at hedge start (no key needed)
 
 ### Installation
 
@@ -127,7 +127,7 @@ swift run Vox
 
 ```
 Sources/
-  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/health-aware routing/fallback)
+  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/hedged racing/health-aware)
   VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
   VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
   VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
