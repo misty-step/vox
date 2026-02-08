@@ -75,9 +75,15 @@ public final class AudioRecorder: AudioRecording {
             ) else { return }
 
             var error: NSError?
+            var hasData = true
             let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
+                if hasData {
+                    hasData = false
+                    outStatus.pointee = .haveData
+                    return buffer
+                }
+                outStatus.pointee = .noDataNow
+                return nil
             }
             let convertStatus = converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
 
