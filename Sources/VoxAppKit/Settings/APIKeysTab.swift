@@ -6,26 +6,34 @@ public struct APIKeysTab: View {
     public init() {}
 
     public var body: some View {
-        Form {
-            Section("Speech-to-Text (ElevenLabs)") {
-                SecureField("ElevenLabs API Key", text: binding(for: \.elevenLabsAPIKey))
-                    .textContentType(.password)
-                SecureField("Deepgram API Key (optional fallback)", text: binding(for: \.deepgramAPIKey))
-                    .textContentType(.password)
-                SecureField("OpenAI API Key (optional Whisper)", text: binding(for: \.openAIAPIKey))
-                    .textContentType(.password)
-                Text("Apple Speech (on-device) is always available as final fallback")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Link("Deepgram Console", destination: URL(string: "https://console.deepgram.com/")!)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Cloud Provider Keys")
+                .font(.headline)
+            Text("Optional cloud providers improve speed and rewrite quality. On-device Apple Speech remains available if cloud STT keys are missing.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
-            Section("Rewrite (OpenRouter)") {
-                SecureField("OpenRouter API Key", text: binding(for: \.openRouterAPIKey))
-                    .textContentType(.password)
+            Form {
+                Section("Speech-to-Text Providers") {
+                    SecureField("ElevenLabs API Key", text: binding(for: \.elevenLabsAPIKey))
+                        .textContentType(.password)
+                    SecureField("Deepgram API Key (optional fallback)", text: binding(for: \.deepgramAPIKey))
+                        .textContentType(.password)
+                    SecureField("OpenAI API Key (optional Whisper)", text: binding(for: \.openAIAPIKey))
+                        .textContentType(.password)
+                    Text("Apple Speech runs locally and is always available.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link("Deepgram Console", destination: URL(string: "https://console.deepgram.com/")!)
+                }
+
+                Section("Rewrite Provider") {
+                    SecureField("OpenRouter API Key", text: binding(for: \.openRouterAPIKey))
+                        .textContentType(.password)
+                }
             }
         }
-        .padding(12)
+        .padding(14)
     }
 
     private func binding(for keyPath: ReferenceWritableKeyPath<PreferencesStore, String>) -> Binding<String> {

@@ -99,44 +99,45 @@ public final class HUDState: ObservableObject {
 // MARK: - Design System
 
 private enum Design {
-    // Dimensions - consistent 8px radius for unified shape language
-    static let widthRecording: CGFloat = 220
-    static let heightRecording: CGFloat = 44
-    static let widthIdle: CGFloat = 120
-    static let heightIdle: CGFloat = 32
-    static let cornerRadius: CGFloat = 8
-    
-    // Typography - distinctive hierarchy
-    static let fontLabel = Font.system(size: 13, weight: .regular, design: .default)
-    static let fontStatus = Font.system(size: 11, weight: .semibold, design: .default)
+    // Dimensions
+    static let widthRecording: CGFloat = 236
+    static let heightRecording: CGFloat = 48
+    static let widthIdle: CGFloat = 132
+    static let heightIdle: CGFloat = 34
+    static let cornerRadius: CGFloat = 10
+
+    // Typography
+    static let fontLabel = Font.system(size: 13, weight: .medium, design: .rounded)
+    static let fontStatus = Font.system(size: 11, weight: .semibold, design: .rounded)
     static let fontTimer = Font.system(size: 14, weight: .semibold, design: .monospaced)
-    
-    // Colors - Minimal palette, no gradients, no purple
-    static let borderIdle = Color.white.opacity(0.12)
-    static let borderActive = Color.red.opacity(0.85)
-    static let textPrimary = Color.white.opacity(0.92)
-    static let textSecondary = Color.white.opacity(0.45)
+
+    // Colors - restrained, no heavy gradients
+    static let borderIdle = Color.white.opacity(0.16)
+    static let borderActive = Color.white.opacity(0.34)
+    static let borderProcessing = Color.white.opacity(0.26)
+    static let borderSuccess = Color.green.opacity(0.5)
+    static let textPrimary = Color.white.opacity(0.94)
+    static let textSecondary = Color.white.opacity(0.58)
     static let accentIndicator = Color(
         red: BrandIdentity.accent.red,
         green: BrandIdentity.accent.green,
         blue: BrandIdentity.accent.blue
     )
-    static let segmentActive = Color.white.opacity(0.9)
-    static let segmentInactive = Color.white.opacity(0.12)
-    static let brandMark = Color.white.opacity(0.08)
-    
-    // Timing - Respecting 200ms constraint for feedback
+    static let segmentActive = Color.white.opacity(0.92)
+    static let segmentInactive = Color.white.opacity(0.2)
+
+    // Timing
     static let transitionDuration: Double = 0.18
     static let fadeOutDuration: Double = 0.18
     static let contentTransitionDuration: Double = 0.15
     static let successDisplayDuration = HUDTiming.successDisplayDuration
     static let pulseDuration: Double = 1.2
     static let segmentUpdateDuration: Double = 0.06
-    
+
     // Shadows
-    static let shadowColor = Color.black.opacity(0.25)
-    static let shadowRadius: CGFloat = 20
-    static let shadowY: CGFloat = 4
+    static let shadowColor = Color.black.opacity(0.22)
+    static let shadowRadius: CGFloat = 16
+    static let shadowY: CGFloat = 3
 }
 
 // MARK: - Accessibility
@@ -174,10 +175,10 @@ private struct PulsingIndicator: View {
     }
 }
 
-/// 7-segment level meter with subtle V-shaped brand signature
+/// Segmented level meter with restrained active/inactive contrast.
 private struct SegmentedMeter: View {
     let level: Float
-    let segmentCount = 7
+    let segmentCount = 8
     
     var body: some View {
         HStack(spacing: 2) {
@@ -190,15 +191,6 @@ private struct SegmentedMeter: View {
             }
         }
         .frame(height: 14)
-        .overlay(brandMark, alignment: .center)
-    }
-    
-    /// Subtle "V" mark as brand signature - visible in negative space
-    private var brandMark: some View {
-        Text("V")
-            .font(.system(size: 8, weight: .bold, design: .default))
-            .foregroundStyle(Design.brandMark)
-            .offset(y: 1)
     }
 }
 
@@ -212,14 +204,8 @@ private struct SegmentBar: View {
         return level >= threshold
     }
     
-    /// V-shaped height variation - subtle brand signature
     private var height: CGFloat {
-        let baseHeight: CGFloat = isActive ? 10 : 5
-        // Center segments are taller (subtle V shape)
-        let centerIndex = CGFloat(totalCount - 1) / 2
-        let distanceFromCenter = abs(CGFloat(index) - centerIndex)
-        let vShape = max(0, 2 - distanceFromCenter) * 1.5
-        return baseHeight + vShape
+        isActive ? 11 : 6
     }
     
     var body: some View {
@@ -345,25 +331,21 @@ public struct HUDView: View {
     
     private var recordingContent: some View {
         HStack(spacing: 12) {
-            // Left: Status indicator with subtle VOX mark
+            // Left: explicit recording state
             HStack(spacing: 6) {
                 PulsingIndicator()
-                
-                // Tight letter-spacing for iconic VOX mark
-                Text("VOX")
+
+                Text("Recording")
                     .font(Design.fontStatus)
                     .foregroundStyle(Design.textSecondary)
-                    .tracking(-0.5)
             }
             
             Spacer()
             
-            // Center: Timer - more visual weight
             TimerDisplay(duration: state.recordingDuration)
             
             Spacer()
             
-            // Right: Level meter with brand signature
             SegmentedMeter(level: state.average)
         }
         .frame(maxWidth: .infinity)
@@ -395,13 +377,22 @@ public struct HUDView: View {
     // MARK: - Container Styling
     
     private var containerBackground: some View {
-        // No gradients - layered solid colors only
-        Color.black.opacity(0.75)
+        RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+                    .fill(Color.black.opacity(0.36))
+            )
     }
     
     private var containerBorder: some View {
         RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
-            .stroke(borderColor, lineWidth: state.mode == .recording ? 1.5 : 1.0)
+            .stroke(borderColor, lineWidth: state.mode == .recording ? 1.4 : 1.0)
+            .overlay(
+                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+                    .inset(by: 0.5)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
     }
     
     private var borderColor: Color {
@@ -411,9 +402,9 @@ public struct HUDView: View {
         case .recording:
             return Design.borderActive
         case .processing:
-            return Design.textSecondary.opacity(0.4)
+            return Design.borderProcessing
         case .success:
-            return Color.green.opacity(0.4)
+            return Design.borderSuccess
         }
     }
 }

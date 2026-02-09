@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import VoxCore
@@ -36,5 +37,24 @@ struct StatusBarIconRendererTests {
         #expect(icon.isTemplate == true)
         #expect(abs(icon.size.width - BrandIdentity.menuIconSize) < 0.000_1)
         #expect(abs(icon.size.height - BrandIdentity.menuIconSize) < 0.000_1)
+    }
+
+    @Test("Geometry coordinates are pixel aligned at 1x and 2x")
+    func geometryIsPixelAligned() {
+        let rect = NSRect(x: 0, y: 0, width: BrandIdentity.menuIconSize, height: BrandIdentity.menuIconSize)
+
+        for scale in [1.0, 2.0] {
+            let geometry = StatusBarIconGeometry.make(in: rect, scale: scale)
+
+            #expect(isPixelAligned(geometry.top, scale: scale))
+            #expect(isPixelAligned(geometry.bottom, scale: scale))
+            #expect(isPixelAligned(geometry.left, scale: scale))
+            #expect(isPixelAligned(geometry.right, scale: scale))
+            #expect(isPixelAligned(geometry.center, scale: scale))
+        }
+    }
+
+    private func isPixelAligned(_ value: CGFloat, scale: CGFloat) -> Bool {
+        abs((value * scale).rounded() - (value * scale)) < 0.000_1
     }
 }

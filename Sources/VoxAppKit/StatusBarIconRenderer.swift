@@ -30,6 +30,31 @@ struct StatusBarIconDescriptor: Equatable {
     }
 }
 
+struct StatusBarIconGeometry: Equatable {
+    let top: CGFloat
+    let bottom: CGFloat
+    let left: CGFloat
+    let right: CGFloat
+    let center: CGFloat
+
+    static func make(in rect: NSRect, scale: CGFloat) -> StatusBarIconGeometry {
+        let resolvedScale = max(scale, 1.0)
+        let inset: CGFloat = 2.2
+
+        return StatusBarIconGeometry(
+            top: aligned(rect.maxY - inset - 0.4, scale: resolvedScale),
+            bottom: aligned(rect.minY + inset + 0.9, scale: resolvedScale),
+            left: aligned(rect.minX + inset, scale: resolvedScale),
+            right: aligned(rect.maxX - inset, scale: resolvedScale),
+            center: aligned(rect.midX, scale: resolvedScale)
+        )
+    }
+
+    private static func aligned(_ value: CGFloat, scale: CGFloat) -> CGFloat {
+        (value * scale).rounded() / scale
+    }
+}
+
 enum StatusBarIconRenderer {
     static func makeIcon(for state: StatusBarState) -> NSImage {
         let descriptor = StatusBarIconDescriptor.make(for: state)
@@ -47,17 +72,13 @@ enum StatusBarIconRenderer {
     }
 
     private static func drawMonogram(in rect: NSRect, descriptor: StatusBarIconDescriptor) {
-        let inset: CGFloat = 2.2
-        let top = rect.maxY - inset - 0.4
-        let bottom = rect.minY + inset + 0.9
-        let left = rect.minX + inset
-        let right = rect.maxX - inset
-        let center = rect.midX
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let geometry = StatusBarIconGeometry.make(in: rect, scale: scale)
 
         let triangle = NSBezierPath()
-        triangle.move(to: NSPoint(x: left, y: top))
-        triangle.line(to: NSPoint(x: center, y: bottom))
-        triangle.line(to: NSPoint(x: right, y: top))
+        triangle.move(to: NSPoint(x: geometry.left, y: geometry.top))
+        triangle.line(to: NSPoint(x: geometry.center, y: geometry.bottom))
+        triangle.line(to: NSPoint(x: geometry.right, y: geometry.top))
         triangle.close()
         triangle.lineJoinStyle = .round
         triangle.lineCapStyle = .round
@@ -65,9 +86,9 @@ enum StatusBarIconRenderer {
         switch descriptor.monogramStyle {
         case .openV:
             let openV = NSBezierPath()
-            openV.move(to: NSPoint(x: left, y: top))
-            openV.line(to: NSPoint(x: center, y: bottom))
-            openV.line(to: NSPoint(x: right, y: top))
+            openV.move(to: NSPoint(x: geometry.left, y: geometry.top))
+            openV.line(to: NSPoint(x: geometry.center, y: geometry.bottom))
+            openV.line(to: NSPoint(x: geometry.right, y: geometry.top))
             openV.lineWidth = descriptor.strokeWidth
             openV.lineCapStyle = .round
             openV.lineJoinStyle = .round
