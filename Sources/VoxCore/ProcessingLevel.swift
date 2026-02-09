@@ -6,12 +6,15 @@ public enum ProcessingLevel: String, Codable, CaseIterable, Sendable {
     case aggressive
     case enhance
 
+    /// Single default rewrite model for all processing levels (simplicity > micro-optimizing per-mode).
+    public static let defaultRewriteModel = "google/gemini-2.5-flash-lite"
+
     public var defaultModel: String {
         switch self {
-        case .off:        return ""
-        case .light:      return "google/gemini-2.5-flash-lite"
-        case .aggressive: return "google/gemini-2.5-flash-lite"
-        case .enhance:    return "google/gemini-2.5-flash-lite"
+        case .off:
+            return ""
+        case .light, .aggressive, .enhance:
+            return Self.defaultRewriteModel
         }
     }
 }

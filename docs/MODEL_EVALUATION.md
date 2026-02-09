@@ -27,14 +27,14 @@ Last updated: February 2026
 
 ## Recommendation
 
-**Primary: `google/gemini-2.5-flash-lite` (Light + Aggressive)**
+**Primary: `google/gemini-2.5-flash-lite` (all rewrite modes)**
 - Fastest production model (392 tok/s, 0.29s time-to-first-token)
 - Thinking disabled by default (no wasted reasoning tokens)
 - 1M context window
 - Very affordable
 
-**Enhance candidate: `google/gemini-2.0-flash-001`**
-- In expanded bakeoff it beat Flash Lite on Enhance p95 latency.
+Decision: we intentionally use **one** default model across light/aggressive/enhance to keep behavior predictable and rollback trivial (`ProcessingLevel.defaultRewriteModel`).
+Expanded bakeoff had `google/gemini-2.0-flash-001` slightly faster on Enhance p95, but not enough to justify per-mode model complexity.
 
 **Fallback options (if Gemini has issues):**
 1. `openai/gpt-4.1-nano`
@@ -50,7 +50,7 @@ Outcome: `ProcessingLevel` defaults now use `google/gemini-2.5-flash-lite` for l
 Expanded bakeoff: `docs/performance/rewrite-model-bakeoff-2026-02-09-expanded.md`
 - Light: `google/gemini-2.5-flash-lite`
 - Aggressive: `google/gemini-2.5-flash-lite`
-- Enhance: `google/gemini-2.0-flash-001`
+- Enhance: `google/gemini-2.0-flash-001` (fastest p95 in this run; we still standardize on Flash Lite for simplicity)
 
 ## Reasoning Control
 
