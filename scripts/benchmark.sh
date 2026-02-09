@@ -16,7 +16,7 @@ trap cleanup EXIT
 cd "$REPO_DIR"
 
 echo "Running pipeline benchmark..."
-if ! swift test --filter PipelineBenchmarkTests -Xswiftc -warnings-as-errors >"$OUTPUT_PATH" 2>&1; then
+if ! VOX_RUN_BENCHMARK_TESTS=1 swift test --filter PipelineBenchmarkTests -Xswiftc -warnings-as-errors >"$OUTPUT_PATH" 2>&1; then
     TEST_EXIT=$?
     grep -v "^\[Pipeline\]" "$OUTPUT_PATH" || true
     echo ""

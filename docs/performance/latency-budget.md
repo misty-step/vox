@@ -31,6 +31,9 @@ Framework overhead (everything except provider network latency):
 ./scripts/benchmark.sh
 ```
 
+`PipelineBenchmarkTests` are opt-in and are skipped during normal `swift test` runs.
+`./scripts/benchmark.sh` enables them by setting `VOX_RUN_BENCHMARK_TESTS=1`.
+
 The benchmark runs `PipelineBenchmarkTests` which:
 1. Creates a `DictationPipeline` with mock STT/rewrite providers at configurable delays
 2. Runs 20 iterations per test, collecting `PipelineTiming` via `timingHandler`
@@ -49,4 +52,4 @@ The benchmark runs `PipelineBenchmarkTests` which:
 
 ### Reproducibility
 
-With deterministic mock provider delays, two consecutive runs should produce p50 within 30% variance on CI hosts. Remaining variance is scheduler jitter.
+CI does not gate on run-to-run variance because hosted runner scheduler jitter can dominate deterministic mock delays.

@@ -132,9 +132,15 @@ private final class TimingCollector: @unchecked Sendable {
 @Suite("Pipeline Benchmark")
 @MainActor
 struct PipelineBenchmarkTests {
+    private static let benchmarkEnvFlag = "VOX_RUN_BENCHMARK_TESTS"
+
     /// Number of iterations per benchmark run.
     /// 20 provides stable percentiles with controlled mock delays while keeping CI fast.
     static let iterations = 20
+
+    private static var benchmarksEnabled: Bool {
+        ProcessInfo.processInfo.environment[benchmarkEnvFlag] == "1"
+    }
 
     /// Runs the pipeline N times with given mock delays, returns timing samples.
     private func collectTimings(
@@ -222,6 +228,8 @@ struct PipelineBenchmarkTests {
 
     @Test("Pipeline overhead p95 under 50ms (mock delays excluded)")
     func benchmark_pipelineOverhead_under50ms() async throws {
+        guard Self.benchmarksEnabled else { return }
+
         // Use minimal mock delays to measure pipeline framework overhead
         let mockSTTDelay = 0.01
         let mockRewriteDelay = 0.01
@@ -241,6 +249,8 @@ struct PipelineBenchmarkTests {
 
     @Test("Paste stage p95 within budget")
     func benchmark_pasteP95_withinBudget() async throws {
+        guard Self.benchmarksEnabled else { return }
+
         let timings = try await collectTimings(sttDelay: 0.01, rewriteDelay: 0.01)
         let result = buildResult(from: timings)
 
@@ -253,6 +263,8 @@ struct PipelineBenchmarkTests {
 
     @Test("Stage timings sum correctly across iterations")
     func benchmark_stageSums_matchTotal() async throws {
+        guard Self.benchmarksEnabled else { return }
+
         let timings = try await collectTimings(sttDelay: 0.05, rewriteDelay: 0.05)
 
         for timing in timings {
@@ -267,6 +279,8 @@ struct PipelineBenchmarkTests {
 
     @Test("Full benchmark produces valid JSON artifact")
     func benchmark_fullRun_producesJSON() async throws {
+        guard Self.benchmarksEnabled else { return }
+
         let timings = try await collectTimings(sttDelay: 0.05, rewriteDelay: 0.05)
         let result = buildResult(from: timings)
 
@@ -286,22 +300,4 @@ struct PipelineBenchmarkTests {
         }
     }
 
-    // MARK: - Reproducibility Verification
-
-    @Test("Two consecutive runs produce p50 within 30% variance")
-    func benchmark_reproducibility_p50Within30Percent() async throws {
-        // Use deterministic mock latency; remaining variance is scheduler jitter.
-        let timings1 = try await collectTimings(sttDelay: 0.05, sttJitter: 0, rewriteDelay: 0.05, rewriteJitter: 0)
-        let timings2 = try await collectTimings(sttDelay: 0.05, sttJitter: 0, rewriteDelay: 0.05, rewriteJitter: 0)
-
-        let stageSum: (PipelineTiming) -> Double = { $0.encodeTime + $0.sttTime + $0.rewriteTime + $0.pasteTime }
-        let total1 = StageDistribution(samples: timings1.map(stageSum))
-        let total2 = StageDistribution(samples: timings2.map(stageSum))
-
-        let variance = abs(total1.p50 - total2.p50) / total1.p50
-        #expect(
-            variance <= 0.30,
-            "p50 variance \(String(format: "%.1f", variance * 100))% exceeds 30% threshold (run1: \(String(format: "%.3f", total1.p50))s, run2: \(String(format: "%.3f", total2.p50))s)"
-        )
-    }
 }

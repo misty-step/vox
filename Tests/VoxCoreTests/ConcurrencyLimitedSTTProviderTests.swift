@@ -10,7 +10,8 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         let provider = ConcurrencyLimitedSTTProvider(provider: gate, maxConcurrent: 1)
 
         let firstTask = Task { try await provider.transcribe(audioURL: audioURL) }
-        try await waitUntil { gate.callCount == 1 }
+        try await waitUntil { gate.pendingWaiterCount == 1 }
+        XCTAssertEqual(gate.callCount, 1)
 
         let secondTask = Task { try await provider.transcribe(audioURL: audioURL) }
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -20,7 +21,7 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         let firstResult = try await firstTask.value
         XCTAssertEqual(firstResult, "first")
 
-        try await waitUntil { gate.callCount == 2 }
+        try await waitUntil { gate.callCount == 2 && gate.pendingWaiterCount == 1 }
         gate.resumeNext(with: .success("second"))
         let secondResult = try await secondTask.value
         XCTAssertEqual(secondResult, "second")
@@ -50,7 +51,8 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         let provider = ConcurrencyLimitedSTTProvider(provider: gate, maxConcurrent: 1)
 
         let firstTask = Task { try await provider.transcribe(audioURL: audioURL) }
-        try await waitUntil { gate.callCount == 1 }
+        try await waitUntil { gate.pendingWaiterCount == 1 }
+        XCTAssertEqual(gate.callCount, 1)
 
         let cancelledTask = Task { try await provider.transcribe(audioURL: audioURL) }
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -71,7 +73,7 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         XCTAssertEqual(firstResult, "first")
 
         let thirdTask = Task { try await provider.transcribe(audioURL: audioURL) }
-        try await waitUntil { gate.callCount == 2 }
+        try await waitUntil { gate.callCount == 2 && gate.pendingWaiterCount == 1 }
         gate.resumeNext(with: .success("third"))
         let thirdResult = try await thirdTask.value
         XCTAssertEqual(thirdResult, "third")
@@ -85,7 +87,8 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         let second = ConcurrencyLimitedSTTProvider(provider: secondBase, maxConcurrent: 1)
 
         let firstTask = Task { try await first.transcribe(audioURL: audioURL) }
-        try await waitUntil { firstBase.callCount == 1 }
+        try await waitUntil { firstBase.pendingWaiterCount == 1 }
+        XCTAssertEqual(firstBase.callCount, 1)
 
         let secondTask = Task { try await second.transcribe(audioURL: audioURL) }
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -95,7 +98,7 @@ final class ConcurrencyLimitedSTTProviderTests: XCTestCase {
         let firstResult = try await firstTask.value
         XCTAssertEqual(firstResult, "first")
 
-        try await waitUntil { secondBase.callCount == 1 }
+        try await waitUntil { secondBase.callCount == 1 && secondBase.pendingWaiterCount == 1 }
         secondBase.resumeNext(with: .success("second"))
         let secondResult = try await secondTask.value
         XCTAssertEqual(secondResult, "second")
@@ -132,6 +135,10 @@ private final class GateSTTProvider: STTProvider, @unchecked Sendable {
 
     var maxInFlight: Int {
         withLock { _maxInFlight }
+    }
+
+    var pendingWaiterCount: Int {
+        withLock { waiters.count }
     }
 
     func transcribe(audioURL: URL) async throws -> String {
