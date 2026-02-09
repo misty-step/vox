@@ -6,7 +6,7 @@ import Testing
 // MARK: - Benchmark Infrastructure
 
 /// Captures percentile distributions from pipeline timing samples.
-struct StageDistribution: Codable {
+private struct StageDistribution: Codable {
     let p50: Double
     let p95: Double
     let min: Double
@@ -41,13 +41,13 @@ struct StageDistribution: Codable {
     }
 }
 
-struct BudgetCheck: Codable {
+private struct BudgetCheck: Codable {
     let target: Double
     let actual: Double
     let pass: Bool
 }
 
-struct BenchmarkResult: Codable {
+private struct BenchmarkResult: Codable {
     let timestamp: String
     let iterations: Int
     let stages: [String: StageDistribution]
@@ -65,16 +65,13 @@ private func clampedNanoseconds(for delay: TimeInterval) -> UInt64 {
 
 /// STT mock with configurable latency for benchmark runs.
 private final class BenchmarkSTTProvider: STTProvider, Sendable {
-    private let baseDelay: TimeInterval
-    private let jitter: TimeInterval
+    private let delay: TimeInterval
 
-    init(baseDelay: TimeInterval, jitter: TimeInterval = 0) {
-        self.baseDelay = baseDelay
-        self.jitter = jitter
+    init(delay: TimeInterval) {
+        self.delay = delay
     }
 
     func transcribe(audioURL: URL) async throws -> String {
-        let delay = baseDelay + Double.random(in: 0...jitter)
         try await Task.sleep(nanoseconds: clampedNanoseconds(for: delay))
         return "benchmark transcript for test"
     }
@@ -82,16 +79,13 @@ private final class BenchmarkSTTProvider: STTProvider, Sendable {
 
 /// Rewrite mock with configurable latency.
 private final class BenchmarkRewriteProvider: RewriteProvider, Sendable {
-    private let baseDelay: TimeInterval
-    private let jitter: TimeInterval
+    private let delay: TimeInterval
 
-    init(baseDelay: TimeInterval, jitter: TimeInterval = 0) {
-        self.baseDelay = baseDelay
-        self.jitter = jitter
+    init(delay: TimeInterval) {
+        self.delay = delay
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        let delay = baseDelay + Double.random(in: 0...jitter)
         try await Task.sleep(nanoseconds: clampedNanoseconds(for: delay))
         return "Benchmark transcript for test."
     }
@@ -105,7 +99,7 @@ private final class BenchmarkPaster: TextPaster, Sendable {
 // MARK: - Budget Constants
 
 /// Latency SLOs from issue #188.
-enum LatencyBudget {
+private enum LatencyBudget {
     static let totalP50: TimeInterval = 1.2
     static let totalP95: TimeInterval = 2.5
     static let pasteP95: TimeInterval = 0.08
@@ -145,14 +139,12 @@ struct PipelineBenchmarkTests {
     /// Runs the pipeline N times with given mock delays, returns timing samples.
     private func collectTimings(
         sttDelay: TimeInterval,
-        sttJitter: TimeInterval = 0.005,
         rewriteDelay: TimeInterval,
-        rewriteJitter: TimeInterval = 0.005,
         processingLevel: ProcessingLevel = .light,
         enableOpus: Bool = false
     ) async throws -> [PipelineTiming] {
-        let stt = BenchmarkSTTProvider(baseDelay: sttDelay, jitter: sttJitter)
-        let rewriter = BenchmarkRewriteProvider(baseDelay: rewriteDelay, jitter: rewriteJitter)
+        let stt = BenchmarkSTTProvider(delay: sttDelay)
+        let rewriter = BenchmarkRewriteProvider(delay: rewriteDelay)
         let paster = BenchmarkPaster()
         let prefs = MockPreferences()
         prefs.processingLevel = processingLevel
@@ -186,6 +178,10 @@ struct PipelineBenchmarkTests {
         return collector.timings
     }
 
+    private func stageTotal(for timing: PipelineTiming) -> TimeInterval {
+        timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime
+    }
+
     /// Builds a BenchmarkResult from collected timings.
     /// Uses stage sums (not PipelineTiming.totalTime) because that property
     /// reads wall-clock at access time, not capture time.
@@ -194,7 +190,7 @@ struct PipelineBenchmarkTests {
         let stts = timings.map(\.sttTime)
         let rewrites = timings.map(\.rewriteTime)
         let pastes = timings.map(\.pasteTime)
-        let totals = timings.map { $0.encodeTime + $0.sttTime + $0.rewriteTime + $0.pasteTime }
+        let totals = timings.map { stageTotal(for: $0) }
 
         let stages: [String: StageDistribution] = [
             "encode": StageDistribution(samples: encodes),
@@ -234,13 +230,13 @@ struct PipelineBenchmarkTests {
         let mockSTTDelay = 0.01
         let mockRewriteDelay = 0.01
         let timings = try await collectTimings(sttDelay: mockSTTDelay, rewriteDelay: mockRewriteDelay)
-        let result = buildResult(from: timings)
+        #expect(timings.count == Self.iterations, "Expected \(Self.iterations) timing samples")
 
-        // Overhead = total - (stt + rewrite mock delays)
-        let totalP95 = result.stages["total"]!.p95
-        let sttP95 = result.stages["stt"]!.p95
-        let rewriteP95 = result.stages["rewrite"]!.p95
-        let overhead = totalP95 - sttP95 - rewriteP95
+        // Compute overhead per run, then take p95 of that distribution.
+        let overheadSamples = timings.map {
+            max(0, stageTotal(for: $0) - mockSTTDelay - mockRewriteDelay)
+        }
+        let overhead = StageDistribution(samples: overheadSamples).p95
         #expect(
             overhead <= 0.05,
             "Pipeline overhead p95 \(String(format: "%.3f", overhead))s exceeds 50ms"
@@ -266,10 +262,11 @@ struct PipelineBenchmarkTests {
         guard Self.benchmarksEnabled else { return }
 
         let timings = try await collectTimings(sttDelay: 0.05, rewriteDelay: 0.05)
+        #expect(timings.count == Self.iterations, "Expected \(Self.iterations) timing samples")
 
         for timing in timings {
-            let stageSum = timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime
-            #expect(stageSum > 0, "Stage sum should be positive")
+            let stageSum = stageTotal(for: timing)
+            #expect(stageSum >= 0.1, "Stage sum should include configured provider delays")
             #expect(timing.sttTime >= 0.05, "STT time should reflect mock delay")
             #expect(timing.rewriteTime >= 0.05, "Rewrite time should reflect mock delay")
         }

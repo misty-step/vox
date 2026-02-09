@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_PATH="$(mktemp /tmp/benchmark-XXXXXX.log)"
+OUTPUT_PATH="$(mktemp "${TMPDIR:-/tmp}/benchmark.XXXXXX")"
 
 cleanup() {
     rm -f "$OUTPUT_PATH"
