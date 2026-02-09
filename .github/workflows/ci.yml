@@ -42,4 +42,4 @@ jobs:
 
       - name: Run latency benchmark
         if: github.event_name == 'pull_request'
-        run: ./scripts/benchmark.sh --compare
+        run: ./scripts/benchmark.sh

@@ -2,10 +2,9 @@
 set -euo pipefail
 
 # Lint only staged .swift files — sub-second on typical commits.
+# Use recursive pathspec + NUL-delimited piping so spaces in filenames are safe.
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
-
-if [ -z "$staged_files" ]; then
+if ! git diff --cached --name-only --diff-filter=ACM -- ':(glob)**/*.swift' | grep -q .; then
     exit 0
 fi
 
@@ -14,4 +13,5 @@ if ! command -v swiftlint >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "$staged_files" | xargs swiftlint lint --strict --config .swiftlint.yml
+git diff --cached --name-only -z --diff-filter=ACM -- ':(glob)**/*.swift' \
+    | xargs -0 swiftlint lint --strict --config .swiftlint.yml

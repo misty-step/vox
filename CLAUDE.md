@@ -14,6 +14,7 @@ swift test -Xswiftc -warnings-as-errors        # Strict test (matches CI)
 ./scripts/test-audio-guardrails.sh             # Critical audio regression contract tests
 swift test --filter VoxCoreTests               # Run one test target
 swift test --filter RetryingSTTProviderTests    # Run one test class
+./scripts/benchmark.sh                         # Run pipeline latency benchmark
 ./scripts/run.sh                               # Launch debug binary with keys from .env.local
 ```
 
@@ -87,10 +88,10 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 ## Testing
 
-XCTest with async tests. ~50 tests across three targets:
+XCTest and Swift Testing with async tests. ~62 tests across three targets:
 - `VoxCoreTests` — decorators, error classification, quality gate, multipart encoding
 - `VoxProvidersTests` — client request format, file size limits
-- `VoxAppTests` — DI contract verification for VoxSession
+- `VoxAppTests` — DI contract verification for VoxSession, pipeline latency benchmarks
 
 Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcribe_retriesOnThrottledError`).
 
