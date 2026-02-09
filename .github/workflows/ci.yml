@@ -39,3 +39,7 @@ jobs:
           CI_TEST_TIMEOUT_SECONDS: "180"
           # Skip integration tests requiring API keys
           DEEPGRAM_API_KEY: ""
+
+      - name: Run latency benchmark
+        if: github.event_name == 'pull_request'
+        run: ./scripts/benchmark.sh --compare
