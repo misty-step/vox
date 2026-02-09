@@ -27,8 +27,16 @@ private struct BenchmarkConfig {
     static let defaultModels: [String] = [
         "google/gemini-2.5-flash-lite",
         "google/gemini-2.5-flash",
-        "deepseek/deepseek-v3.2",
+        "google/gemini-2.0-flash-lite-001",
+        "google/gemini-2.0-flash-001",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4.1-nano",
+        "anthropic/claude-haiku-4.5",
+        "mistralai/ministral-8b-2512",
+        "mistralai/ministral-3b-2512",
+        "meta-llama/llama-3.1-8b-instruct",
         "xiaomi/mimo-v2-flash",
+        "nvidia/nemotron-nano-9b-v2",
         "inception/mercury",
     ]
 
