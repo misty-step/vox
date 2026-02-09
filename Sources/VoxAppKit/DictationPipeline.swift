@@ -49,6 +49,7 @@ public final class DictationPipeline: DictationProcessing {
     private let rewriteCache: RewriteResultCache
     private let pipelineTimeout: TimeInterval
     private let enableOpus: Bool
+    private let opusBypassThreshold: Int
     private let enableRewriteCache: Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
     // Invoked once per process call. On failures it receives partial stage timings.
@@ -65,6 +66,7 @@ public final class DictationPipeline: DictationProcessing {
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
+        opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120
     ) {
         self.init(
@@ -76,6 +78,7 @@ public final class DictationPipeline: DictationProcessing {
             enableRewriteCache: enableRewriteCache,
             enableOpus: enableOpus,
             convertCAFToOpus: convertCAFToOpus,
+            opusBypassThreshold: opusBypassThreshold,
             pipelineTimeout: pipelineTimeout
         )
     }
@@ -92,6 +95,7 @@ public final class DictationPipeline: DictationProcessing {
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
+        opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
     ) {
@@ -102,6 +106,7 @@ public final class DictationPipeline: DictationProcessing {
         self.rewriteCache = rewriteCache
         self.enableRewriteCache = enableRewriteCache
         self.enableOpus = enableOpus
+        self.opusBypassThreshold = opusBypassThreshold
         self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
         self.timingHandler = timingHandler
@@ -120,7 +125,8 @@ public final class DictationPipeline: DictationProcessing {
 
         // Encode to Opus if enabled
         let uploadURL: URL
-        if enableOpus, audioURL.pathExtension.lowercased() == "caf" {
+        let isCAF = audioURL.pathExtension.lowercased() == "caf"
+        if enableOpus, isCAF, timing.originalSizeBytes >= opusBypassThreshold {
             let encodeStart = CFAbsoluteTimeGetCurrent()
             do {
                 let opusURL = try await convertCAFToOpus(audioURL)
@@ -139,6 +145,11 @@ public final class DictationPipeline: DictationProcessing {
             }
             timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
         } else {
+            if enableOpus, isCAF, timing.originalSizeBytes < opusBypassThreshold {
+                #if DEBUG
+                print("[Pipeline] Opus skipped: file size \(timing.originalSizeBytes) below threshold \(opusBypassThreshold)")
+                #endif
+            }
             uploadURL = audioURL
         }
 

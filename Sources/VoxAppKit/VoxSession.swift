@@ -56,6 +56,15 @@ public final class VoxSession: ObservableObject {
         }
     }
 
+    private var hasCloudProviders: Bool {
+        let keys = [
+            prefs.elevenLabsAPIKey,
+            prefs.deepgramAPIKey,
+            prefs.openAIAPIKey,
+        ]
+        return keys.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     private func makePipeline() -> DictationProcessing {
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return DictationPipeline(
@@ -63,7 +72,8 @@ public final class VoxSession: ObservableObject {
             rewriter: OpenRouterClient(apiKey: openRouterKey),
             paster: ClipboardPaster(),
             prefs: prefs,
-            enableRewriteCache: true
+            enableRewriteCache: true,
+            enableOpus: hasCloudProviders
         )
     }
 

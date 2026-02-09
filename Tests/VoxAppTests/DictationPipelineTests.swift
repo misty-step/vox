@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Testing
 @testable import VoxCore
@@ -161,6 +162,21 @@ struct DictationPipelineTests {
         RewriteResultCache(maxEntries: 16, ttlSeconds: 60, maxCharacterCount: 1_024)
     }
 
+    private func makeCAF(frameCount: AVAudioFrameCount) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pipeline-\(UUID().uuidString).caf")
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1) else {
+            throw VoxError.internalError("Failed to create test audio format")
+        }
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw VoxError.internalError("Failed to create test audio buffer")
+        }
+        buffer.frameLength = frameCount
+        try file.write(from: buffer)
+        return url
+    }
+
     // MARK: - Basic Flow Tests
 
     @Test("Process with STT only - processing level off")
@@ -212,7 +228,8 @@ struct DictationPipelineTests {
             enableOpus: true,
             convertCAFToOpus: { inputURL in
                 try await converter.convert(inputURL)
-            }
+            },
+            opusBypassThreshold: 0
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -223,6 +240,79 @@ struct DictationPipelineTests {
         #expect(stt.callCount == 1)
         #expect(stt.lastAudioURL == convertedURL)
         #expect(stt.lastAudioURL?.pathExtension.lowercased() == "ogg")
+    }
+
+    @Test("Opus skipped when file size below threshold")
+    func process_opusSkipped_whenFileBelowThreshold() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let converter = MockAudioConverter(
+            outputURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("unused-\(UUID().uuidString).ogg")
+        )
+        let smallCAF = try makeCAF(frameCount: 800)
+        defer { try? FileManager.default.removeItem(at: smallCAF) }
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            },
+            opusBypassThreshold: 500_000
+        )
+
+        let result = try await pipeline.process(audioURL: smallCAF)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 0)
+        #expect(stt.lastAudioURL == smallCAF)
+    }
+
+    @Test("Opus applied when file size above threshold")
+    func process_opusApplied_whenFileAboveThreshold() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .off
+
+        let convertedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("converted-\(UUID().uuidString).ogg")
+        FileManager.default.createFile(atPath: convertedURL.path, contents: Data([0x4F, 0x67, 0x67, 0x53]))
+        defer { try? FileManager.default.removeItem(at: convertedURL) }
+        let converter = MockAudioConverter(outputURL: convertedURL)
+        let largeCAF = try makeCAF(frameCount: 8_000)
+        defer { try? FileManager.default.removeItem(at: largeCAF) }
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            },
+            opusBypassThreshold: 5_000
+        )
+
+        let result = try await pipeline.process(audioURL: largeCAF)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 1)
+        #expect(stt.lastAudioURL == convertedURL)
     }
 
     @Test("Process falls back to CAF when Opus output is empty")
@@ -248,7 +338,8 @@ struct DictationPipelineTests {
             enableOpus: true,
             convertCAFToOpus: { inputURL in
                 try await converter.convert(inputURL)
-            }
+            },
+            opusBypassThreshold: 0
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
