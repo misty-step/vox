@@ -4,7 +4,8 @@ import VoxMac
 import VoxProviders
 
 /// Tracks timing for each pipeline stage.
-struct PipelineTiming {
+/// Note: `totalTime` is a live wall-clock reading — use stage sums for captured snapshots.
+struct PipelineTiming: Sendable {
     let startTime: CFAbsoluteTime
     var encodeTime: TimeInterval = 0
     var sttTime: TimeInterval = 0
@@ -50,6 +51,8 @@ public final class DictationPipeline: DictationProcessing {
     private let enableOpus: Bool
     private let enableRewriteCache: Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
+    // Invoked once per process call. On failures it receives partial stage timings.
+    private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
     @MainActor
     public convenience init(
@@ -89,7 +92,8 @@ public final class DictationPipeline: DictationProcessing {
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
-        pipelineTimeout: TimeInterval = 120
+        pipelineTimeout: TimeInterval = 120,
+        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
     ) {
         self.stt = stt
         self.rewriter = rewriter
@@ -100,10 +104,14 @@ public final class DictationPipeline: DictationProcessing {
         self.enableOpus = enableOpus
         self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
+        self.timingHandler = timingHandler
     }
 
     public func process(audioURL: URL) async throws -> String {
         var timing = PipelineTiming()
+        defer {
+            timingHandler?(timing)
+        }
 
         // Capture original size BEFORE encoding
         let originalAttributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)

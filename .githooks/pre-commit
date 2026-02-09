@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Lint only staged .swift files — sub-second on typical commits.
+# Use recursive pathspec + NUL-delimited piping so spaces in filenames are safe.
+
+if ! git diff --cached --name-only --diff-filter=ACM -- ':(glob)**/*.swift' | grep -q .; then
+    exit 0
+fi
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+    echo "[pre-commit] swiftlint not found. Install with: brew install swiftlint" >&2
+    exit 1
+fi
+
+git diff --cached --name-only -z --diff-filter=ACM -- ':(glob)**/*.swift' \
+    | xargs -0 swiftlint lint --strict --config .swiftlint.yml
