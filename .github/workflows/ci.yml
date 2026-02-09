@@ -36,6 +36,6 @@ jobs:
       - name: Run tests
         run: ./scripts/run-tests-ci.sh
         env:
-          CI_TEST_TIMEOUT_SECONDS: "600"
+          CI_TEST_TIMEOUT_SECONDS: "180"
           # Skip integration tests requiring API keys
           DEEPGRAM_API_KEY: ""
