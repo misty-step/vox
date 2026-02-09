@@ -27,8 +27,11 @@ public final class VoxSession: ObservableObject {
     private let requestMicrophoneAccess: () async -> Bool
     private let errorPresenter: (String) -> Void
     private let pipeline: DictationProcessing?
+    private let streamingSTTProvider: StreamingSTTProvider?
+    private let streamingFinalizeTimeout: TimeInterval
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
+    private var activeStreamingBridge: StreamingAudioBridge?
 
     public init(
         recorder: AudioRecording? = nil,
@@ -37,7 +40,9 @@ public final class VoxSession: ObservableObject {
         prefs: PreferencesReading? = nil,
         sessionExtension: SessionExtension? = nil,
         requestMicrophoneAccess: (() async -> Bool)? = nil,
-        errorPresenter: ((String) -> Void)? = nil
+        errorPresenter: ((String) -> Void)? = nil,
+        streamingSTTProvider: StreamingSTTProvider? = nil,
+        streamingFinalizeTimeout: TimeInterval = 1.5
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
@@ -54,6 +59,8 @@ public final class VoxSession: ObservableObject {
             alert.alertStyle = .warning
             alert.runModal()
         }
+        self.streamingSTTProvider = streamingSTTProvider
+        self.streamingFinalizeTimeout = streamingFinalizeTimeout
     }
 
     private var hasCloudProviders: Bool {
@@ -158,6 +165,56 @@ public final class VoxSession: ObservableObject {
         return parsed
     }
 
+    private func resolveStreamingProvider() -> StreamingSTTProvider? {
+        if let streamingSTTProvider {
+            return streamingSTTProvider
+        }
+        guard isStreamingEnabled() else {
+            return nil
+        }
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !deepgramKey.isEmpty else {
+            return nil
+        }
+        return DeepgramStreamingClient(apiKey: deepgramKey)
+    }
+
+    private func isStreamingEnabled() -> Bool {
+        let raw = ProcessInfo.processInfo.environment["VOX_ENABLE_STREAMING_STT"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        return raw == "1" || raw == "true" || raw == "yes"
+    }
+
+    private func recorderSupportsStreaming() -> Bool {
+        guard recorder is AudioChunkStreaming else {
+            return false
+        }
+        if recorder is AudioRecorder {
+            let backend = ProcessInfo.processInfo.environment["VOX_AUDIO_BACKEND"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return backend == "engine"
+        }
+        return true
+    }
+
+    private func makeStreamingBridgeIfAvailable() async -> StreamingAudioBridge? {
+        guard recorderSupportsStreaming() else {
+            return nil
+        }
+        guard let provider = resolveStreamingProvider() else {
+            return nil
+        }
+        do {
+            let session = try await provider.makeSession()
+            return StreamingAudioBridge(session: session)
+        } catch {
+            print("[Vox] Streaming unavailable, using batch STT: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     public func toggleRecording() async {
         switch state {
         case .idle: await startRecording()
@@ -213,13 +270,29 @@ public final class VoxSession: ObservableObject {
             print("[Vox] Failed to set default input device for UID \(uid), continuing")
         }
 
+        let streamingBridge = await makeStreamingBridgeIfAvailable()
+        if let streamingRecorder = recorder as? AudioChunkStreaming {
+            streamingRecorder.setAudioChunkHandler(nil)
+            if let streamingBridge {
+                streamingRecorder.setAudioChunkHandler { chunk in
+                    streamingBridge.enqueue(chunk)
+                }
+            }
+        }
+
         do {
             try recorder.start(inputDeviceUID: prefs.selectedInputDeviceUID)
+            activeStreamingBridge = streamingBridge
             recordingStartTime = CFAbsoluteTimeGetCurrent()
             state = .recording
             hud.showRecording(average: 0, peak: 0)
             startLevelTimer()
         } catch {
+            await streamingBridge?.cancel()
+            activeStreamingBridge = nil
+            if let streamingRecorder = recorder as? AudioChunkStreaming {
+                streamingRecorder.setAudioChunkHandler(nil)
+            }
             await sessionExtension.didFailDictation(reason: "recording_start_failed")
             presentError(error.localizedDescription)
             state = .idle
@@ -246,6 +319,8 @@ public final class VoxSession: ObservableObject {
         do {
             url = try recorder.stop()
         } catch let error as VoxError {
+            let streamingBridge = detachStreamingBridge()
+            await streamingBridge?.cancel()
             switch error {
             case .audioCaptureFailed:
                 await sessionExtension.didFailDictation(reason: "recording_tap_failed")
@@ -257,6 +332,8 @@ public final class VoxSession: ObservableObject {
             hud.hide()
             return
         } catch {
+            let streamingBridge = detachStreamingBridge()
+            await streamingBridge?.cancel()
             await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)
             state = .idle
@@ -264,10 +341,21 @@ public final class VoxSession: ObservableObject {
             return
         }
 
+        let streamingBridge = detachStreamingBridge()
+
         var succeeded = false
         do {
             let active = pipeline ?? makePipeline()
-            let output = try await active.process(audioURL: url)
+            let output: String
+            if let streamingBridge {
+                output = try await processWithStreamingFallback(
+                    bridge: streamingBridge,
+                    batchPipeline: active,
+                    audioURL: url
+                )
+            } else {
+                output = try await active.process(audioURL: url)
+            }
             await sessionExtension.didCompleteDictation(
                 event: DictationUsageEvent(
                     recordingDuration: recordingDuration,
@@ -300,6 +388,45 @@ public final class VoxSession: ObservableObject {
         }
     }
 
+    private func processWithStreamingFallback(
+        bridge: StreamingAudioBridge,
+        batchPipeline: DictationProcessing,
+        audioURL: URL
+    ) async throws -> String {
+        do {
+            let transcript = try await bridge.finish(timeout: streamingFinalizeTimeout)
+            let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else {
+                throw VoxError.noTranscript
+            }
+            if let transcriptPipeline = batchPipeline as? TranscriptProcessing {
+                #if DEBUG
+                print("[Vox] Streaming transcript finalized (\(normalized.count) chars)")
+                #endif
+                return try await transcriptPipeline.process(transcript: normalized)
+            }
+            print("[Vox] Streaming finalized, but pipeline lacks TranscriptProcessing; falling back to batch STT")
+        } catch let streamingError as StreamingSTTError
+            where !streamingError.isFallbackEligible {
+            await bridge.cancel()
+            throw streamingError
+        } catch {
+            print("[Vox] Streaming finalize failed, falling back to batch STT: \(error.localizedDescription)")
+        }
+
+        await bridge.cancel()
+        return try await batchPipeline.process(audioURL: audioURL)
+    }
+
+    private func detachStreamingBridge() -> StreamingAudioBridge? {
+        if let streamingRecorder = recorder as? AudioChunkStreaming {
+            streamingRecorder.setAudioChunkHandler(nil)
+        }
+        let bridge = activeStreamingBridge
+        activeStreamingBridge = nil
+        return bridge
+    }
+
     private func startLevelTimer() {
         levelTimer?.invalidate()
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
@@ -315,4 +442,199 @@ public final class VoxSession: ObservableObject {
     private func presentError(_ message: String) {
         errorPresenter(message)
     }
+}
+
+private final class StreamingAudioBridge: @unchecked Sendable {
+    private let pump: StreamingSessionPump
+    private let queueLock = NSLock()
+    private var pendingChunks: [AudioChunk] = []
+    private var drainTask: Task<Void, Never>?
+    private var acceptsChunks = true
+
+    init(session: any StreamingSTTSession) {
+        self.pump = StreamingSessionPump(session: session)
+    }
+
+    func enqueue(_ chunk: AudioChunk) {
+        queueLock.withLock {
+            guard acceptsChunks else {
+                return
+            }
+            pendingChunks.append(chunk)
+            if drainTask == nil {
+                drainTask = Task { [weak self] in
+                    await self?.drainLoop()
+                }
+            }
+        }
+    }
+
+    func finish(timeout: TimeInterval) async throws -> String {
+        let activeDrain = queueLock.withLock { () -> Task<Void, Never>? in
+            acceptsChunks = false
+            return drainTask
+        }
+        if let activeDrain {
+            await activeDrain.value
+        }
+        return try await pump.finish(timeout: timeout)
+    }
+
+    func cancel() async {
+        let activeDrain = queueLock.withLock { () -> Task<Void, Never>? in
+            acceptsChunks = false
+            pendingChunks.removeAll()
+            return drainTask
+        }
+        activeDrain?.cancel()
+        if let activeDrain {
+            _ = await activeDrain.result
+        }
+        await pump.cancel()
+    }
+
+    private func drainLoop() async {
+        while true {
+            if Task.isCancelled {
+                queueLock.withLock {
+                    drainTask = nil
+                }
+                return
+            }
+
+            let next = queueLock.withLock { () -> AudioChunk? in
+                guard !pendingChunks.isEmpty else {
+                    drainTask = nil
+                    return nil
+                }
+                return pendingChunks.removeFirst()
+            }
+            guard let next else {
+                return
+            }
+            await pump.enqueue(next)
+        }
+    }
+}
+
+private actor StreamingSessionPump {
+    private enum LifecycleState {
+        case open
+        case finishing
+        case closed
+    }
+
+    private let session: any StreamingSTTSession
+    private var partialReader: Task<Void, Never>?
+    private var latestTranscript: String = ""
+    private var sendError: Error?
+    private var state: LifecycleState = .open
+
+    init(session: any StreamingSTTSession) {
+        self.session = session
+        Task {
+            await ensurePartialReaderStarted()
+        }
+    }
+
+    private func ensurePartialReaderStarted() {
+        guard partialReader == nil else {
+            return
+        }
+        partialReader = Task { [weak self] in
+            guard let self else { return }
+            for await partial in session.partialTranscripts {
+                let trimmed = partial.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                await self.recordPartial(trimmed)
+            }
+        }
+    }
+
+    func enqueue(_ chunk: AudioChunk) async {
+        ensurePartialReaderStarted()
+        guard state == .open, sendError == nil else {
+            return
+        }
+        do {
+            try await session.sendAudioChunk(chunk)
+        } catch {
+            sendError = error
+        }
+    }
+
+    func finish(timeout: TimeInterval) async throws -> String {
+        ensurePartialReaderStarted()
+        guard state == .open else {
+            throw StreamingSTTError.invalidState("Streaming pump already finished")
+        }
+        state = .finishing
+        if let sendError {
+            throw sendError
+        }
+
+        let transcript: String
+        do {
+            transcript = try await withStreamingFinalizeTimeout(seconds: timeout) {
+                try await self.session.finish()
+            }
+        } catch {
+            throw error
+        }
+
+        state = .closed
+        let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalized.isEmpty {
+            return normalized
+        }
+        let fallback = latestTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback
+    }
+
+    func cancel() async {
+        ensurePartialReaderStarted()
+        guard state != .closed else {
+            return
+        }
+        state = .closed
+        partialReader?.cancel()
+        await session.cancel()
+    }
+
+    private func recordPartial(_ transcript: String) {
+        latestTranscript = transcript
+    }
+}
+
+private func withStreamingFinalizeTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let timeoutNanoseconds = try validatedStreamingTimeoutNanoseconds(seconds: seconds)
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            throw StreamingSTTError.finalizationTimeout
+        }
+        guard let result = try await group.next() else {
+            group.cancelAll()
+            throw StreamingSTTError.finalizationTimeout
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
+private func validatedStreamingTimeoutNanoseconds(seconds: TimeInterval) throws -> UInt64 {
+    guard seconds > 0, seconds.isFinite else {
+        throw StreamingSTTError.invalidState("Invalid streaming finalize timeout: \(seconds)")
+    }
+    let nanoseconds = seconds * 1_000_000_000
+    guard nanoseconds.isFinite, nanoseconds >= 0, nanoseconds < Double(UInt64.max) else {
+        throw StreamingSTTError.invalidState("Invalid streaming finalize timeout: \(seconds)")
+    }
+    return UInt64(nanoseconds)
 }

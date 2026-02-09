@@ -19,9 +19,10 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
                 │                         │
       VoxMac (OS integration)      VoxProviders (network + on-device)
  ┌──────────────────────────┐     ┌───────────────────────────────┐
- │ AudioRecorder            │     │ ElevenLabsClient (STT)         │
- │ AudioDeviceManager       │     │ DeepgramClient (STT)           │
- │ HotkeyMonitor            │     │ WhisperClient (STT)            │
+│ AudioRecorder            │     │ ElevenLabsClient (STT)         │
+│ AudioDeviceManager       │     │ DeepgramClient (STT)           │
+│                          │     │ DeepgramStreamingClient (STT)  │
+│ HotkeyMonitor            │     │ WhisperClient (STT)            │
  │ HUDController / HUDView  │     │ AppleSpeechClient (STT)        │
  │ ClipboardPaster          │     │ AudioConverter (CAF→WAV)       │
  │ KeychainHelper           │     │ OpenRouterClient (rewrite)     │
@@ -32,8 +33,10 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
                                │
                         VoxCore (foundation)
  ┌─────────────────────────────────────────────────────────────────────┐
- │ Protocols: STTProvider • RewriteProvider • TextPaster • AudioRecording │
- │            HUDDisplaying • DictationProcessing • PreferencesReading    │
+ │ Protocols: STTProvider • StreamingSTTProvider • RewriteProvider        │
+ │            TextPaster • AudioRecording • AudioChunkStreaming           │
+ │            DictationProcessing • TranscriptProcessing • PreferencesReading │
+ │            HUDDisplaying                                                │
  │ Decorators: TimeoutSTTProvider • RetryingSTTProvider                 │
  │             HedgedSTTProvider • ConcurrencyLimitedSTTProvider        │
  │             HealthAwareSTTProvider • FallbackSTTProvider             │
@@ -69,10 +72,12 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
 3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
 4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioRecorder` (default backend)
-5) Hedged STT router transcribes (Apple Speech + staggered cloud hedges)
-6) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive/enhance)
-7) `RewriteQualityGate` validates output length ratio
-8) Result → `ClipboardPaster` → text insertion
+5) Optional realtime path (engine backend + streaming enabled): recorder forwards PCM chunks to `StreamingSTTSession`
+6) On stop, `VoxSession` attempts streaming `finish()` with bounded timeout
+7) If streaming finalize fails/times out, fallback to hedged batch STT router (Apple Speech + staggered cloud hedges)
+8) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive/enhance)
+9) `RewriteQualityGate` validates output length ratio
+10) Result → `ClipboardPaster` → text insertion
 
 Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioInspector` and fails fast with `VoxError.emptyCapture` when decoded frame count is zero.
 
@@ -132,11 +137,15 @@ Behavior:
 
 `VoxCore/Protocols.swift` defines core contracts:
 - `STTProvider`: async transcription from audio URL
+- `StreamingSTTProvider` / `StreamingSTTSession`: realtime STT lifecycle (`makeSession`, chunk feed, finalize)
+- `AudioChunk` / `PartialTranscript`: streaming payload + incremental transcript domain types
 - `RewriteProvider`: async rewrite with prompt + model
 - `TextPaster`: async main-actor text insertion
 - `AudioRecording`: start/level/stop recording contract
+- `AudioChunkStreaming`: optional recorder seam for realtime chunk callbacks
 - `HUDDisplaying`: recording + processing + completion HUD updates
 - `DictationProcessing`: pipeline abstraction for processing captured audio
+- `TranscriptProcessing`: rewrite/paste abstraction for precomputed transcripts
 - `PreferencesReading`: read-only app settings + API key access for DI
 
 App wires concrete providers in `DictationPipeline`. Swap implementations without touching flow logic.
@@ -163,10 +172,12 @@ BYOK. `PreferencesStore` reads env first, then Keychain:
 - `DEEPGRAM_API_KEY` — hedged cloud STT (Deepgram Nova-3, launches at 5s)
 - `OPENAI_API_KEY` — hedged cloud STT (Whisper, launches at 10s)
 - `VOX_MAX_CONCURRENT_STT` — optional global in-flight STT limit (default: `8`)
+- `VOX_ENABLE_STREAMING_STT` — opt-in realtime STT session orchestration (`1`/`true`)
 
 Endpoints:
 - ElevenLabs STT: `https://api.elevenlabs.io/v1/speech-to-text`
 - Deepgram STT: `https://api.deepgram.com/v1/listen?model=nova-3`
+- Deepgram streaming STT: `wss://api.deepgram.com/v1/listen`
 - OpenAI Whisper: `https://api.openai.com/v1/audio/transcriptions`
 - OpenRouter chat: `https://openrouter.ai/api/v1/chat/completions`
 
@@ -180,7 +191,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift`, `StatusBarIconRenderer.swift` |
 | Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
 | Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
-| STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
+| STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
