@@ -170,6 +170,11 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
     private var _sentChunks: [AudioChunk] = []
     var sentChunks: [AudioChunk] { lock.withLock { _sentChunks } }
     var finishResult: Result<String, Error> = .success("streamed transcript")
+    private var _expectedChunkCountAtFinish: Int?
+    var expectedChunkCountAtFinish: Int? {
+        get { lock.withLock { _expectedChunkCountAtFinish } }
+        set { lock.withLock { _expectedChunkCountAtFinish = newValue } }
+    }
     private var _cancelCallCount = 0
     var cancelCallCount: Int { lock.withLock { _cancelCallCount } }
 
@@ -188,6 +193,15 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
     }
 
     func finish() async throws -> String {
+        let expectedChunkCount = lock.withLock { _expectedChunkCountAtFinish }
+        if let expectedChunkCount {
+            let sentCount = lock.withLock { _sentChunks.count }
+            if sentCount < expectedChunkCount {
+                throw StreamingSTTError.invalidState(
+                    "finish before queued chunks drained (\(sentCount)/\(expectedChunkCount))"
+                )
+            }
+        }
         continuation?.finish()
         switch finishResult {
         case .success(let transcript):
@@ -454,7 +468,7 @@ struct VoxSessionDITests {
     }
 
     @Test("Streaming finalize success uses transcript processing path")
-    @MainActor func streamingFinalizeSuccess_usesTranscriptProcessing() async {
+    @MainActor func test_streamingFinalizeSuccess_usesTranscriptProcessing() async {
         let recorder = MockRecorder()
         let pipeline = MockPipeline()
         pipeline.result = "batch transcript"
@@ -487,7 +501,7 @@ struct VoxSessionDITests {
     }
 
     @Test("Streaming finalize failure falls back to batch processing")
-    @MainActor func streamingFinalizeFailure_fallsBackToBatch() async {
+    @MainActor func test_streamingFinalizeFailure_fallsBackToBatch() async {
         let recorder = MockRecorder()
         let pipeline = MockPipeline()
         pipeline.result = "batch fallback transcript"
@@ -513,6 +527,76 @@ struct VoxSessionDITests {
         #expect(streamingProvider.makeSessionCallCount == 1)
         #expect(pipeline.processCallCount == 1)
         #expect(pipeline.processTranscriptCallCount == 0)
+        #expect(streamingSession.cancelCallCount == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming finalize drains queued chunks before finish")
+    @MainActor func test_streamingFinalize_drainsQueuedChunksBeforeFinish() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.transcriptResult = "streamed transcript output"
+        let streamingSession = MockStreamingSession()
+        streamingSession.expectedChunkCountAtFinish = 6
+        streamingSession.finishResult = .success("streamed transcript")
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.5
+        )
+
+        await session.toggleRecording()
+        for index in 0..<6 {
+            let value = UInt8(index)
+            recorder.emitChunk(AudioChunk(pcm16LEData: Data([value, value &+ 1])))
+        }
+        await session.toggleRecording()
+
+        #expect(streamingSession.sentChunks.count == 6)
+        #expect(pipeline.processTranscriptCallCount == 1)
+        #expect(streamingSession.cancelCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming bridge cleanup runs when recorder stop fails")
+    @MainActor func test_streamingStopFailure_cleansUpBridge() async {
+        let recorder = MockRecorder()
+        recorder.stopError = VoxError.internalError("stop failed")
+        let pipeline = MockPipeline()
+        let streamingSession = MockStreamingSession()
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        var errors: [String] = []
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.1
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x10, 0x11])))
+        await session.toggleRecording()
+
+        let sentBefore = streamingSession.sentChunks.count
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x20, 0x21])))
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(streamingSession.cancelCallCount == 1)
+        #expect(streamingSession.sentChunks.count == sentBefore)
+        #expect(pipeline.processCallCount == 0)
+        #expect(errors.count == 1)
         #expect(session.state == .idle)
     }
 }

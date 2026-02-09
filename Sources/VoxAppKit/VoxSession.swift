@@ -319,6 +319,8 @@ public final class VoxSession: ObservableObject {
         do {
             url = try recorder.stop()
         } catch let error as VoxError {
+            let streamingBridge = detachStreamingBridge()
+            await streamingBridge?.cancel()
             switch error {
             case .audioCaptureFailed:
                 await sessionExtension.didFailDictation(reason: "recording_tap_failed")
@@ -330,6 +332,8 @@ public final class VoxSession: ObservableObject {
             hud.hide()
             return
         } catch {
+            let streamingBridge = detachStreamingBridge()
+            await streamingBridge?.cancel()
             await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)
             state = .idle
@@ -337,11 +341,7 @@ public final class VoxSession: ObservableObject {
             return
         }
 
-        if let streamingRecorder = recorder as? AudioChunkStreaming {
-            streamingRecorder.setAudioChunkHandler(nil)
-        }
-        let streamingBridge = activeStreamingBridge
-        activeStreamingBridge = nil
+        let streamingBridge = detachStreamingBridge()
 
         var succeeded = false
         do {
@@ -406,12 +406,25 @@ public final class VoxSession: ObservableObject {
                 return try await transcriptPipeline.process(transcript: normalized)
             }
             print("[Vox] Streaming finalized, but pipeline lacks TranscriptProcessing; falling back to batch STT")
+        } catch let streamingError as StreamingSTTError
+            where !streamingError.isFallbackEligible {
+            await bridge.cancel()
+            throw streamingError
         } catch {
             print("[Vox] Streaming finalize failed, falling back to batch STT: \(error.localizedDescription)")
         }
 
         await bridge.cancel()
         return try await batchPipeline.process(audioURL: audioURL)
+    }
+
+    private func detachStreamingBridge() -> StreamingAudioBridge? {
+        if let streamingRecorder = recorder as? AudioChunkStreaming {
+            streamingRecorder.setAudioChunkHandler(nil)
+        }
+        let bridge = activeStreamingBridge
+        activeStreamingBridge = nil
+        return bridge
     }
 
     private func startLevelTimer() {
@@ -433,32 +446,89 @@ public final class VoxSession: ObservableObject {
 
 private final class StreamingAudioBridge: @unchecked Sendable {
     private let pump: StreamingSessionPump
+    private let queueLock = NSLock()
+    private var pendingChunks: [AudioChunk] = []
+    private var drainTask: Task<Void, Never>?
+    private var acceptsChunks = true
 
     init(session: any StreamingSTTSession) {
         self.pump = StreamingSessionPump(session: session)
     }
 
     func enqueue(_ chunk: AudioChunk) {
-        Task {
-            await pump.enqueue(chunk)
+        queueLock.withLock {
+            guard acceptsChunks else {
+                return
+            }
+            pendingChunks.append(chunk)
+            if drainTask == nil {
+                drainTask = Task { [weak self] in
+                    await self?.drainLoop()
+                }
+            }
         }
     }
 
     func finish(timeout: TimeInterval) async throws -> String {
-        try await pump.finish(timeout: timeout)
+        let activeDrain = queueLock.withLock { () -> Task<Void, Never>? in
+            acceptsChunks = false
+            return drainTask
+        }
+        if let activeDrain {
+            await activeDrain.value
+        }
+        return try await pump.finish(timeout: timeout)
     }
 
     func cancel() async {
+        let activeDrain = queueLock.withLock { () -> Task<Void, Never>? in
+            acceptsChunks = false
+            pendingChunks.removeAll()
+            return drainTask
+        }
+        activeDrain?.cancel()
+        if let activeDrain {
+            _ = await activeDrain.result
+        }
         await pump.cancel()
+    }
+
+    private func drainLoop() async {
+        while true {
+            if Task.isCancelled {
+                queueLock.withLock {
+                    drainTask = nil
+                }
+                return
+            }
+
+            let next = queueLock.withLock { () -> AudioChunk? in
+                guard !pendingChunks.isEmpty else {
+                    drainTask = nil
+                    return nil
+                }
+                return pendingChunks.removeFirst()
+            }
+            guard let next else {
+                return
+            }
+            await pump.enqueue(next)
+        }
     }
 }
 
 private actor StreamingSessionPump {
+    private enum LifecycleState {
+        case open
+        case finishing
+        case closed
+    }
+
     private let session: any StreamingSTTSession
     private var partialReader: Task<Void, Never>?
     private var latestTranscript: String = ""
     private var sendError: Error?
-    private var finished = false
+    private var state: LifecycleState = .open
 
     init(session: any StreamingSTTSession) {
         self.session = session
@@ -483,7 +553,7 @@ private actor StreamingSessionPump {
 
     func enqueue(_ chunk: AudioChunk) async {
         ensurePartialReaderStarted()
-        guard !finished, sendError == nil else {
+        guard state == .open, sendError == nil else {
             return
         }
         do {
@@ -495,16 +565,24 @@ private actor StreamingSessionPump {
 
     func finish(timeout: TimeInterval) async throws -> String {
         ensurePartialReaderStarted()
-        guard !finished else {
+        guard state == .open else {
             throw StreamingSTTError.invalidState("Streaming pump already finished")
         }
-        finished = true
+        state = .finishing
         if let sendError {
             throw sendError
         }
-        let transcript = try await withStreamingFinalizeTimeout(seconds: timeout) {
-            try await self.session.finish()
+
+        let transcript: String
+        do {
+            transcript = try await withStreamingFinalizeTimeout(seconds: timeout) {
+                try await self.session.finish()
+            }
+        } catch {
+            throw error
         }
+
+        state = .closed
         let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalized.isEmpty {
             return normalized
@@ -515,10 +593,10 @@ private actor StreamingSessionPump {
 
     func cancel() async {
         ensurePartialReaderStarted()
-        guard !finished else {
+        guard state != .closed else {
             return
         }
-        finished = true
+        state = .closed
         partialReader?.cancel()
         await session.cancel()
     }
