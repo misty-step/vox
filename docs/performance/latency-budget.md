@@ -53,3 +53,18 @@ The benchmark runs `PipelineBenchmarkTests` which:
 ### Reproducibility
 
 CI does not gate on run-to-run variance because hosted runner scheduler jitter can dominate deterministic mock delays.
+
+## Rewrite Model Bakeoff (Manual)
+
+Rewrite p95 latency is often dominated by the selected OpenRouter model. For data-backed defaults, run:
+
+```bash
+swift run VoxBenchmarks
+```
+
+Inputs:
+- `docs/performance/rewrite-corpus.json`
+
+Outputs (dated):
+- `docs/performance/rewrite-benchmark-results-YYYY-MM-DD.json`
+- `docs/performance/rewrite-model-bakeoff-YYYY-MM-DD.md`

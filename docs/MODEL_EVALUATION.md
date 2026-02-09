@@ -1,6 +1,6 @@
 # OpenRouter Model Evaluation for Vox
 
-Last updated: January 2026
+Last updated: February 2026
 
 ## Use Case Requirements
 - Text rewriting/cleanup of voice transcripts
@@ -30,6 +30,12 @@ Last updated: January 2026
 **Fallback options:**
 1. `xiaomi/mimo-v2-flash` - Cheapest, but may have instruction-following issues
 2. `deepseek/deepseek-v3.2` - Best intelligence when speed is less critical
+
+## Bakeoff (2026-02-09)
+
+See `docs/performance/rewrite-model-bakeoff-2026-02-09.md` for measured p50/p95 latency, cost, and `RewriteQualityGate` pass-rate across candidate models.
+
+Outcome: `ProcessingLevel` defaults now use `google/gemini-2.5-flash-lite` for light/aggressive/enhance.
 
 ## Reasoning Control
 
