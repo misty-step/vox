@@ -13,7 +13,7 @@ struct StatusBarMenuSnapshotTests {
 
         #expect(snapshot.statusTitle == "Status: Ready")
         #expect(snapshot.modeTitle == "Mode: Light")
-        #expect(snapshot.cloudTitle == "Cloud: Ready (STT + Rewrite)")
+        #expect(snapshot.cloudTitle == "Cloud services: Ready")
         #expect(snapshot.cloudNeedsAction == false)
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == true)
@@ -29,7 +29,7 @@ struct StatusBarMenuSnapshotTests {
 
         #expect(snapshot.statusTitle == "Status: Recording")
         #expect(snapshot.modeTitle == "Mode: Aggressive")
-        #expect(snapshot.cloudTitle == "Cloud: STT ready, rewrite missing")
+        #expect(snapshot.cloudTitle == "Cloud STT ready; rewrite missing")
         #expect(snapshot.cloudNeedsAction == true)
         #expect(snapshot.toggleTitle == "Stop Dictation")
         #expect(snapshot.toggleEnabled == true)
@@ -45,7 +45,7 @@ struct StatusBarMenuSnapshotTests {
 
         #expect(snapshot.statusTitle == "Status: Processing")
         #expect(snapshot.modeTitle == "Mode: Off")
-        #expect(snapshot.cloudTitle == "Cloud: Apple Speech only (keys missing)")
+        #expect(snapshot.cloudTitle == "Cloud services: Not configured")
         #expect(snapshot.cloudNeedsAction == true)
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == false)

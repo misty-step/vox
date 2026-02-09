@@ -57,13 +57,13 @@ struct StatusBarMenuSnapshot: Equatable {
         let cloudTitle: String
         switch (hasCloudSTT, hasRewrite) {
         case (true, true):
-            cloudTitle = "Cloud: Ready (STT + Rewrite)"
+            cloudTitle = "Cloud services: Ready"
         case (true, false):
-            cloudTitle = "Cloud: STT ready, rewrite missing"
+            cloudTitle = "Cloud STT ready; rewrite missing"
         case (false, true):
-            cloudTitle = "Cloud: Rewrite ready, Apple Speech fallback"
+            cloudTitle = "Rewrite ready; transcription local"
         case (false, false):
-            cloudTitle = "Cloud: Apple Speech only (keys missing)"
+            cloudTitle = "Cloud services: Not configured"
         }
 
         return StatusBarMenuSnapshot(

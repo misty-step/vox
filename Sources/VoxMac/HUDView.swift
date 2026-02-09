@@ -265,7 +265,7 @@ public struct HUDView: View {
     }
 
     private var isCompact: Bool {
-        state.mode == .idle || state.mode == .success
+        state.mode == .idle
     }
 
     public var body: some View {
@@ -331,14 +331,7 @@ public struct HUDView: View {
     
     private var recordingContent: some View {
         HStack(spacing: 12) {
-            // Left: explicit recording state
-            HStack(spacing: 6) {
-                PulsingIndicator()
-
-                Text("Recording")
-                    .font(Design.fontStatus)
-                    .foregroundStyle(Design.textSecondary)
-            }
+            PulsingIndicator()
             
             Spacer()
             
@@ -363,15 +356,20 @@ public struct HUDView: View {
     }
     
     private var successContent: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.green.opacity(0.9))
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.green.opacity(0.9))
 
-            Text("Done")
-                .font(Design.fontLabel)
-                .foregroundStyle(Design.textPrimary)
+                Text("Done")
+                    .font(Design.fontLabel)
+                    .foregroundStyle(Design.textPrimary)
+            }
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Container Styling

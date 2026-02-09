@@ -10,6 +10,7 @@ public final class HUDController: HUDDisplaying {
     private let reducedMotion: Bool
     private var scheduledHide: DispatchWorkItem?
     private var announcementPolicy = HUDAnnouncementPolicy()
+    private var hasInitialPosition = false
 
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -34,7 +35,7 @@ public final class HUDController: HUDDisplaying {
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         announcer = VoiceOverAnnouncer(element: panel)
-        positionPanel()
+        hasInitialPosition = positionPanel()
     }
 
     public func showRecording(average: Float, peak: Float) {
@@ -89,17 +90,21 @@ public final class HUDController: HUDDisplaying {
     private func show() {
         scheduledHide?.cancel()
         scheduledHide = nil
-        positionPanel()
+        if !hasInitialPosition {
+            hasInitialPosition = positionPanel()
+        }
         state.show()
         panel.orderFrontRegardless()
     }
 
-    private func positionPanel() {
-        guard let screen = NSScreen.main else { return }
+    @discardableResult
+    private func positionPanel() -> Bool {
+        guard let screen = NSScreen.main else { return false }
         let size = panel.frame.size
         let x = screen.visibleFrame.midX - size.width / 2
         let y = screen.visibleFrame.maxY - size.height - 80
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+        return true
     }
 
     private func announceTransition(to mode: HUDMode) {

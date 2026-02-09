@@ -141,7 +141,7 @@ public final class VoxSession: ObservableObject {
                     return
                 }
                 Task { @MainActor in
-                    self?.hud.showProcessing(message: "Racing \(providerName)")
+                    self?.hud.showProcessing(message: "Trying \(providerName)…")
                 }
             }
         }
