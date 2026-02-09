@@ -38,11 +38,9 @@ struct BenchmarkResult: Codable {
 // MARK: - Benchmark Mocks
 
 /// STT mock with configurable latency for benchmark runs.
-private final class BenchmarkSTTProvider: STTProvider, @unchecked Sendable {
-    private let lock = NSLock()
+private final class BenchmarkSTTProvider: STTProvider, Sendable {
     private let baseDelay: TimeInterval
     private let jitter: TimeInterval
-    private var _callCount = 0
 
     init(baseDelay: TimeInterval, jitter: TimeInterval = 0) {
         self.baseDelay = baseDelay
@@ -50,7 +48,6 @@ private final class BenchmarkSTTProvider: STTProvider, @unchecked Sendable {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
-        lock.withLock { _callCount += 1 }
         let delay = baseDelay + Double.random(in: 0...jitter)
         try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         return "benchmark transcript for test"
@@ -58,8 +55,7 @@ private final class BenchmarkSTTProvider: STTProvider, @unchecked Sendable {
 }
 
 /// Rewrite mock with configurable latency.
-private final class BenchmarkRewriteProvider: RewriteProvider, @unchecked Sendable {
-    private let lock = NSLock()
+private final class BenchmarkRewriteProvider: RewriteProvider, Sendable {
     private let baseDelay: TimeInterval
     private let jitter: TimeInterval
 
@@ -75,8 +71,8 @@ private final class BenchmarkRewriteProvider: RewriteProvider, @unchecked Sendab
     }
 }
 
-/// Paster that captures text without side effects.
-private final class BenchmarkPaster: TextPaster, @unchecked Sendable {
+/// Paster that does nothing — benchmark measures timing, not output.
+private final class BenchmarkPaster: TextPaster, Sendable {
     @MainActor func paste(text: String) throws {}
 }
 
@@ -155,10 +151,10 @@ struct PipelineBenchmarkTests {
         return collector.timings
     }
 
-    /// Builds a BenchmarkResult from collected timings and writes JSON if output path is set.
-    /// Note: totalTime is computed from stage sums, not PipelineTiming.totalTime,
-    /// because that property reads wall-clock at access time (not capture time).
-    private func buildResult(from timings: [PipelineTiming]) throws -> BenchmarkResult {
+    /// Builds a BenchmarkResult from collected timings.
+    /// Uses stage sums (not PipelineTiming.totalTime) because that property
+    /// reads wall-clock at access time, not capture time.
+    private func buildResult(from timings: [PipelineTiming]) -> BenchmarkResult {
         let encodes = timings.map(\.encodeTime)
         let stts = timings.map(\.sttTime)
         let rewrites = timings.map(\.rewriteTime)
@@ -173,46 +169,24 @@ struct PipelineBenchmarkTests {
             "total": StageDistribution(samples: totals),
         ]
 
+        func check(_ key: String, percentile: KeyPath<StageDistribution, Double>, target: Double) -> BudgetCheck {
+            let actual = stages[key]![keyPath: percentile]
+            return BudgetCheck(target: target, actual: actual, pass: actual <= target)
+        }
+
         let budgets: [String: BudgetCheck] = [
-            "total_p50": BudgetCheck(
-                target: LatencyBudget.totalP50,
-                actual: stages["total"]!.p50,
-                pass: stages["total"]!.p50 <= LatencyBudget.totalP50
-            ),
-            "total_p95": BudgetCheck(
-                target: LatencyBudget.totalP95,
-                actual: stages["total"]!.p95,
-                pass: stages["total"]!.p95 <= LatencyBudget.totalP95
-            ),
-            "paste_p95": BudgetCheck(
-                target: LatencyBudget.pasteP95,
-                actual: stages["paste"]!.p95,
-                pass: stages["paste"]!.p95 <= LatencyBudget.pasteP95
-            ),
-            "rewrite_p95_light": BudgetCheck(
-                target: LatencyBudget.rewriteLightP95,
-                actual: stages["rewrite"]!.p95,
-                pass: stages["rewrite"]!.p95 <= LatencyBudget.rewriteLightP95
-            ),
+            "total_p50": check("total", percentile: \.p50, target: LatencyBudget.totalP50),
+            "total_p95": check("total", percentile: \.p95, target: LatencyBudget.totalP95),
+            "paste_p95": check("paste", percentile: \.p95, target: LatencyBudget.pasteP95),
+            "rewrite_p95_light": check("rewrite", percentile: \.p95, target: LatencyBudget.rewriteLightP95),
         ]
 
-        let formatter = ISO8601DateFormatter()
-        let result = BenchmarkResult(
-            timestamp: formatter.string(from: Date()),
+        return BenchmarkResult(
+            timestamp: ISO8601DateFormatter().string(from: Date()),
             iterations: timings.count,
             stages: stages,
             budgets: budgets
         )
-
-        // Write JSON artifact if output path is set
-        if let outputPath = ProcessInfo.processInfo.environment["BENCHMARK_OUTPUT_PATH"] {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(result)
-            try data.write(to: URL(fileURLWithPath: outputPath))
-        }
-
-        return result
     }
 
     // MARK: - Budget Assertion Tests
@@ -223,7 +197,7 @@ struct PipelineBenchmarkTests {
         let mockSTTDelay = 0.01
         let mockRewriteDelay = 0.01
         let timings = try await collectTimings(sttDelay: mockSTTDelay, rewriteDelay: mockRewriteDelay)
-        let result = try buildResult(from: timings)
+        let result = buildResult(from: timings)
 
         // Overhead = total - (stt + rewrite mock delays)
         let totalP95 = result.stages["total"]!.p95
@@ -239,7 +213,7 @@ struct PipelineBenchmarkTests {
     @Test("Paste stage p95 within budget")
     func benchmark_pasteP95_withinBudget() async throws {
         let timings = try await collectTimings(sttDelay: 0.01, rewriteDelay: 0.01)
-        let result = try buildResult(from: timings)
+        let result = buildResult(from: timings)
 
         let pasteP95 = result.stages["paste"]!.p95
         #expect(
@@ -254,7 +228,6 @@ struct PipelineBenchmarkTests {
 
         for timing in timings {
             let stageSum = timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime
-            // Stage sum should be close to wall-clock total (within 10ms of pipeline overhead)
             #expect(stageSum > 0, "Stage sum should be positive")
             #expect(timing.sttTime >= 0.05, "STT time should reflect mock delay")
             #expect(timing.rewriteTime >= 0.05, "Rewrite time should reflect mock delay")
@@ -265,29 +238,18 @@ struct PipelineBenchmarkTests {
 
     @Test("Full benchmark produces valid JSON artifact")
     func benchmark_fullRun_producesJSON() async throws {
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("benchmark-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: outputURL) }
-
-        // Can't set env vars at runtime, so we write manually
         let timings = try await collectTimings(sttDelay: 0.05, rewriteDelay: 0.05)
+        let result = buildResult(from: timings)
 
-        let result = try buildResult(from: timings)
-
+        // Round-trip through JSON to verify Codable conformance
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(result)
-        try data.write(to: outputURL)
-
-        // Verify JSON is valid and contains expected keys
         let decoded = try JSONDecoder().decode(BenchmarkResult.self, from: data)
+
         #expect(decoded.iterations == Self.iterations)
-        #expect(decoded.stages.count == 5)
-        #expect(decoded.stages["total"] != nil)
-        #expect(decoded.stages["stt"] != nil)
-        #expect(decoded.stages["encode"] != nil)
-        #expect(decoded.stages["rewrite"] != nil)
-        #expect(decoded.stages["paste"] != nil)
+        let expectedStages: Set<String> = ["encode", "stt", "rewrite", "paste", "total"]
+        #expect(Set(decoded.stages.keys) == expectedStages)
     }
 
     // MARK: - Reproducibility Verification

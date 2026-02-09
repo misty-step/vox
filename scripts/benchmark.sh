@@ -34,20 +34,15 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Running pipeline benchmark..."
-BENCHMARK_OUTPUT_PATH="$OUTPUT_PATH" \
-    swift test --filter "benchmark_fullRun_producesJSON" \
+swift test --filter "PipelineBenchmarkTests" \
     -Xswiftc -warnings-as-errors 2>&1 | grep -v "^\[Pipeline\]" || true
 
-# Also run the budget assertion tests
-echo ""
-echo "Running budget assertions..."
-swift test --filter "PipelineBenchmarkTests" \
-    -Xswiftc -warnings-as-errors 2>&1 | grep -E "^[✔✘]" || true
-
+# TODO: swift test doesn't forward env vars to test processes, so JSON artifact
+# is never produced. The --json/--compare/--update-baseline paths below are
+# infrastructure for when a JSON export mechanism is wired up.
 if [ ! -f "$OUTPUT_PATH" ] || [ ! -s "$OUTPUT_PATH" ]; then
     echo ""
-    echo "Warning: No JSON artifact produced. Budget tests may still pass."
-    echo "Run with BENCHMARK_OUTPUT_PATH set to capture JSON output."
+    echo "Budget assertion tests completed. JSON artifact not yet supported (see TODO in script)."
     exit 0
 fi
 
