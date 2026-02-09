@@ -5,6 +5,47 @@ public protocol STTProvider: Sendable {
     func transcribe(audioURL: URL) async throws -> String
 }
 
+/// Incremental transcript update from a realtime provider.
+public struct PartialTranscript: Sendable, Equatable {
+    public let text: String
+    public let isFinal: Bool
+
+    public init(text: String, isFinal: Bool) {
+        self.text = text
+        self.isFinal = isFinal
+    }
+}
+
+/// PCM audio payload pushed into streaming STT sessions.
+public struct AudioChunk: Sendable, Equatable {
+    public let pcm16LEData: Data
+    public let sampleRate: Int
+    public let channels: Int
+
+    public init(
+        pcm16LEData: Data,
+        sampleRate: Int = 16_000,
+        channels: Int = 1
+    ) {
+        self.pcm16LEData = pcm16LEData
+        self.sampleRate = sampleRate
+        self.channels = channels
+    }
+}
+
+/// Stateful realtime STT lifecycle.
+public protocol StreamingSTTSession: Sendable {
+    var partialTranscripts: AsyncStream<PartialTranscript> { get }
+    func sendAudioChunk(_ chunk: AudioChunk) async throws
+    func finish() async throws -> String
+    func cancel() async
+}
+
+/// Factory for provider-specific streaming sessions.
+public protocol StreamingSTTProvider: Sendable {
+    func makeSession() async throws -> any StreamingSTTSession
+}
+
 /// Text rewriting/processing provider protocol
 public protocol RewriteProvider: Sendable {
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String
@@ -27,6 +68,12 @@ extension AudioRecording {
     public func start() throws { try start(inputDeviceUID: nil) }
 }
 
+/// Recorder seam for realtime chunk forwarding.
+@MainActor
+public protocol AudioChunkStreaming: AudioRecording {
+    func setAudioChunkHandler(_ handler: (@Sendable (AudioChunk) -> Void)?)
+}
+
 /// HUD display abstraction
 @MainActor
 public protocol HUDDisplaying: AnyObject {
@@ -46,6 +93,11 @@ extension HUDDisplaying {
 /// Implementations must be safe for repeated calls across recording sessions.
 public protocol DictationProcessing: Sendable {
     func process(audioURL: URL) async throws -> String
+}
+
+/// Reuse rewrite/paste semantics from a precomputed transcript.
+public protocol TranscriptProcessing: Sendable {
+    func process(transcript: String) async throws -> String
 }
 
 /// Read-only preferences abstraction for dependency injection.

@@ -205,6 +205,32 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 1)
     }
 
+    @Test("Process precomputed transcript keeps rewrite and paste semantics")
+    func process_precomputedTranscript_rewritesAndPastes() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("unused")]
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Hello, world!")]
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(transcript: "hello world")
+
+        #expect(result == "Hello, world!")
+        #expect(stt.callCount == 0)
+        #expect(rewriter.callCount == 1)
+        #expect(paster.callCount == 1)
+    }
+
     @Test("Process converts CAF to OGG before STT")
     func process_enableOpus_passesOggToSTT() async throws {
         let stt = MockSTTProvider()

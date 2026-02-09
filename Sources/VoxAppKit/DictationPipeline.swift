@@ -41,7 +41,7 @@ private func formatBytes(_ bytes: Int) -> String {
     return String(format: "%.1fMB", Double(bytes) / (1024 * 1024))
 }
 
-public final class DictationPipeline: DictationProcessing {
+public final class DictationPipeline: DictationProcessing, TranscriptProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
@@ -183,9 +183,31 @@ public final class DictationPipeline: DictationProcessing {
         #endif
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
-        // Rewrite stage
-        var output = transcript
         let level = await MainActor.run { prefs.processingLevel }
+        let processed = try await rewriteAndPaste(transcript: transcript, level: level)
+        timing.rewriteTime = processed.rewriteTime
+        timing.pasteTime = processed.pasteTime
+
+        #if DEBUG
+        print(timing.summary())
+        #endif
+        return processed.text
+    }
+
+    public func process(transcript rawTranscript: String) async throws -> String {
+        let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transcript.isEmpty else { throw VoxError.noTranscript }
+        let level = await MainActor.run { prefs.processingLevel }
+        let processed = try await rewriteAndPaste(transcript: transcript, level: level)
+        return processed.text
+    }
+
+    private func rewriteAndPaste(
+        transcript: String,
+        level: ProcessingLevel
+    ) async throws -> (text: String, rewriteTime: TimeInterval, pasteTime: TimeInterval) {
+        var output = transcript
+        var rewriteTime: TimeInterval = 0
         if level != .off {
             let rewriteStart = CFAbsoluteTimeGetCurrent()
             let model = level.defaultModel
@@ -229,24 +251,20 @@ public final class DictationPipeline: DictationProcessing {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
                 output = transcript
             }
-            timing.rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
+            rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
         }
 
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalText.isEmpty else { throw VoxError.noTranscript }
 
-        // Paste stage
         let pasteStart = CFAbsoluteTimeGetCurrent()
         #if DEBUG
         print("[Pipeline] Pasting \(finalText.count) chars")
         #endif
         try await paster.paste(text: finalText)
-        timing.pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
+        let pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
-        #if DEBUG
-        print(timing.summary())
-        #endif
-        return finalText
+        return (text: finalText, rewriteTime: rewriteTime, pasteTime: pasteTime)
     }
 
 }

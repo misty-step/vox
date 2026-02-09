@@ -64,6 +64,44 @@ public enum STTError: Error, Sendable, Equatable, LocalizedError {
     }
 }
 
+public enum StreamingSTTError: Error, Sendable, Equatable, LocalizedError {
+    case connectionFailed(String)
+    case sendFailed(String)
+    case receiveFailed(String)
+    case provider(String)
+    case finalizationTimeout
+    case cancelled
+    case invalidState(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .connectionFailed(let msg):
+            return "Streaming connection failed: \(msg)"
+        case .sendFailed(let msg):
+            return "Streaming send failed: \(msg)"
+        case .receiveFailed(let msg):
+            return "Streaming receive failed: \(msg)"
+        case .provider(let msg):
+            return "Streaming provider error: \(msg)"
+        case .finalizationTimeout:
+            return "Streaming finalize timed out."
+        case .cancelled:
+            return "Streaming session cancelled."
+        case .invalidState(let msg):
+            return "Streaming state error: \(msg)"
+        }
+    }
+
+    public var isFallbackEligible: Bool {
+        switch self {
+        case .invalidState:
+            return false
+        default:
+            return true
+        }
+    }
+}
+
 public enum RewriteError: Error, Sendable, Equatable, LocalizedError {
     case auth
     case quotaExceeded

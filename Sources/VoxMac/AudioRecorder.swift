@@ -3,14 +3,16 @@ import AudioToolbox
 import Foundation
 import VoxCore
 
-public final class AudioRecorder: AudioRecording {
+public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
     private var recorder: AVAudioRecorder?
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var converter: AVAudioConverter?
     private let converterStateLock = NSLock()
     private let captureIntegrityLock = NSLock()
+    private let audioChunkHandlerLock = NSLock()
     private var captureIntegrityFailure: VoxError?
+    private var audioChunkHandler: (@Sendable (AudioChunk) -> Void)?
     private var currentURL: URL?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
@@ -25,6 +27,12 @@ public final class AudioRecorder: AudioRecording {
     }
 
     public init() {}
+
+    public func setAudioChunkHandler(_ handler: (@Sendable (AudioChunk) -> Void)?) {
+        audioChunkHandlerLock.lock()
+        audioChunkHandler = handler
+        audioChunkHandlerLock.unlock()
+    }
 
     public func start(inputDeviceUID: String?) throws {
         if recorder != nil || engine != nil { return }
@@ -133,6 +141,7 @@ public final class AudioRecorder: AudioRecording {
             // Convert to target format and write to file.
             var convertedFrames: AVAudioFrameCount = 0
             do {
+                var producedChunks: [AudioChunk] = []
                 let conversion = try Self.convertInputBufferRecoveringFormat(
                     converter: tapConverter,
                     inputBuffer: buffer,
@@ -140,6 +149,9 @@ public final class AudioRecorder: AudioRecording {
                     minimumOutputFrameCapacity: minimumOutputFrameCapacity
                 ) { outputBuffer in
                     try file.write(from: outputBuffer)
+                    if let chunk = Self.makeAudioChunk(from: outputBuffer) {
+                        producedChunks.append(chunk)
+                    }
                 }
                 convertedFrames = conversion.frames
                 tapConverter = conversion.converter
@@ -150,6 +162,7 @@ public final class AudioRecorder: AudioRecording {
                     )
                     self?.setConverter(conversion.converter)
                 }
+                self?.emitAudioChunks(producedChunks)
             } catch {
                 print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
                 self?.recordCaptureIntegrityFailure(
@@ -272,6 +285,17 @@ public final class AudioRecorder: AudioRecording {
         converterStateLock.lock()
         defer { converterStateLock.unlock() }
         return converter
+    }
+
+    private func emitAudioChunks(_ chunks: [AudioChunk]) {
+        guard !chunks.isEmpty else { return }
+        audioChunkHandlerLock.lock()
+        let handler = audioChunkHandler
+        audioChunkHandlerLock.unlock()
+        guard let handler else { return }
+        for chunk in chunks {
+            handler(chunk)
+        }
     }
 
     private func recordCaptureIntegrityFailure(message: String) {
@@ -496,6 +520,25 @@ public final class AudioRecorder: AudioRecording {
             converterFormat.channelCount == inputFormat.channelCount &&
             converterFormat.commonFormat == inputFormat.commonFormat &&
             converterFormat.isInterleaved == inputFormat.isInterleaved
+    }
+
+    nonisolated static func makeAudioChunk(from outputBuffer: AVAudioPCMBuffer) -> AudioChunk? {
+        guard outputBuffer.frameLength > 0 else {
+            return nil
+        }
+        guard let int16Data = outputBuffer.int16ChannelData else {
+            return nil
+        }
+        let frameCount = Int(outputBuffer.frameLength)
+        let channelCount = Int(outputBuffer.format.channelCount)
+        let sampleCount = frameCount * channelCount
+        let byteCount = sampleCount * MemoryLayout<Int16>.size
+        let data = Data(bytes: int16Data[0], count: byteCount)
+        return AudioChunk(
+            pcm16LEData: data,
+            sampleRate: Int(outputBuffer.format.sampleRate.rounded()),
+            channels: channelCount
+        )
     }
 
     nonisolated static func flushConverterOutput(
