@@ -25,6 +25,11 @@ Review artifact for `[P1] Execute premium UI polish pass (HUD/menu/settings)`.
 - Idle menu (`Status: Ready`, cloud readiness line, `Start Dictation`)
 - Recording menu (`Status: Recording`, cloud readiness line, `Stop Dictation`)
 - Processing menu (`Status: Processing`, toggle disabled while processing)
+- Cloud readiness lines:
+  - `Cloud services: Ready`
+  - `Cloud STT ready; rewrite missing`
+  - `Rewrite ready; transcription local`
+  - `Cloud services: Not configured`
 
 ## Review Notes
 - No new settings were introduced.

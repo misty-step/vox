@@ -235,7 +235,8 @@ public final class StatusBarController: NSObject {
     private func updateIcon(for state: StatusBarState) {
         guard let button = statusItem.button else { return }
 
-        let icon = StatusBarIconRenderer.makeIcon(for: state)
+        let scale = button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let icon = StatusBarIconRenderer.makeIcon(for: state, scale: scale)
         button.image = icon
         button.imagePosition = .imageOnly
 

@@ -98,12 +98,19 @@ public final class HUDState: ObservableObject {
 
 // MARK: - Design System
 
+enum HUDLayout {
+    static let expandedWidth: CGFloat = 236
+    static let expandedHeight: CGFloat = 48
+    static let compactWidth: CGFloat = 132
+    static let compactHeight: CGFloat = 34
+}
+
 private enum Design {
     // Dimensions
-    static let widthRecording: CGFloat = 236
-    static let heightRecording: CGFloat = 48
-    static let widthIdle: CGFloat = 132
-    static let heightIdle: CGFloat = 34
+    static let widthRecording = HUDLayout.expandedWidth
+    static let heightRecording = HUDLayout.expandedHeight
+    static let widthIdle = HUDLayout.compactWidth
+    static let heightIdle = HUDLayout.compactHeight
     static let cornerRadius: CGFloat = 10
 
     // Typography

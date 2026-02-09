@@ -17,7 +17,12 @@ public final class HUDController: HUDDisplaying {
         let content = HUDView(state: state)
             .environment(\.reducedMotion, reducedMotion)
         let hosting = NSHostingView(rootView: content)
-        hosting.frame = NSRect(x: 0, y: 0, width: 220, height: 110)
+        hosting.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: HUDLayout.expandedWidth,
+            height: HUDLayout.expandedHeight
+        )
 
         panel = NSPanel(
             contentRect: hosting.frame,
@@ -90,11 +95,24 @@ public final class HUDController: HUDDisplaying {
     private func show() {
         scheduledHide?.cancel()
         scheduledHide = nil
-        if !hasInitialPosition {
-            hasInitialPosition = positionPanel()
-        }
+        ensureVisiblePosition()
         state.show()
         panel.orderFrontRegardless()
+    }
+
+    private func ensureVisiblePosition() {
+        if !hasInitialPosition {
+            hasInitialPosition = positionPanel()
+            return
+        }
+
+        let frame = panel.frame
+        let isVisibleOnAnyScreen = NSScreen.screens.contains { screen in
+            screen.visibleFrame.intersects(frame)
+        }
+        if !isVisibleOnAnyScreen {
+            _ = positionPanel()
+        }
     }
 
     @discardableResult

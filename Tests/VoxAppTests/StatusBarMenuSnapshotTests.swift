@@ -50,4 +50,27 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == false)
     }
+
+    @Test("Rewrite-only setup message is explicit")
+    func rewriteOnlySnapshotMessage() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .light),
+            hasCloudSTT: false,
+            hasRewrite: true
+        )
+
+        #expect(snapshot.cloudTitle == "Rewrite ready; transcription local")
+        #expect(snapshot.cloudNeedsAction == true)
+    }
+
+    @Test("Enhance level label is preserved")
+    func enhanceModeLabel() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .enhance),
+            hasCloudSTT: true,
+            hasRewrite: true
+        )
+
+        #expect(snapshot.modeTitle == "Mode: Enhance")
+    }
 }

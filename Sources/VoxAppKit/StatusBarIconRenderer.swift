@@ -56,7 +56,7 @@ struct StatusBarIconGeometry: Equatable {
 }
 
 enum StatusBarIconRenderer {
-    static func makeIcon(for state: StatusBarState) -> NSImage {
+    static func makeIcon(for state: StatusBarState, scale: CGFloat = NSScreen.main?.backingScaleFactor ?? 2.0) -> NSImage {
         let descriptor = StatusBarIconDescriptor.make(for: state)
         let size = NSSize(width: BrandIdentity.menuIconSize, height: BrandIdentity.menuIconSize)
 
@@ -64,15 +64,14 @@ enum StatusBarIconRenderer {
             NSColor.black.setStroke()
             NSColor.black.setFill()
 
-            drawMonogram(in: rect, descriptor: descriptor)
+            drawMonogram(in: rect, descriptor: descriptor, scale: scale)
             return true
         }
         image.isTemplate = true
         return image
     }
 
-    private static func drawMonogram(in rect: NSRect, descriptor: StatusBarIconDescriptor) {
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+    private static func drawMonogram(in rect: NSRect, descriptor: StatusBarIconDescriptor, scale: CGFloat) {
         let geometry = StatusBarIconGeometry.make(in: rect, scale: scale)
 
         let triangle = NSBezierPath()
