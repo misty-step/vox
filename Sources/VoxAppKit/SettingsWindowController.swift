@@ -9,7 +9,7 @@ public final class SettingsWindowController: NSWindowController {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Vox Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 520, height: 400))
+        window.setContentSize(NSSize(width: 560, height: 420))
         window.center()
         super.init(window: window)
     }

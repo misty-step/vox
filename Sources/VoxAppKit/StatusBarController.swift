@@ -26,6 +26,72 @@ public enum StatusBarState: Equatable {
     }
 }
 
+struct StatusBarMenuSnapshot: Equatable {
+    let statusTitle: String
+    let modeTitle: String
+    let cloudTitle: String
+    let cloudNeedsAction: Bool
+    let toggleTitle: String
+    let toggleEnabled: Bool
+
+    static func make(state: StatusBarState, hasCloudSTT: Bool, hasRewrite: Bool) -> StatusBarMenuSnapshot {
+        let statusTitle: String
+        let toggleTitle: String
+        let toggleEnabled: Bool
+
+        switch state {
+        case .idle:
+            statusTitle = "Status: Ready"
+            toggleTitle = "Start Dictation"
+            toggleEnabled = true
+        case .recording:
+            statusTitle = "Status: Recording"
+            toggleTitle = "Stop Dictation"
+            toggleEnabled = true
+        case .processing:
+            statusTitle = "Status: Processing"
+            toggleTitle = "Start Dictation"
+            toggleEnabled = false
+        }
+
+        let cloudTitle: String
+        switch (hasCloudSTT, hasRewrite) {
+        case (true, true):
+            cloudTitle = "Cloud services: Ready"
+        case (true, false):
+            cloudTitle = "Cloud STT ready; rewrite missing"
+        case (false, true):
+            cloudTitle = "Rewrite ready; transcription local"
+        case (false, false):
+            cloudTitle = "Cloud services: Not configured"
+        }
+
+        return StatusBarMenuSnapshot(
+            statusTitle: statusTitle,
+            modeTitle: "Mode: \(state.processingLevel.menuDisplayName)",
+            cloudTitle: cloudTitle,
+            cloudNeedsAction: !(hasCloudSTT && hasRewrite),
+            toggleTitle: toggleTitle,
+            toggleEnabled: toggleEnabled
+        )
+    }
+}
+
+private extension ProcessingLevel {
+    var menuDisplayName: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .light:
+            return "Light"
+        case .aggressive:
+            return "Aggressive"
+        case .enhance:
+            return "Enhance"
+        }
+    }
+}
+
 @MainActor
 public final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
@@ -58,9 +124,12 @@ public final class StatusBarController: NSObject {
     }
 
     private func applyState(_ state: StatusBarState) {
-        guard state != currentState else { return }
+        let stateChanged = state != currentState
         currentState = state
-        updateIcon(for: state)
+        if stateChanged {
+            updateIcon(for: state)
+        }
+        rebuildMenu()
     }
 
     private func configure() {
@@ -78,15 +147,35 @@ public final class StatusBarController: NSObject {
 
     private func handlePreferencesChange() {
         applyState(currentState.updatingProcessingLevel(prefs.processingLevel))
-        rebuildMenu()
     }
 
     private func rebuildMenu() {
+        let cloudReadiness = resolveCloudReadiness()
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: currentState,
+            hasCloudSTT: cloudReadiness.hasCloudSTT,
+            hasRewrite: cloudReadiness.hasRewrite
+        )
+
         let menu = NSMenu()
 
-        let toggleItem = NSMenuItem(title: "Toggle Recording", action: #selector(toggleRecording), keyEquivalent: " ")
+        menu.addItem(statusMenuItem(snapshot.statusTitle))
+        menu.addItem(statusMenuItem(snapshot.modeTitle))
+
+        let cloudItem = NSMenuItem(
+            title: snapshot.cloudTitle,
+            action: snapshot.cloudNeedsAction ? #selector(openSettings) : nil,
+            keyEquivalent: ""
+        )
+        cloudItem.target = snapshot.cloudNeedsAction ? self : nil
+        cloudItem.isEnabled = snapshot.cloudNeedsAction
+        menu.addItem(cloudItem)
+        menu.addItem(.separator())
+
+        let toggleItem = NSMenuItem(title: snapshot.toggleTitle, action: #selector(toggleRecording), keyEquivalent: " ")
         toggleItem.keyEquivalentModifierMask = [.option]
         toggleItem.target = self
+        toggleItem.isEnabled = snapshot.toggleEnabled
         menu.addItem(toggleItem)
         menu.addItem(.separator())
 
@@ -109,17 +198,6 @@ public final class StatusBarController: NSObject {
         menu.addItem(processingItem)
         menu.addItem(.separator())
 
-        let hasKeys = hasAPIKeysConfigured()
-        let keyTitle = hasKeys ? "✓ API Keys Configured" : "✗ API Keys Missing"
-        let keyStatusItem = NSMenuItem(
-            title: keyTitle,
-            action: hasKeys ? nil : #selector(openSettings),
-            keyEquivalent: ""
-        )
-        keyStatusItem.target = hasKeys ? nil : self
-        keyStatusItem.isEnabled = !hasKeys
-        menu.addItem(keyStatusItem)
-
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -132,22 +210,39 @@ public final class StatusBarController: NSObject {
         statusItem.menu = menu
     }
 
-    private func hasAPIKeysConfigured() -> Bool {
-        let hasElevenLabs = !prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasOpenRouter = !prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return hasElevenLabs && hasOpenRouter
+    private func statusMenuItem(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    private struct CloudReadiness {
+        let hasCloudSTT: Bool
+        let hasRewrite: Bool
+    }
+
+    private func resolveCloudReadiness() -> CloudReadiness {
+        CloudReadiness(
+            hasCloudSTT: isConfigured(prefs.elevenLabsAPIKey) || isConfigured(prefs.deepgramAPIKey) || isConfigured(prefs.openAIAPIKey),
+            hasRewrite: isConfigured(prefs.openRouterAPIKey)
+        )
+    }
+
+    private func isConfigured(_ value: String) -> Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func updateIcon(for state: StatusBarState) {
         guard let button = statusItem.button else { return }
 
-        let icon = StatusBarIconRenderer.makeIcon(for: state)
+        let scale = button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let icon = StatusBarIconRenderer.makeIcon(for: state, scale: scale)
         button.image = icon
         button.imagePosition = .imageOnly
 
         switch state {
-        case .idle:
-            button.toolTip = "Vox – Ready (⌥Space to record)"
+        case .idle(let level):
+            button.toolTip = "Vox – Ready (\(level.menuDisplayName), ⌥Space to record)"
         case .recording:
             button.toolTip = "Vox – Recording..."
         case .processing:
@@ -160,7 +255,6 @@ public final class StatusBarController: NSObject {
         guard prefs.processingLevel != level else { return }
         prefs.processingLevel = level
         applyState(currentState.updatingProcessingLevel(level))
-        rebuildMenu()
     }
 
     @objc private func toggleRecording() { onToggle() }

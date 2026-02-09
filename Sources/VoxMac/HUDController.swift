@@ -10,13 +10,19 @@ public final class HUDController: HUDDisplaying {
     private let reducedMotion: Bool
     private var scheduledHide: DispatchWorkItem?
     private var announcementPolicy = HUDAnnouncementPolicy()
+    private var hasInitialPosition = false
 
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let content = HUDView(state: state)
             .environment(\.reducedMotion, reducedMotion)
         let hosting = NSHostingView(rootView: content)
-        hosting.frame = NSRect(x: 0, y: 0, width: 220, height: 110)
+        hosting.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: HUDLayout.expandedWidth,
+            height: HUDLayout.expandedHeight
+        )
 
         panel = NSPanel(
             contentRect: hosting.frame,
@@ -34,7 +40,7 @@ public final class HUDController: HUDDisplaying {
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         announcer = VoiceOverAnnouncer(element: panel)
-        positionPanel()
+        hasInitialPosition = positionPanel()
     }
 
     public func showRecording(average: Float, peak: Float) {
@@ -89,17 +95,34 @@ public final class HUDController: HUDDisplaying {
     private func show() {
         scheduledHide?.cancel()
         scheduledHide = nil
-        positionPanel()
+        ensureVisiblePosition()
         state.show()
         panel.orderFrontRegardless()
     }
 
-    private func positionPanel() {
-        guard let screen = NSScreen.main else { return }
+    private func ensureVisiblePosition() {
+        if !hasInitialPosition {
+            hasInitialPosition = positionPanel()
+            return
+        }
+
+        let frame = panel.frame
+        let isVisibleOnAnyScreen = NSScreen.screens.contains { screen in
+            screen.visibleFrame.intersects(frame)
+        }
+        if !isVisibleOnAnyScreen {
+            _ = positionPanel()
+        }
+    }
+
+    @discardableResult
+    private func positionPanel() -> Bool {
+        guard let screen = NSScreen.main else { return false }
         let size = panel.frame.size
         let x = screen.visibleFrame.midX - size.width / 2
         let y = screen.visibleFrame.maxY - size.height - 80
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+        return true
     }
 
     private func announceTransition(to mode: HUDMode) {
