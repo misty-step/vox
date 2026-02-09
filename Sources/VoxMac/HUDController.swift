@@ -6,8 +6,10 @@ import VoxCore
 public final class HUDController: HUDDisplaying {
     private let state = HUDState()
     private let panel: NSPanel
+    private let announcer: any AccessibilityAnnouncing
     private let reducedMotion: Bool
     private var scheduledHide: DispatchWorkItem?
+    private var announcementPolicy = HUDAnnouncementPolicy()
 
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -31,6 +33,7 @@ public final class HUDController: HUDDisplaying {
         panel.isMovableByWindowBackground = true
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
+        announcer = VoiceOverAnnouncer(element: panel)
         positionPanel()
     }
 
@@ -38,6 +41,7 @@ public final class HUDController: HUDDisplaying {
         state.startRecording()
         state.average = average
         state.peak = peak
+        announceTransition(to: .recording)
         show()
     }
 
@@ -49,12 +53,14 @@ public final class HUDController: HUDDisplaying {
 
     public func showProcessing(message: String) {
         state.startProcessing(message: message)
+        announceTransition(to: .processing)
         show()
     }
 
     public func showSuccess() {
         scheduledHide?.cancel()
         state.startSuccess()
+        announceTransition(to: .success)
         show()
         let task = DispatchWorkItem { [weak self] in
             self?.animatedHide()
@@ -66,12 +72,16 @@ public final class HUDController: HUDDisplaying {
     public func hide() {
         scheduledHide?.cancel()
         scheduledHide = nil
+        if let announcement = announcementPolicy.hideAnnouncement(for: state.mode) {
+            announcer.announce(announcement)
+        }
         animatedHide()
     }
 
     private func animatedHide() {
         guard state.isVisible else { return }
         state.dismiss(reducedMotion: reducedMotion) { [weak self] in
+            self?.announcementPolicy.markIdle()
             self?.panel.orderOut(nil)
         }
     }
@@ -90,5 +100,11 @@ public final class HUDController: HUDDisplaying {
         let x = screen.visibleFrame.midX - size.width / 2
         let y = screen.visibleFrame.maxY - size.height - 80
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func announceTransition(to mode: HUDMode) {
+        if let announcement = announcementPolicy.transitionAnnouncement(for: mode) {
+            announcer.announce(announcement)
+        }
     }
 }

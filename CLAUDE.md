@@ -10,6 +10,7 @@ swift build -c release                         # Release build
 swift build -Xswiftc -warnings-as-errors       # Strict build (matches CI + pre-push hook)
 swift test                                     # Run all tests
 swift test -Xswiftc -warnings-as-errors        # Strict test (matches CI)
+./scripts/run-tests-ci.sh                      # CI strict tests with timeout + timeout diagnostics
 ./scripts/test-audio-guardrails.sh             # Critical audio regression contract tests
 swift test --filter VoxCoreTests               # Run one test target
 swift test --filter RetryingSTTProviderTests    # Run one test class

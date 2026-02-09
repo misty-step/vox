@@ -18,6 +18,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
 - **State-aware visual identity**: consistent menu icon + HUD language for ready/recording/processing
+- **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
 - **BYOK** (Bring Your Own Keys) for complete control over costs
 - **Secure storage** via macOS Keychain
 
@@ -119,6 +120,9 @@ swift build -c release
 # Lint
 ./scripts/lint.sh
 
+# CI-equivalent strict tests with hang timeout
+./scripts/run-tests-ci.sh
+
 # Run with verbose output
 swift run Vox
 ```
@@ -156,7 +160,7 @@ Available via OpenRouter:
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
 
-Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
+Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && ./scripts/run-tests-ci.sh`, submit PR.
 
 ## Docs
 
