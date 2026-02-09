@@ -120,6 +120,9 @@ swift build -c release
 # Lint
 ./scripts/lint.sh
 
+# CI-equivalent strict tests with hang timeout
+./scripts/run-tests-ci.sh
+
 # Run with verbose output
 swift run Vox
 ```
@@ -157,7 +160,7 @@ Available via OpenRouter:
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
 
-Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && swift test -Xswiftc -warnings-as-errors`, submit PR.
+Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && ./scripts/run-tests-ci.sh`, submit PR.
 
 ## Docs
 

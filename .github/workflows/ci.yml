@@ -10,6 +10,7 @@ jobs:
   test:
     name: Build & Test
     runs-on: macos-14
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +34,8 @@ jobs:
         run: ./scripts/test-audio-guardrails.sh
 
       - name: Run tests
-        run: swift test -Xswiftc -warnings-as-errors
+        run: ./scripts/run-tests-ci.sh
         env:
+          CI_TEST_TIMEOUT_SECONDS: "600"
           # Skip integration tests requiring API keys
           DEEPGRAM_API_KEY: ""
