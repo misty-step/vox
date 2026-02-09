@@ -1,34 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Fast gate: compile check only. Full tests run in CI.
+
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
-
-echo "[pre-push] Linting..."
-if ! ./scripts/lint.sh 2>&1; then
-    echo ""
-    echo "[pre-push] FAILED: Fix lint violations before pushing."
-    exit 1
-fi
 
 echo "[pre-push] Building with warnings-as-errors..."
 if ! swift build -Xswiftc -warnings-as-errors 2>&1; then
     echo ""
     echo "[pre-push] FAILED: Fix compiler warnings before pushing."
-    exit 1
-fi
-
-echo "[pre-push] Running audio guardrail tests..."
-if ! ./scripts/test-audio-guardrails.sh 2>&1; then
-    echo ""
-    echo "[pre-push] FAILED: Fix audio guardrail test failures before pushing."
-    exit 1
-fi
-
-echo "[pre-push] Running tests with warnings-as-errors..."
-if ! swift test -Xswiftc -warnings-as-errors 2>&1; then
-    echo ""
-    echo "[pre-push] FAILED: Fix test failures before pushing."
     exit 1
 fi
 echo "[pre-push] OK"

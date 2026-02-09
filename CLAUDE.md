@@ -17,7 +17,9 @@ swift test --filter RetryingSTTProviderTests    # Run one test class
 ./scripts/run.sh                               # Launch debug binary with keys from .env.local
 ```
 
-CI runs on macOS 14 with Xcode 16.2. Warnings-as-errors is enforced in CI and via a `.githooks/pre-push` hook. All builds and tests must pass with `-Xswiftc -warnings-as-errors`.
+CI runs on macOS 14 with Xcode 16.2. Warnings-as-errors is enforced in CI. All builds and tests must pass with `-Xswiftc -warnings-as-errors`.
+
+Git hooks (`.githooks/`): pre-commit runs SwiftLint on staged files (<1s), pre-push runs `swift build -Xswiftc -warnings-as-errors` (~30s). Full test suite and audio guardrails run only in CI.
 
 ## Architecture
 
@@ -100,7 +102,7 @@ Audio regression guardrail:
   - `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage; converter drain logic tested, not assumed)
   - `CapturedAudioInspectorTests` (valid/empty/corrupt/missing payload detection)
   - `DictationPipelineTests` empty-capture fast-fail guard (`VoxError.emptyCapture`) and Opus-empty fallback contract
-  - `scripts/test-audio-guardrails.sh` as CI/pre-push gate entrypoint
+  - `scripts/test-audio-guardrails.sh` as CI gate entrypoint
 
 ## Conventions
 

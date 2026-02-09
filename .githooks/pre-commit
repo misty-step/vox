@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Lint only staged .swift files — sub-second on typical commits.
+
+staged_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
+
+if [ -z "$staged_files" ]; then
+    exit 0
+fi
+
+if ! command -v swiftlint >/dev/null 2>&1; then
+    echo "[pre-commit] swiftlint not found. Install with: brew install swiftlint" >&2
+    exit 1
+fi
+
+echo "$staged_files" | xargs swiftlint lint --strict --config .swiftlint.yml
