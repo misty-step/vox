@@ -173,11 +173,6 @@ struct DictationPipelineTests {
             throw VoxError.internalError("Failed to create test audio buffer")
         }
         buffer.frameLength = frameCount
-        if let channelData = buffer.floatChannelData {
-            for index in 0..<Int(frameCount) {
-                channelData[0][index] = 0
-            }
-        }
         try file.write(from: buffer)
         return url
     }
