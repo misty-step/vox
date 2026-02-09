@@ -50,6 +50,7 @@ public final class DictationPipeline: DictationProcessing {
     private let enableOpus: Bool
     private let enableRewriteCache: Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
+    private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
     @MainActor
     public convenience init(
@@ -89,7 +90,8 @@ public final class DictationPipeline: DictationProcessing {
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
-        pipelineTimeout: TimeInterval = 120
+        pipelineTimeout: TimeInterval = 120,
+        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
     ) {
         self.stt = stt
         self.rewriter = rewriter
@@ -100,6 +102,7 @@ public final class DictationPipeline: DictationProcessing {
         self.enableOpus = enableOpus
         self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
+        self.timingHandler = timingHandler
     }
 
     public func process(audioURL: URL) async throws -> String {
@@ -227,6 +230,7 @@ public final class DictationPipeline: DictationProcessing {
         #if DEBUG
         print(timing.summary())
         #endif
+        timingHandler?(timing)
         return finalText
     }
 
