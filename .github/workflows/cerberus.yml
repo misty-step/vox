@@ -29,12 +29,11 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/cerberus
+      - uses: misty-step/cerberus@v1
         with:
           perspective: ${{ matrix.perspective }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          # Default model. Prompt no longer inlines full PR diff, so 256k context is fine.
           model: openrouter/moonshotai/kimi-k2.5
 
   verdict:
@@ -43,7 +42,6 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/cerberus/verdict
+      - uses: misty-step/cerberus/verdict@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
