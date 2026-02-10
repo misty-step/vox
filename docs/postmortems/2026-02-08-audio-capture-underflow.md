@@ -1,5 +1,11 @@
 # Postmortem: Audio Capture Regression After AVAudioEngine Migration
 
+## Update (2026-02-10)
+
+This postmortem documents the Feb 8 incident and the immediate mitigation at that time.
+The backend policy has since been revised: engine capture is default again to support streaming STT, with recorder as legacy opt-out.
+See: [ADR-0004](../adr/0004-streaming-first-audio-capture-backend-policy.md).
+
 ## Summary
 
 On February 8, 2026 (UTC), Vox regressions caused recordings to produce header-only CAF files (`audio bytes: 0`) even though recording duration advanced and input device selection looked correct (AirPods/Bluetooth included).  

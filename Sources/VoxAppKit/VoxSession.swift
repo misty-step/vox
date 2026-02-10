@@ -173,7 +173,7 @@ public final class VoxSession: ObservableObject {
         if let streamingSTTProvider {
             return streamingSTTProvider
         }
-        guard isStreamingEnabled() else {
+        guard Self.isStreamingAllowed(environment: ProcessInfo.processInfo.environment) else {
             return nil
         }
         let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,8 +183,8 @@ public final class VoxSession: ObservableObject {
         return DeepgramStreamingClient(apiKey: deepgramKey)
     }
 
-    private func isStreamingEnabled() -> Bool {
-        let raw = ProcessInfo.processInfo.environment["VOX_DISABLE_STREAMING_STT"]?
+    nonisolated static func isStreamingAllowed(environment: [String: String]) -> Bool {
+        let raw = environment["VOX_DISABLE_STREAMING_STT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() ?? ""
         let disabled = raw == "1" || raw == "true" || raw == "yes"
@@ -196,12 +196,15 @@ public final class VoxSession: ObservableObject {
             return false
         }
         if recorder is AudioRecorder {
-            let backend = ProcessInfo.processInfo.environment["VOX_AUDIO_BACKEND"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-            return backend != "recorder"
+            return !Self.isRecorderBackendSelected(environment: ProcessInfo.processInfo.environment)
         }
         return true
+    }
+
+    nonisolated static func isRecorderBackendSelected(environment: [String: String]) -> Bool {
+        environment["VOX_AUDIO_BACKEND"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "recorder"
     }
 
     public func toggleRecording() async {

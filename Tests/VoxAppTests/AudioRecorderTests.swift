@@ -245,6 +245,11 @@ final class AudioRecorderBackendSelectionTests: XCTestCase {
         XCTAssertEqual(backend, .avAudioEngine)
     }
 
+    func test_selectedBackend_trimsAndLowercasesEnvValue() {
+        let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "  RECORDER  "])
+        XCTAssertEqual(backend, .avAudioRecorder)
+    }
+
     func test_selectedBackend_usesRecorderWhenEnvSet() {
         let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "recorder"])
         XCTAssertEqual(backend, .avAudioRecorder)
@@ -358,10 +363,16 @@ final class AudioRecorderWriteFormatValidationTests: XCTestCase {
         )
     }
 
-    func test_validateWriteFormatCompatible_throwsOnAutoInitMismatch() throws {
-        let format = AVAudioFormat(
+    func test_validateWriteFormatCompatible_throwsOnMismatchedBufferFormat() throws {
+        let fileFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: 16_000,
+            channels: 1,
+            interleaved: true
+        )!
+        let bufferFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: 48_000,
             channels: 1,
             interleaved: true
         )!
@@ -369,27 +380,21 @@ final class AudioRecorderWriteFormatValidationTests: XCTestCase {
             .appendingPathComponent("compat-fail-\(UUID().uuidString).caf")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        // Use the implicit init (the one that caused the crash).
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: fileFormat.settings,
+            commonFormat: fileFormat.commonFormat,
+            interleaved: fileFormat.isInterleaved
+        )
 
-        // If processingFormat differs from our buffer format, validation must throw.
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 100) else {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: bufferFormat, frameCapacity: 100) else {
             XCTFail("Failed to create buffer")
             return
         }
         buffer.frameLength = 100
 
-        if file.processingFormat.commonFormat != format.commonFormat
-            || file.processingFormat.isInterleaved != format.isInterleaved {
-            // Mismatch detected — validation should throw.
-            XCTAssertThrowsError(
-                try AudioRecorder.validateWriteFormatCompatible(buffer: buffer, file: file)
-            )
-        } else {
-            // On this macOS version the auto-init happens to match. Document it.
-            XCTAssertNoThrow(
-                try AudioRecorder.validateWriteFormatCompatible(buffer: buffer, file: file)
-            )
-        }
+        XCTAssertThrowsError(
+            try AudioRecorder.validateWriteFormatCompatible(buffer: buffer, file: file)
+        )
     }
 }
