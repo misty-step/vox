@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import VoxCore
-import VoxAppKit
+@testable import VoxAppKit
 
 // MARK: - Mocks
 
@@ -257,6 +257,24 @@ struct VoxSessionDITests {
         // but compilation + instantiation proves backward compat
         let session = VoxSession()
         #expect(session.state == .idle)
+    }
+
+    @Test("Streaming kill switch parsing")
+    func streamingKillSwitchParsing() {
+        #expect(VoxSession.isStreamingAllowed(environment: [:]))
+        #expect(!VoxSession.isStreamingAllowed(environment: ["VOX_DISABLE_STREAMING_STT": "1"]))
+        #expect(!VoxSession.isStreamingAllowed(environment: ["VOX_DISABLE_STREAMING_STT": " true "]))
+        #expect(!VoxSession.isStreamingAllowed(environment: ["VOX_DISABLE_STREAMING_STT": "YES"]))
+        #expect(VoxSession.isStreamingAllowed(environment: ["VOX_DISABLE_STREAMING_STT": "0"]))
+    }
+
+    @Test("Recorder backend selection parsing")
+    func recorderBackendParsing() {
+        #expect(!VoxSession.isRecorderBackendSelected(environment: [:]))
+        #expect(VoxSession.isRecorderBackendSelected(environment: ["VOX_AUDIO_BACKEND": "recorder"]))
+        #expect(VoxSession.isRecorderBackendSelected(environment: ["VOX_AUDIO_BACKEND": " RECORDER "]))
+        #expect(!VoxSession.isRecorderBackendSelected(environment: ["VOX_AUDIO_BACKEND": "engine"]))
+        #expect(!VoxSession.isRecorderBackendSelected(environment: ["VOX_AUDIO_BACKEND": "something-else"]))
     }
 
     @Test("Injected recorder is used")

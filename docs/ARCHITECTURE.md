@@ -71,10 +71,10 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 1) User presses Option+Space
 2) `HotkeyMonitor` fires → `VoxSession.toggleRecording()`
 3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
-4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioRecorder` (default backend)
-5) Optional realtime path (engine backend + streaming enabled): recorder forwards PCM chunks to `StreamingSTTSession`
+4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioEngine` (default backend) and emits PCM chunks when available
+5) If Deepgram streaming is available (key present) and not disabled (`VOX_DISABLE_STREAMING_STT`), `VoxSession` forwards PCM chunks to a `StreamingSTTSession`
 6) On stop, `VoxSession` attempts streaming `finish()` with bounded timeout
-7) If streaming finalize fails/times out, fallback to hedged batch STT router (Apple Speech + staggered cloud hedges)
+7) If streaming is unavailable, setup fails, or finalize fails/times out, fallback to hedged batch STT router (Apple Speech + staggered cloud hedges)
 8) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive/enhance)
 9) `RewriteQualityGate` validates output length ratio
 10) Result → `ClipboardPaster` → text insertion
@@ -100,9 +100,11 @@ Runtime invariants:
 - **Engine underflow guard**: recorder logs one-time warning when per-tap output ratio drops below threshold (`0.85`).
 
 Test invariants:
-- `AudioRecorderBackendSelectionTests` enforces default backend = `AVAudioRecorder` and `engine` opt-in behavior.
+- `AudioRecorderBackendSelectionTests` enforces default backend = `AVAudioEngine` and `recorder` opt-out behavior.
 - `AudioRecorderConversionTests` validates duration preservation for common input rates (`16k`, `24k`, `44.1k`, `48k`).
 - Regression fixture explicitly checks the old truncation failure shape (`4096 @ 24k` incorrectly capped to `1600` output frames) is detected as unhealthy.
+- `AudioRecorderFileFormatTests` verifies `AVAudioFile` processingFormat alignment and Int16 writes (prevents macOS 26+ traps).
+- `AudioRecorderWriteFormatValidationTests` verifies runtime guard throws on buffer/file format mismatch.
 - `CapturedAudioInspectorTests` validates payload detection across valid/empty/corrupt/missing capture files.
 - `DictationPipelineTests` asserts header-only capture payloads fail fast with `VoxError.emptyCapture` before STT.
 

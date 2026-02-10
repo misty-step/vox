@@ -143,65 +143,69 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
             // Compute metering from raw hardware buffer.
             let levels = Self.computeLevels(buffer: buffer)
 
-            // Convert to target format and write to file.
-            var convertedFrames: AVAudioFrameCount = 0
-            do {
-                var producedChunks: [AudioChunk] = []
-                let conversion = try Self.convertInputBufferRecoveringFormat(
-                    converter: tapConverter,
-                    inputBuffer: buffer,
-                    outputFormat: targetFormat,
-                    minimumOutputFrameCapacity: minimumOutputFrameCapacity
-                ) { outputBuffer in
-                    try Self.validateWriteFormatCompatible(
-                        buffer: outputBuffer, file: file
-                    )
-                    try file.write(from: outputBuffer)
-                    if let chunk = Self.makeAudioChunk(from: outputBuffer) {
-                        producedChunks.append(chunk)
+            // If capture already failed, stop doing conversion work to avoid log/CPU storms.
+            let shouldSkipConversion = self?.hasCaptureIntegrityFailure() ?? false
+            if !shouldSkipConversion {
+                // Convert to target format and write to file.
+                var convertedFrames: AVAudioFrameCount = 0
+                do {
+                    var producedChunks: [AudioChunk] = []
+                    let conversion = try Self.convertInputBufferRecoveringFormat(
+                        converter: tapConverter,
+                        inputBuffer: buffer,
+                        outputFormat: targetFormat,
+                        minimumOutputFrameCapacity: minimumOutputFrameCapacity
+                    ) { outputBuffer in
+                        try Self.validateWriteFormatCompatible(
+                            buffer: outputBuffer, file: file
+                        )
+                        try file.write(from: outputBuffer)
+                        if let chunk = Self.makeAudioChunk(from: outputBuffer) {
+                            producedChunks.append(chunk)
+                        }
                     }
-                }
-                convertedFrames = conversion.frames
-                tapConverter = conversion.converter
-                if conversion.didRebuild {
-                    print(
-                        "[AudioRecorder] Rebuilt converter for input format " +
-                        "\(Int(buffer.format.sampleRate))Hz/\(buffer.format.channelCount)ch"
+                    convertedFrames = conversion.frames
+                    tapConverter = conversion.converter
+                    if conversion.didRebuild {
+                        print(
+                            "[AudioRecorder] Rebuilt converter for input format " +
+                            "\(Int(buffer.format.sampleRate))Hz/\(buffer.format.channelCount)ch"
+                        )
+                        self?.setConverter(conversion.converter)
+                    }
+                    self?.emitAudioChunks(producedChunks)
+                } catch {
+                    print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
+                    self?.recordCaptureIntegrityFailure(
+                        message: "Audio capture failed: tap conversion/write error (\(error.localizedDescription))"
                     )
-                    self?.setConverter(conversion.converter)
                 }
-                self?.emitAudioChunks(producedChunks)
-            } catch {
-                print("[AudioRecorder] Conversion error: \(error.localizedDescription)")
-                self?.recordCaptureIntegrityFailure(
-                    message: "Audio capture failed: tap conversion/write error (\(error.localizedDescription))"
-                )
-            }
 
-            if !didLogConversionUnderflow,
-               !Self.isConversionHealthy(
-                   inputFrames: buffer.frameLength,
-                   outputFrames: convertedFrames,
-                   inputSampleRate: buffer.format.sampleRate,
-                   outputSampleRate: targetFormat.sampleRate
-               ) {
-                didLogConversionUnderflow = true
-                let expectedFrames = Self.expectedOutputFrames(
-                    inputFrames: buffer.frameLength,
-                    inputSampleRate: buffer.format.sampleRate,
-                    outputSampleRate: targetFormat.sampleRate
-                )
-                let ratio = Self.conversionHealthRatio(
-                    inputFrames: buffer.frameLength,
-                    outputFrames: convertedFrames,
-                    inputSampleRate: buffer.format.sampleRate,
-                    outputSampleRate: targetFormat.sampleRate
-                )
-                print(
-                    "[AudioRecorder] Conversion underflow detected: " +
-                    "output \(convertedFrames) < expected \(expectedFrames) " +
-                    "(ratio \(String(format: "%.2f", ratio)))"
-                )
+                if !didLogConversionUnderflow,
+                   !Self.isConversionHealthy(
+                       inputFrames: buffer.frameLength,
+                       outputFrames: convertedFrames,
+                       inputSampleRate: buffer.format.sampleRate,
+                       outputSampleRate: targetFormat.sampleRate
+                   ) {
+                    didLogConversionUnderflow = true
+                    let expectedFrames = Self.expectedOutputFrames(
+                        inputFrames: buffer.frameLength,
+                        inputSampleRate: buffer.format.sampleRate,
+                        outputSampleRate: targetFormat.sampleRate
+                    )
+                    let ratio = Self.conversionHealthRatio(
+                        inputFrames: buffer.frameLength,
+                        outputFrames: convertedFrames,
+                        inputSampleRate: buffer.format.sampleRate,
+                        outputSampleRate: targetFormat.sampleRate
+                    )
+                    print(
+                        "[AudioRecorder] Conversion underflow detected: " +
+                        "output \(convertedFrames) < expected \(expectedFrames) " +
+                        "(ratio \(String(format: "%.2f", ratio)))"
+                    )
+                }
             }
 
             // Dispatch metering to MainActor.
@@ -273,6 +277,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
                 converter: converter,
                 minimumOutputFrameCapacity: AVAudioFrameCount(converter.outputFormat.sampleRate * 0.1)
             ) { outputBuffer in
+                try Self.validateWriteFormatCompatible(buffer: outputBuffer, file: file)
                 try file.write(from: outputBuffer)
             }
         } catch {
@@ -312,6 +317,12 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
             captureIntegrityFailure = .audioCaptureFailed(message)
         }
         captureIntegrityLock.unlock()
+    }
+
+    private func hasCaptureIntegrityFailure() -> Bool {
+        captureIntegrityLock.lock()
+        defer { captureIntegrityLock.unlock() }
+        return captureIntegrityFailure != nil
     }
 
     private func clearCaptureIntegrityFailure() {

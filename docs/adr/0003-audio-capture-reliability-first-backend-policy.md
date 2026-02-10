@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by: [ADR-0004](./0004-streaming-first-audio-capture-backend-policy.md)
 
 ## Context
 
