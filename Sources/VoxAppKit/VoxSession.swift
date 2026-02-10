@@ -154,17 +154,18 @@ public final class VoxSession: ObservableObject {
         } else {
             // Default: sequential primary → fallback → Apple Speech safety net
             let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSpeech as STTProvider)]
-            chain = allProviders.dropFirst().reduce(allProviders[0].provider) { accumulated, next in
-                FallbackSTTProvider(
-                    primary: accumulated,
+            chain = allProviders.dropFirst().reduce(allProviders[0]) { accumulated, next in
+                let wrapper = FallbackSTTProvider(
+                    primary: accumulated.provider,
                     fallback: next.provider,
-                    primaryName: cloudProviders[0].name
+                    primaryName: accumulated.name
                 ) { [weak self] in
                     Task { @MainActor in
                         self?.hud.showProcessing(message: "Trying \(next.name)…")
                     }
                 }
-            }
+                return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
+            }.provider
         }
 
         return ConcurrencyLimitedSTTProvider(
