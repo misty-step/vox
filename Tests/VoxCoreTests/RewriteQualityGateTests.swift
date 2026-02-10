@@ -8,7 +8,7 @@ final class RewriteQualityGateTests: XCTestCase {
         XCTAssertTrue(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 1, accuracy: 0.0001)
         XCTAssertEqual(decision.minimumRatio, 0.6, accuracy: 0.0001)
-        XCTAssertNil(decision.maximumRatio)
+        XCTAssertEqual(decision.maximumRatio!, 3.0, accuracy: 0.0001)
     }
 
     func test_evaluate_emptyCandidate_returnsNotAcceptable() {
@@ -80,6 +80,17 @@ final class RewriteQualityGateTests: XCTestCase {
 
         XCTAssertFalse(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 20.0, accuracy: 0.0001)
+    }
+
+    func test_evaluate_lightExpansionAboveMax_isNotAcceptable() {
+        let raw = String(repeating: "r", count: 10)
+        let candidate = String(repeating: "c", count: 31)  // ratio = 3.1 (> max 3.0)
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertFalse(decision.isAcceptable)
+        XCTAssertEqual(decision.maximumRatio!, 3.0, accuracy: 0.0001)
+        XCTAssertEqual(decision.ratio, 3.1, accuracy: 0.0001)
     }
 
     func test_decision_equatable_matchesEqualValues() {
@@ -219,7 +230,7 @@ final class RewriteQualityGateTests: XCTestCase {
         let candidate = String(repeating: "x", count: 1000)
 
         let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
-        XCTAssertNil(lightDecision.maximumRatio)
+        XCTAssertEqual(lightDecision.maximumRatio!, 3.0, accuracy: 0.0001)
 
         let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .aggressive)
         XCTAssertNil(aggressiveDecision.maximumRatio)
@@ -235,7 +246,7 @@ final class RewriteQualityGateTests: XCTestCase {
         let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
 
         XCTAssertEqual(decision.minimumRatio, 0.6, accuracy: 0.0001)
-        XCTAssertNil(decision.maximumRatio)
+        XCTAssertEqual(decision.maximumRatio!, 3.0, accuracy: 0.0001)
         XCTAssertEqual(decision.ratio, 11.0/26.0, accuracy: 0.0001)
         // 11/26 ≈ 0.42, which is below 0.6, so not acceptable
         XCTAssertFalse(decision.isAcceptable)

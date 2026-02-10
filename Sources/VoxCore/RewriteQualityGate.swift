@@ -40,8 +40,9 @@ public enum RewriteQualityGate {
 
     private static func maximumRatio(for level: ProcessingLevel) -> Double? {
         switch level {
+        case .light: return 3.0
         case .enhance: return 15.0
-        case .off, .light, .aggressive: return nil
+        case .off, .aggressive: return nil
         }
     }
 }

@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "light-01",
+      "level": "light",
+      "transcript": "okay so um today i want to talk about the release plan for vox like what we ship first and what we cut",
+      "notes": "Filler removal, punctuation, sentence casing."
+    },
+    {
+      "id": "light-02",
+      "level": "light",
+      "transcript": "right so the bug is that the app records but sometimes the paste doesnt happen and i think its permissions but im not sure",
+      "notes": "Apostrophes, punctuation, preserve wording."
+    },
+    {
+      "id": "light-03",
+      "level": "light",
+      "transcript": "we should probably add a small warning if the api key is missing and maybe say exactly which key not just missing key",
+      "notes": "Keep meaning and vocabulary; cleanup only."
+    },
+    {
+      "id": "light-04",
+      "level": "light",
+      "transcript": "i tried it on bluetooth headphones and it sounded fine but the transcript had random commas and like weird capitalization",
+      "notes": "Remove filler word 'like', improve punctuation."
+    },
+    {
+      "id": "light-05",
+      "level": "light",
+      "transcript": "note to self check the pipeline timing logs encode stt rewrite paste and total and make sure they add up",
+      "notes": "Colon/list punctuation; preserve words."
+    },
+    {
+      "id": "light-06",
+      "level": "light",
+      "transcript": "the docs is out of date and we should update it before release",
+      "notes": "Grammar fix (docs are), punctuation."
+    },
+    {
+      "id": "light-07",
+      "level": "light",
+      "transcript": "so basically the goal is fast rewrite no settings like the user should not choose models at all",
+      "notes": "Remove filler; keep statement."
+    },
+    {
+      "id": "light-08",
+      "level": "light",
+      "transcript": "i think we need retries on throttling but not infinite retries maybe exponential backoff with jitter",
+      "notes": "Punctuation and casing."
+    },
+    {
+      "id": "light-09",
+      "level": "light",
+      "transcript": "add a benchmark command that anyone can run with openrouter api key and it should output a markdown report",
+      "notes": "Basic punctuation; preserve phrasing."
+    },
+    {
+      "id": "light-10",
+      "level": "light",
+      "transcript": "the app should never log actual transcript content in production logs just character counts",
+      "notes": "Apostrophes, punctuation; preserve policy wording."
+    },
+
+    {
+      "id": "aggressive-01",
+      "level": "aggressive",
+      "transcript": "so ive been thinking about how the app feels slow and i think its not the stt anymore its the rewrite step because it waits for the llm and that can take like two seconds sometimes",
+      "notes": "Polish into clear prose; preserve intent."
+    },
+    {
+      "id": "aggressive-02",
+      "level": "aggressive",
+      "transcript": "the problem with adding more settings is that it turns into a maze and then support becomes impossible so i want defaults that are just good",
+      "notes": "Crisp rewrite; no new info."
+    },
+    {
+      "id": "aggressive-03",
+      "level": "aggressive",
+      "transcript": "if we do a bakeoff we should measure p50 and p95 not just average because the long tail is what annoys users",
+      "notes": "Concise, forceful."
+    },
+    {
+      "id": "aggressive-04",
+      "level": "aggressive",
+      "transcript": "for light cleanup it should mostly keep the same words but just fix punctuation and remove filler words like um and uh",
+      "notes": "Polish but do not over-rewrite."
+    },
+    {
+      "id": "aggressive-05",
+      "level": "aggressive",
+      "transcript": "we should pick the model that is fast and stable and then if quality is bad we roll back by changing the processing level defaults in one file",
+      "notes": "Rewrite into tight plan."
+    },
+    {
+      "id": "aggressive-06",
+      "level": "aggressive",
+      "transcript": "i want the report to be easy to scan like a table per level with latency and cost and pass rate and then a recommendation line",
+      "notes": "Rewrite into clear requirements."
+    },
+    {
+      "id": "aggressive-07",
+      "level": "aggressive",
+      "transcript": "dont make this a big framework just a small executable that calls openrouter and writes json and markdown",
+      "notes": "Rewrite with good tone; preserve constraints."
+    },
+    {
+      "id": "aggressive-08",
+      "level": "aggressive",
+      "transcript": "if a model is missing or errors out we should record that and still finish the run so we can see partial results",
+      "notes": "Rewrite into crisp engineering guidance."
+    },
+    {
+      "id": "aggressive-09",
+      "level": "aggressive",
+      "transcript": "we should keep transcripts in the repo synthetic no user data and keep the corpus small enough that it doesnt cost much to run",
+      "notes": "Rewrite into policy statement."
+    },
+    {
+      "id": "aggressive-10",
+      "level": "aggressive",
+      "transcript": "after we pick new defaults we should update the docs and run strict build and strict tests so we dont break anything",
+      "notes": "Rewrite into checklist sentence."
+    },
+
+    {
+      "id": "enhance-01",
+      "level": "enhance",
+      "transcript": "i need you to review a swift file and point out bugs and missing tests and then suggest a safe refactor plan",
+      "notes": "Prompt enhancer: role, task, output format."
+    },
+    {
+      "id": "enhance-02",
+      "level": "enhance",
+      "transcript": "help me write a script that runs swift build with warnings as errors and then swift test and fails fast if either one fails",
+      "notes": "Prompt enhancer: concrete output."
+    },
+    {
+      "id": "enhance-03",
+      "level": "enhance",
+      "transcript": "i want a benchmark harness that tests rewrite latency across models and outputs a markdown report and a json artifact",
+      "notes": "Prompt enhancer: specify structure."
+    },
+    {
+      "id": "enhance-04",
+      "level": "enhance",
+      "transcript": "act like a product engineer and propose a minimal rollback plan if users report the rewrite is worse after a model change",
+      "notes": "Prompt enhancer: role and plan."
+    },
+    {
+      "id": "enhance-05",
+      "level": "enhance",
+      "transcript": "design a quality rubric for light aggressive and enhance rewrite modes but keep it simple and automatic no user settings",
+      "notes": "Prompt enhancer: constraints and deliverable."
+    },
+    {
+      "id": "enhance-06",
+      "level": "enhance",
+      "transcript": "create a table that compares candidate openrouter models on latency cost and instruction following for transcript rewrite",
+      "notes": "Prompt enhancer: output format."
+    },
+    {
+      "id": "enhance-07",
+      "level": "enhance",
+      "transcript": "i want you to update processing level default models based on benchmark results and also update the docs so they match",
+      "notes": "Prompt enhancer: steps and files."
+    },
+    {
+      "id": "enhance-08",
+      "level": "enhance",
+      "transcript": "write a short methodology section for a benchmark report that explains corpus prompts quality gate and decision rules",
+      "notes": "Prompt enhancer: explicit section."
+    },
+    {
+      "id": "enhance-09",
+      "level": "enhance",
+      "transcript": "help me add error handling so the benchmark can continue if one model fails and still record the failure in the results",
+      "notes": "Prompt enhancer: engineering task."
+    },
+    {
+      "id": "enhance-10",
+      "level": "enhance",
+      "transcript": "give me a one command way to run the rewrite model benchmark locally and store the artifacts under docs performance",
+      "notes": "Prompt enhancer: command output."
+    }
+  ]
+}

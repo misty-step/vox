@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Vox", targets: ["VoxApp"]),
+        .executable(name: "VoxBenchmarks", targets: ["VoxBenchmarks"]),
     ],
     targets: [
         .target(name: "VoxCore"),
@@ -18,6 +19,10 @@ let package = Package(
         .executableTarget(
             name: "VoxApp",
             dependencies: ["VoxAppKit"]
+        ),
+        .executableTarget(
+            name: "VoxBenchmarks",
+            dependencies: ["VoxCore", "VoxProviders"]
         ),
         .testTarget(
             name: "VoxProvidersTests",

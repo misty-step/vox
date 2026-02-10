@@ -1,5 +1,7 @@
 # Cerberus AI Code Review Council
 # https://github.com/misty-step/cerberus
+# Fork PR security: repository secrets are unavailable to forks.
+# Keep review job gated to same-repo PRs to avoid secret access attempts.
 name: Cerberus Council
 
 on:
@@ -16,6 +18,7 @@ concurrency:
 
 jobs:
   review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     name: "${{ matrix.reviewer }}"
     runs-on: ubuntu-latest
     strategy:
@@ -29,13 +32,12 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/cerberus
+      - uses: misty-step/cerberus@v1
         with:
           perspective: ${{ matrix.perspective }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-key: ${{ secrets.OPENROUTER_API_KEY }}
-          # Default model. Prompt no longer inlines full PR diff, so 256k context is fine.
-          model: openrouter/moonshotai/kimi-k2.5
+          timeout: '600'
 
   verdict:
     name: "Council Verdict"
@@ -43,7 +45,6 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/cerberus/verdict
+      - uses: misty-step/cerberus/verdict@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
