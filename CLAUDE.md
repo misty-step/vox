@@ -38,22 +38,25 @@ VoxAppKit was extracted from VoxApp so tests can import it — SwiftPM executabl
 
 ### STT Resilience Chain
 
-Providers are wrapped in composable decorators, with default routing via staggered hedging:
+Providers are wrapped in composable decorators, with default routing via sequential fallback:
 
 ```text
                          ConcurrencyLimit(8 default)
                                    │
                                    ▼
-                             HedgedSTTProvider
-                                        │
-      Apple Speech(0s) • ElevenLabs(0s Timeout+Retry) • Deepgram(5s Timeout+Retry) • Whisper(10s Timeout+Retry)
+                     Sequential FallbackSTTProvider chain
+                                   │
+      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Whisper(Timeout+Retry) → Apple Speech
 ```
 
+- **Default routing**: sequential primary+fallback — tries providers in order, falls back on failure
+- **Opt-in hedged routing**: `VOX_STT_ROUTING=hedged` restores parallel cloud race with stagger delays
 - **TimeoutSTTProvider**: dynamic deadline — `baseTimeout + fileSizeMB * secondsPerMB`
 - **RetryingSTTProvider**: exponential backoff + jitter on `STTError.isRetryable` errors
-- **HedgedSTTProvider**: launches providers with stagger delays and returns first success
+- **HedgedSTTProvider**: parallel race with stagger delays (opt-in only)
+- **FallbackSTTProvider**: sequential primary → fallback on eligible errors
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT transcribes and queues overflow
-- **HealthAwareSTTProvider / FallbackSTTProvider**: retained for alternate routing strategies and tests
+- **HealthAwareSTTProvider**: retained for adaptive routing strategies and tests
 - Hedge/fallback logic treats non-STTError failures as fallback-eligible network/transient failures
 - `CancellationError` must propagate cleanly through all decorators
 
@@ -75,7 +78,7 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Quality gate**: `RewriteQualityGate` compares candidate/raw character count ratio. Falls back to raw transcript if below threshold (light: 0.6, aggressive: 0.3, enhance: 0.2).
 
-**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT).
+**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback).
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 

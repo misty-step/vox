@@ -90,11 +90,10 @@ public final class VoxSession: ObservableObject {
 
     private func makeSTTProvider() -> STTProvider {
         let appleSpeech = AppleSpeechClient()
-        var hedgedEntries: [HedgedSTTProvider.Entry] = [
-            .init(name: "Apple Speech", provider: appleSpeech, delay: 0),
-        ]
 
-        // Optional: ElevenLabs (highest preference if configured)
+        // Build decorated cloud providers in preference order
+        var cloudProviders: [(name: String, provider: STTProvider)] = []
+
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
@@ -105,10 +104,9 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            hedgedEntries.append(.init(name: "ElevenLabs", provider: retried, delay: 0))
+            cloudProviders.append((name: "ElevenLabs", provider: retried))
         }
 
-        // Optional: Deepgram
         let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !deepgramKey.isEmpty {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
@@ -119,10 +117,9 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            hedgedEntries.append(.init(name: "Deepgram", provider: retried, delay: 5))
+            cloudProviders.append((name: "Deepgram", provider: retried))
         }
 
-        // Optional: Whisper (OpenAI)
         let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !openAIKey.isEmpty {
             let whisper = WhisperClient(apiKey: openAIKey)
@@ -133,21 +130,42 @@ public final class VoxSession: ObservableObject {
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
                 }
             }
-            hedgedEntries.append(.init(name: "Whisper", provider: retried, delay: 10))
+            cloudProviders.append((name: "Whisper", provider: retried))
         }
 
         let chain: STTProvider
-        if hedgedEntries.count == 1 {
+        if cloudProviders.isEmpty {
             chain = appleSpeech
-        } else {
+        } else if Self.isHedgedRoutingSelected(environment: ProcessInfo.processInfo.environment) {
+            // Opt-in: parallel cloud race with stagger delays
+            var hedgedEntries: [HedgedSTTProvider.Entry] = [
+                .init(name: "Apple Speech", provider: appleSpeech, delay: 0),
+            ]
+            let delays: [TimeInterval] = [0, 5, 10]
+            for (i, cp) in cloudProviders.enumerated() {
+                hedgedEntries.append(.init(name: cp.name, provider: cp.provider, delay: delays[min(i, delays.count - 1)]))
+            }
             chain = HedgedSTTProvider(entries: hedgedEntries) { [weak self] providerName in
-                guard providerName == "Deepgram" || providerName == "Whisper" else {
-                    return
-                }
+                guard providerName != "Apple Speech" && providerName != "ElevenLabs" else { return }
                 Task { @MainActor in
                     self?.hud.showProcessing(message: "Trying \(providerName)…")
                 }
             }
+        } else {
+            // Default: sequential primary → fallback → Apple Speech safety net
+            let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSpeech as STTProvider)]
+            chain = allProviders.dropFirst().reduce(allProviders[0]) { accumulated, next in
+                let wrapper = FallbackSTTProvider(
+                    primary: accumulated.provider,
+                    fallback: next.provider,
+                    primaryName: accumulated.name
+                ) { [weak self] in
+                    Task { @MainActor in
+                        self?.hud.showProcessing(message: "Trying \(next.name)…")
+                    }
+                }
+                return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
+            }.provider
         }
 
         return ConcurrencyLimitedSTTProvider(
@@ -181,6 +199,12 @@ public final class VoxSession: ObservableObject {
             return nil
         }
         return DeepgramStreamingClient(apiKey: deepgramKey)
+    }
+
+    nonisolated static func isHedgedRoutingSelected(environment: [String: String]) -> Bool {
+        environment["VOX_STT_ROUTING"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "hedged"
     }
 
     nonisolated static func isStreamingAllowed(environment: [String: String]) -> Bool {

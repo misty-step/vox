@@ -268,6 +268,15 @@ struct VoxSessionDITests {
         #expect(VoxSession.isStreamingAllowed(environment: ["VOX_DISABLE_STREAMING_STT": "0"]))
     }
 
+    @Test("Hedged routing opt-in parsing")
+    func hedgedRoutingParsing() {
+        #expect(!VoxSession.isHedgedRoutingSelected(environment: [:]))
+        #expect(VoxSession.isHedgedRoutingSelected(environment: ["VOX_STT_ROUTING": "hedged"]))
+        #expect(VoxSession.isHedgedRoutingSelected(environment: ["VOX_STT_ROUTING": " HEDGED "]))
+        #expect(!VoxSession.isHedgedRoutingSelected(environment: ["VOX_STT_ROUTING": "sequential"]))
+        #expect(!VoxSession.isHedgedRoutingSelected(environment: ["VOX_STT_ROUTING": ""]))
+    }
+
     @Test("Recorder backend selection parsing")
     func recorderBackendParsing() {
         #expect(!VoxSession.isRecorderBackendSelected(environment: [:]))
