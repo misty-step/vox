@@ -153,6 +153,9 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
                     outputFormat: targetFormat,
                     minimumOutputFrameCapacity: minimumOutputFrameCapacity
                 ) { outputBuffer in
+                    try Self.validateWriteFormatCompatible(
+                        buffer: outputBuffer, file: file
+                    )
                     try file.write(from: outputBuffer)
                     if let chunk = Self.makeAudioChunk(from: outputBuffer) {
                         producedChunks.append(chunk)
@@ -525,6 +528,28 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
             converterFormat.channelCount == inputFormat.channelCount &&
             converterFormat.commonFormat == inputFormat.commonFormat &&
             converterFormat.isInterleaved == inputFormat.isInterleaved
+    }
+
+    /// Guard against processingFormat/buffer mismatch that crashes on macOS 26+.
+    /// AVAudioFile(forWriting:settings:) auto-selects Float32 non-interleaved;
+    /// the explicit 4-param init must be used to align processingFormat with writes.
+    nonisolated static func validateWriteFormatCompatible(
+        buffer: AVAudioPCMBuffer, file: AVAudioFile
+    ) throws {
+        let proc = file.processingFormat
+        let buf = buffer.format
+        guard proc.commonFormat == buf.commonFormat,
+              proc.isInterleaved == buf.isInterleaved,
+              proc.sampleRate == buf.sampleRate,
+              proc.channelCount == buf.channelCount else {
+            throw VoxError.audioCaptureFailed(
+                "Buffer/file format mismatch: " +
+                "buffer=\(buf.commonFormat.rawValue)/\(buf.isInterleaved ? "i" : "ni")/" +
+                "\(Int(buf.sampleRate))Hz/\(buf.channelCount)ch " +
+                "vs file=\(proc.commonFormat.rawValue)/\(proc.isInterleaved ? "i" : "ni")/" +
+                "\(Int(proc.sampleRate))Hz/\(proc.channelCount)ch"
+            )
+        }
     }
 
     nonisolated static func makeAudioChunk(from outputBuffer: AVAudioPCMBuffer) -> AudioChunk? {

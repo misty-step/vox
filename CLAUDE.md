@@ -79,6 +79,16 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 
+## Audio Platform Gotchas
+
+- **AVAudioFile init**: Never use `AVAudioFile(forWriting:settings:)` — it auto-selects Float32 non-interleaved as `processingFormat`, which crashes on `write(from:)` with Int16 interleaved buffers (macOS 26+ assertion in `ExtAudioFile::WriteInputProc`). Always use the explicit 4-param init:
+  ```swift
+  AVAudioFile(forWriting: url, settings: fmt.settings,
+              commonFormat: fmt.commonFormat, interleaved: fmt.isInterleaved)
+  ```
+- **Pre-write validation**: `validateWriteFormatCompatible(buffer:file:)` guards every `file.write(from:)` call — converts system trap to recoverable `VoxError.audioCaptureFailed`
+- **Format contract tests**: `AudioRecorderFileFormatTests` verifies processingFormat alignment and actual Int16 write success without hardware
+
 ## Concurrency Gotchas
 
 - `@MainActor` protocol default params can't call `@MainActor` init in default expressions — use `nil` + resolve in body
@@ -101,6 +111,8 @@ Audio regression guardrail:
 - Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve backend reliability defaults and conversion duration invariants. Keep/extend:
   - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioEngine`; `recorder` is opt-out)
   - `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage; converter drain logic tested, not assumed)
+  - `AudioRecorderFileFormatTests` (AVAudioFile processingFormat alignment; Int16 write integration — prevents macOS 26+ crash)
+  - `AudioRecorderWriteFormatValidationTests` (runtime format guard catches mismatch before system trap)
   - `CapturedAudioInspectorTests` (valid/empty/corrupt/missing payload detection)
   - `DictationPipelineTests` empty-capture fast-fail guard (`VoxError.emptyCapture`) and Opus-empty fallback contract
   - `scripts/test-audio-guardrails.sh` as CI gate entrypoint
