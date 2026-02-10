@@ -184,10 +184,11 @@ public final class VoxSession: ObservableObject {
     }
 
     private func isStreamingEnabled() -> Bool {
-        let raw = ProcessInfo.processInfo.environment["VOX_ENABLE_STREAMING_STT"]?
+        let raw = ProcessInfo.processInfo.environment["VOX_DISABLE_STREAMING_STT"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() ?? ""
-        return raw == "1" || raw == "true" || raw == "yes"
+        let disabled = raw == "1" || raw == "true" || raw == "yes"
+        return !disabled
     }
 
     private func recorderSupportsStreaming() -> Bool {
@@ -198,7 +199,7 @@ public final class VoxSession: ObservableObject {
             let backend = ProcessInfo.processInfo.environment["VOX_AUDIO_BACKEND"]?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
-            return backend == "engine"
+            return backend != "recorder"
         }
         return true
     }

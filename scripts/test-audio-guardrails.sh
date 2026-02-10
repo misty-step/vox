@@ -9,6 +9,8 @@ run_filter() {
 
 run_filter "AudioRecorderBackendSelectionTests"
 run_filter "AudioRecorderConversionTests"
+run_filter "AudioRecorderFileFormatTests"
+run_filter "AudioRecorderWriteFormatValidationTests"
 run_filter "CapturedAudioInspectorTests"
 run_filter "DictationPipelineTests"
 
