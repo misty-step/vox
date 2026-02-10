@@ -34,6 +34,8 @@ jobs:
           perspective: ${{ matrix.perspective }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          # Kimi's 256k context breaks on large diffs (benchmark artifacts). Use a 1M-context fast model.
+          model: openrouter/google/gemini-2.5-flash-lite
 
   verdict:
     name: "Council Verdict"
