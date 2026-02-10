@@ -222,6 +222,7 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
 final class MockStreamingProvider: StreamingSTTProvider, @unchecked Sendable {
     private let lock = NSLock()
     var makeSessionError: Error?
+    var makeSessionDelay: TimeInterval?
     var session: MockStreamingSession
     private var _makeSessionCallCount = 0
     var makeSessionCallCount: Int { lock.withLock { _makeSessionCallCount } }
@@ -233,6 +234,9 @@ final class MockStreamingProvider: StreamingSTTProvider, @unchecked Sendable {
     func makeSession() async throws -> any StreamingSTTSession {
         lock.withLock {
             _makeSessionCallCount += 1
+        }
+        if let delay = makeSessionDelay {
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
         if let makeSessionError {
             throw makeSessionError
@@ -562,6 +566,107 @@ struct VoxSessionDITests {
         #expect(streamingSession.sentChunks.count == 6)
         #expect(pipeline.processTranscriptCallCount == 1)
         #expect(streamingSession.cancelCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming setup buffers chunks during slow session creation")
+    @MainActor func test_streamingSetupBuffering_chunksBufferedAndFlushed() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.transcriptResult = "buffered transcript output"
+        let streamingSession = MockStreamingSession()
+        streamingSession.expectedChunkCountAtFinish = 3
+        streamingSession.finishResult = .success("buffered transcript")
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        streamingProvider.makeSessionDelay = 0.2
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 1.0,
+            streamingSetupTimeout: 2.0
+        )
+
+        await session.toggleRecording()
+
+        for i in 0..<3 {
+            let val = UInt8(i)
+            recorder.emitChunk(AudioChunk(pcm16LEData: Data([val, val &+ 1])))
+        }
+
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(streamingSession.sentChunks.count == 3)
+        #expect(pipeline.processTranscriptCallCount == 1)
+        #expect(pipeline.lastTranscript == "buffered transcript")
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming setup failure falls back to batch processing")
+    @MainActor func test_streamingSetupFailure_fallsBackToBatch() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch fallback"
+        let streamingSession = MockStreamingSession()
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        streamingProvider.makeSessionError = StreamingSTTError.connectionFailed("test error")
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.5,
+            streamingSetupTimeout: 1.0
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.processTranscriptCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming setup timeout falls back to batch processing")
+    @MainActor func test_streamingSetupTimeout_fallsBackToBatch() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch timeout fallback"
+        let streamingSession = MockStreamingSession()
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        streamingProvider.makeSessionDelay = 5.0
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.5,
+            streamingSetupTimeout: 0.1
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.processTranscriptCallCount == 0)
         #expect(session.state == .idle)
     }
 
