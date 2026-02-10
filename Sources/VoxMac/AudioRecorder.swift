@@ -122,7 +122,12 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vox-\(UUID().uuidString).caf")
-        let file = try AVAudioFile(forWriting: url, settings: targetFormat.settings)
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: targetFormat.settings,
+            commonFormat: targetFormat.commonFormat,
+            interleaved: targetFormat.isInterleaved
+        )
 
         // Converter from hardware format → target format.
         guard let converter = AVAudioConverter(from: hwFormat, to: targetFormat) else {
