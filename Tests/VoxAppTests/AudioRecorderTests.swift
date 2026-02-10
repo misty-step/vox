@@ -240,18 +240,23 @@ final class AudioRecorderConversionTests: XCTestCase {
 }
 
 final class AudioRecorderBackendSelectionTests: XCTestCase {
-    func test_selectedBackend_defaultsToAVAudioRecorder() {
+    func test_selectedBackend_defaultsToAVAudioEngine() {
         let backend = AudioRecorder.selectedBackend(environment: [:])
+        XCTAssertEqual(backend, .avAudioEngine)
+    }
+
+    func test_selectedBackend_usesRecorderWhenEnvSet() {
+        let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "recorder"])
         XCTAssertEqual(backend, .avAudioRecorder)
     }
 
-    func test_selectedBackend_usesEngineWhenEnvSet() {
+    func test_selectedBackend_usesEngineWhenExplicitlySet() {
         let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "engine"])
         XCTAssertEqual(backend, .avAudioEngine)
     }
 
-    func test_selectedBackend_fallsBackForUnknownValues() {
+    func test_selectedBackend_usesEngineForUnknownValues() {
         let backend = AudioRecorder.selectedBackend(environment: ["VOX_AUDIO_BACKEND": "something-else"])
-        XCTAssertEqual(backend, .avAudioRecorder)
+        XCTAssertEqual(backend, .avAudioEngine)
     }
 }

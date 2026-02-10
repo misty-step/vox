@@ -328,10 +328,10 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
     // MARK: - Internal (visible for testing)
 
     nonisolated static func selectedBackend(environment: [String: String]) -> Backend {
-        if environment["VOX_AUDIO_BACKEND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "engine" {
-            return .avAudioEngine
+        if environment["VOX_AUDIO_BACKEND"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "recorder" {
+            return .avAudioRecorder
         }
-        return .avAudioRecorder
+        return .avAudioEngine
     }
 
     nonisolated static func normalizeDecibels(_ value: Float, minDb: Float = -50) -> Float {

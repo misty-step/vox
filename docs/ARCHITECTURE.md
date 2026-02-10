@@ -85,8 +85,8 @@ Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioIn
 
 `AudioRecorder` has two backends with reliability-first defaults:
 
-- **Default (`AVAudioRecorder`)**: direct 16kHz/16-bit mono CAF capture from macOS default input route.
-- **Opt-in (`AVAudioEngine`)**: enabled only with `VOX_AUDIO_BACKEND=engine`; supports experimental per-app routing and format conversion.
+- **Default (`AVAudioEngine`)**: 16kHz/16-bit mono CAF capture with real-time audio chunk emission for streaming STT.
+- **Legacy opt-out (`AVAudioRecorder`)**: enabled with `VOX_AUDIO_BACKEND=recorder`; direct file-based capture without streaming support.
 
 Non-negotiable contract: **recorded speech duration and frame payload must survive capture and conversion across device/sample-rate differences**.
 
@@ -110,12 +110,12 @@ Test invariants:
 
 `AudioDeviceManager` (VoxMac) enumerates CoreAudio devices and resolves stable `kAudioDevicePropertyDeviceUID` to runtime `AudioDeviceID`.
 
-Default behavior prioritizes reliability:
+Default behavior uses `AVAudioEngine` for streaming-capable capture:
 - `VoxSession` sets the selected input as macOS default before recording starts.
-- `AudioRecorder` captures from the default route using `AVAudioRecorder`.
+- `AudioRecorder` captures via `AVAudioEngine` with real-time chunk emission for streaming STT.
 
 Optional overrides:
-- set `VOX_AUDIO_BACKEND=engine` to use `AVAudioEngine` backend.
+- set `VOX_AUDIO_BACKEND=recorder` to use legacy `AVAudioRecorder` backend (no streaming).
 - set `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1` to attempt `kAudioOutputUnitProperty_CurrentDevice` on the input `AudioUnit`.
 - if per-app routing is unavailable/fails, capture continues on the default route.
 
@@ -123,7 +123,7 @@ Behavior:
 - **System Default** (nil UID): recorder uses whatever macOS has selected
 - **Specific device**: Vox sets system default input to the selected UID before capture
 - **Device unplugged**: silently falls back to current system default
-- **Optional per-app mode**: `VOX_AUDIO_BACKEND=engine` + `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1`
+- **Optional per-app mode**: `VOX_ENABLE_PER_APP_AUDIO_ROUTING=1` (requires engine backend, which is now default)
 
 ## State Machine
 
@@ -172,7 +172,8 @@ BYOK. `PreferencesStore` reads env first, then Keychain:
 - `DEEPGRAM_API_KEY` — hedged cloud STT (Deepgram Nova-3, launches at 5s)
 - `OPENAI_API_KEY` — hedged cloud STT (Whisper, launches at 10s)
 - `VOX_MAX_CONCURRENT_STT` — optional global in-flight STT limit (default: `8`)
-- `VOX_ENABLE_STREAMING_STT` — opt-in realtime STT session orchestration (`1`/`true`)
+- `VOX_DISABLE_STREAMING_STT` — kill switch to force batch-only STT (`1`/`true`)
+- `VOX_AUDIO_BACKEND` — `recorder` for legacy AVAudioRecorder (default: engine)
 
 Endpoints:
 - ElevenLabs STT: `https://api.elevenlabs.io/v1/speech-to-text`

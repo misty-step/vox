@@ -59,7 +59,7 @@ Providers are wrapped in composable decorators, with default routing via stagger
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioRecorder @ 16kHz/16-bit mono CAF; engine backend opt-in via `VOX_AUDIO_BACKEND=engine`) → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -75,7 +75,7 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Quality gate**: `RewriteQualityGate` compares candidate/raw character count ratio. Falls back to raw transcript if below threshold (light: 0.6, aggressive: 0.3, enhance: 0.2).
 
-**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`).
+**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT).
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 
@@ -99,7 +99,7 @@ Shared mock: `Tests/VoxCoreTests/MockSTTProvider.swift` — thread-safe with NSL
 
 Audio regression guardrail:
 - Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve backend reliability defaults and conversion duration invariants. Keep/extend:
-  - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioRecorder`; `engine` is opt-in)
+  - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioEngine`; `recorder` is opt-out)
   - `AudioRecorderConversionTests` (Bluetooth-like `24k` plus `16k/44.1k/48k` sample-rate coverage; converter drain logic tested, not assumed)
   - `CapturedAudioInspectorTests` (valid/empty/corrupt/missing payload detection)
   - `DictationPipelineTests` empty-capture fast-fail guard (`VoxError.emptyCapture`) and Opus-empty fallback contract
