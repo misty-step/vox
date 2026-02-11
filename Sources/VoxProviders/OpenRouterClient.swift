@@ -4,13 +4,61 @@ import VoxCore
 public final class OpenRouterClient: RewriteProvider {
     private let apiKey: String
     private let session: URLSession
+    private let fallbackModels: [String]
 
-    public init(apiKey: String, session: URLSession = .shared) {
+    public init(
+        apiKey: String,
+        session: URLSession = .shared,
+        fallbackModels: [String] = []
+    ) {
         self.apiKey = apiKey
         self.session = session
+        self.fallbackModels = fallbackModels
     }
 
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
+        let models = [model] + fallbackModels
+        var lastError: Error?
+
+        for (index, currentModel) in models.enumerated() {
+            try Task.checkCancellation()
+            let start = CFAbsoluteTimeGetCurrent()
+            do {
+                let result = try await executeRequest(
+                    transcript: transcript,
+                    systemPrompt: systemPrompt,
+                    model: currentModel
+                )
+                let elapsed = CFAbsoluteTimeGetCurrent() - start
+                if index > 0 {
+                    print("[Rewrite] Fallback \(currentModel) succeeded in \(String(format: "%.2f", elapsed))s")
+                } else {
+                    print("[Rewrite] \(currentModel) completed in \(String(format: "%.2f", elapsed))s")
+                }
+                return result
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let elapsed = CFAbsoluteTimeGetCurrent() - start
+                lastError = error
+                if index < models.count - 1, isRetryable(error) {
+                    print("[Rewrite] \(currentModel) failed (\(String(format: "%.2f", elapsed))s), trying fallback: \(errorSummary(error))")
+                    continue
+                }
+                throw error
+            }
+        }
+
+        throw lastError ?? RewriteError.unknown("No models available")
+    }
+
+    // MARK: - Private
+
+    private func executeRequest(
+        transcript: String,
+        systemPrompt: String,
+        model: String
+    ) async throws -> String {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
 
         let body: [String: Any] = [
@@ -19,9 +67,13 @@ public final class OpenRouterClient: RewriteProvider {
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": transcript]
             ],
-            // Disable reasoning for faster responses
             "reasoning": [
                 "enabled": false
+            ],
+            "provider": [
+                "sort": "latency",
+                "allow_fallbacks": true,
+                "require_parameters": true
             ]
         ]
 
@@ -47,8 +99,39 @@ public final class OpenRouterClient: RewriteProvider {
             return content
         case 401: throw RewriteError.auth
         case 429: throw RewriteError.throttled
+        case 502, 503: throw RewriteError.network("HTTP \(httpResponse.statusCode)")
         default: throw RewriteError.unknown("HTTP \(httpResponse.statusCode)")
         }
+    }
+
+    private func isRetryable(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        guard let rewriteError = error as? RewriteError else { return true }
+        switch rewriteError {
+        case .throttled, .network: return true
+        case .auth, .invalidRequest, .quotaExceeded, .timeout: return false
+        case .unknown(let msg):
+            if let code = Int(msg.replacingOccurrences(of: "HTTP ", with: "")),
+               (500...599).contains(code) {
+                return true
+            }
+            return false
+        }
+    }
+
+    private func errorSummary(_ error: Error) -> String {
+        if let rewriteError = error as? RewriteError {
+            switch rewriteError {
+            case .auth: return "auth"
+            case .quotaExceeded: return "quotaExceeded"
+            case .throttled: return "throttled"
+            case .invalidRequest: return "invalidRequest"
+            case .network(let msg): return "network(\(msg))"
+            case .timeout: return "timeout"
+            case .unknown(let msg): return msg
+            }
+        }
+        return String(describing: type(of: error))
     }
 }
 
