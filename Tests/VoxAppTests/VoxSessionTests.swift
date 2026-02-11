@@ -170,6 +170,7 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
     private var _sentChunks: [AudioChunk] = []
     var sentChunks: [AudioChunk] { lock.withLock { _sentChunks } }
     var finishResult: Result<String, Error> = .success("streamed transcript")
+    var finishDelay: TimeInterval?
     private var _expectedChunkCountAtFinish: Int?
     var expectedChunkCountAtFinish: Int? {
         get { lock.withLock { _expectedChunkCountAtFinish } }
@@ -202,6 +203,9 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
                 )
             }
         }
+        if let finishDelay {
+            try await Task.sleep(nanoseconds: UInt64(finishDelay * 1_000_000_000))
+        }
         continuation?.finish()
         switch finishResult {
         case .success(let transcript):
@@ -209,6 +213,10 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
         case .failure(let error):
             throw error
         }
+    }
+
+    func emitPartial(text: String, isFinal: Bool = false) {
+        continuation?.yield(PartialTranscript(text: text, isFinal: isFinal))
     }
 
     func cancel() async {
@@ -531,6 +539,39 @@ struct VoxSessionDITests {
         #expect(session.state == .idle)
     }
 
+    @Test("Streaming finalize uses latest partial transcript when final is empty")
+    @MainActor func test_streamingFinalizeEmptyFinal_usesLatestPartialTranscript() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.transcriptResult = "partial fallback output"
+        let streamingSession = MockStreamingSession()
+        streamingSession.finishResult = .success("   ")
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.5
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        streamingSession.emitPartial(text: "draft")
+        streamingSession.emitPartial(text: "stable partial transcript", isFinal: true)
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(pipeline.processTranscriptCallCount == 1)
+        #expect(pipeline.lastTranscript == "stable partial transcript")
+        #expect(pipeline.processCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
     @Test("Streaming finalize failure falls back to batch processing")
     @MainActor func test_streamingFinalizeFailure_fallsBackToBatch() async {
         let recorder = MockRecorder()
@@ -549,6 +590,37 @@ struct VoxSessionDITests {
             errorPresenter: { _ in },
             streamingSTTProvider: streamingProvider,
             streamingFinalizeTimeout: 0.1
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.processTranscriptCallCount == 0)
+        #expect(streamingSession.cancelCallCount == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming finalize timeout falls back to batch processing")
+    @MainActor func test_streamingFinalizeTimeout_fallsBackToBatch() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch timeout fallback transcript"
+        let streamingSession = MockStreamingSession()
+        streamingSession.finishDelay = 1.0
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.05
         )
 
         await session.toggleRecording()
