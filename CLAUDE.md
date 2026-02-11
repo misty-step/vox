@@ -110,6 +110,8 @@ Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcr
 
 Shared mock: `Tests/VoxCoreTests/MockSTTProvider.swift` — thread-safe with NSLock.
 
+Async timeout tests should avoid sub-100ms thresholds unless explicitly testing timeout granularity. Prefer `>= 0.1s` to reduce CI scheduler-jitter flakes.
+
 Audio regression guardrail:
 - Changes to `Sources/VoxMac/AudioRecorder.swift` must preserve backend reliability defaults and conversion duration invariants. Keep/extend:
   - `AudioRecorderBackendSelectionTests` (default backend = `AVAudioEngine`; `recorder` is opt-out)
