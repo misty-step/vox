@@ -620,7 +620,7 @@ struct VoxSessionDITests {
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
             streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.05
+            streamingFinalizeTimeout: 0.1
         )
 
         await session.toggleRecording()
