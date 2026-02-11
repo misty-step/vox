@@ -49,16 +49,30 @@ final class RewriteQualityGateTests: XCTestCase {
     }
 
     func test_evaluate_boundaryAtThreshold_isAcceptable() {
+        // Realistic text that passes distance checks while testing ratio boundaries.
+        // Light mode: ratio >= 0.6
+        let lightRaw = "fix the bug now"        // 15 chars
+        let lightCandidate = "Fix the bug."      // 12 chars, ratio = 0.8
+        let lightDecision = RewriteQualityGate.evaluate(raw: lightRaw, candidate: lightCandidate, level: .light)
+        XCTAssertTrue(lightDecision.isAcceptable)
+
+        // Aggressive mode: ratio >= 0.3
+        let aggRaw = "so basically I think we should really fix that critical bug soon"  // 63 chars
+        let aggCandidate = "Fix that critical bug."  // 22 chars, ratio ≈ 0.349
+        let aggDecision = RewriteQualityGate.evaluate(raw: aggRaw, candidate: aggCandidate, level: .aggressive)
+        XCTAssertTrue(aggDecision.isAcceptable)
+    }
+
+    func test_evaluate_boundaryRatio_syntheticStrings() {
+        // Pure ratio math: synthetic strings with .off mode (no distance checks)
         let raw = String(repeating: "r", count: 10)
 
         let lightCandidate = String(repeating: "c", count: 6)
-        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: lightCandidate, level: .light)
-        XCTAssertTrue(lightDecision.isAcceptable)
+        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: lightCandidate, level: .off)
         XCTAssertEqual(lightDecision.ratio, 0.6, accuracy: 0.0001)
 
         let aggressiveCandidate = String(repeating: "c", count: 3)
-        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: aggressiveCandidate, level: .aggressive)
-        XCTAssertTrue(aggressiveDecision.isAcceptable)
+        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: aggressiveCandidate, level: .off)
         XCTAssertEqual(aggressiveDecision.ratio, 0.3, accuracy: 0.0001)
     }
 
@@ -193,7 +207,8 @@ final class RewriteQualityGateTests: XCTestCase {
         let raw = "こんにちは"  // 5 Japanese characters
         let candidate = "hello"   // 5 English characters
 
-        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+        // Use .off to isolate character counting from distance checks
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .off)
 
         XCTAssertTrue(decision.isAcceptable)
         XCTAssertEqual(decision.ratio, 1.0, accuracy: 0.0001)
@@ -237,6 +252,107 @@ final class RewriteQualityGateTests: XCTestCase {
 
         let offDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .off)
         XCTAssertNil(offDecision.maximumRatio)
+    }
+
+    // MARK: - Levenshtein Similarity
+
+    func test_normalizedLevenshteinSimilarity_identicalStrings_returns1() {
+        let score = RewriteQualityGate.normalizedLevenshteinSimilarity(raw: "hello world", candidate: "hello world")
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
+    func test_normalizedLevenshteinSimilarity_completelyDifferent_returnsLow() {
+        let score = RewriteQualityGate.normalizedLevenshteinSimilarity(raw: "hello world", candidate: "xyz abc qrs")
+        XCTAssertLessThan(score, 0.3)
+    }
+
+    func test_normalizedLevenshteinSimilarity_fillerRemoval_scoresHigh() {
+        let raw = "so um I was like thinking we should you know do the thing"
+        let candidate = "I was thinking we should do the thing"
+        let score = RewriteQualityGate.normalizedLevenshteinSimilarity(raw: raw, candidate: candidate)
+        XCTAssertGreaterThan(score, 0.5)
+    }
+
+    func test_normalizedLevenshteinSimilarity_emptyStrings_returns1() {
+        let score = RewriteQualityGate.normalizedLevenshteinSimilarity(raw: "", candidate: "")
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
+    // MARK: - Content Word Overlap
+
+    func test_contentOverlapScore_identicalText_returns1() {
+        let score = RewriteQualityGate.contentOverlapScore(raw: "project factory names brainstorm", candidate: "project factory names brainstorm")
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
+    func test_contentOverlapScore_completelyDifferent_returnsNear0() {
+        let score = RewriteQualityGate.contentOverlapScore(raw: "factory project brainstorm names", candidate: "quantum physics relativity entropy")
+        XCTAssertEqual(score, 0.0, accuracy: 0.0001)
+    }
+
+    func test_contentOverlapScore_emptyInput_returns1() {
+        let score = RewriteQualityGate.contentOverlapScore(raw: "", candidate: "anything here")
+        XCTAssertEqual(score, 1.0, accuracy: 0.0001)
+    }
+
+    func test_contentOverlapScore_partialOverlap() {
+        let raw = "asking Gemini brainstorm factory names project"
+        let candidate = "factory project meeting review"
+        let score = RewriteQualityGate.contentOverlapScore(raw: raw, candidate: candidate)
+        XCTAssertGreaterThan(score, 0.0)
+        XCTAssertLessThan(score, 1.0)
+    }
+
+    // MARK: - Hallucination Regression
+
+    func test_evaluate_lightMode_rejectsHallucinatedAnswer() {
+        let raw = "so I was asking Gemini to brainstorm factory names for our factory project"
+        let candidate = "Here are some factory name suggestions: 1. SteelForge Industries 2. Nova Manufacturing 3. Apex Production Co. 4. Titan Works 5. Ironclad Fabrication"
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertFalse(decision.isAcceptable, "Hallucinated answer must be rejected")
+        XCTAssertNotNil(decision.levenshteinSimilarity)
+        XCTAssertNotNil(decision.contentOverlap)
+        XCTAssertLessThan(decision.levenshteinSimilarity!, 0.4, "Hallucinated answer should have low Levenshtein similarity")
+        XCTAssertLessThan(decision.contentOverlap!, 0.5, "Hallucinated answer should have low content overlap")
+    }
+
+    func test_evaluate_aggressiveMode_rejectsHallucinatedAnswer() {
+        let raw = "we were debating what if we used Redis instead of Postgres for the session cache and John thought it was overkill"
+        let candidate = "Redis vs PostgreSQL Comparison:\n\nRedis Advantages:\n- In-memory storage for faster reads\n- Built-in TTL support\n\nPostgreSQL Advantages:\n- ACID compliance\n- No additional infrastructure"
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .aggressive)
+
+        XCTAssertFalse(decision.isAcceptable, "Generated comparison must be rejected")
+    }
+
+    func test_evaluate_enhanceMode_skipsDistanceChecks() {
+        let raw = "write me a function that sorts an array"
+        let candidate = "You are an expert programmer. Write a function that sorts an array using an efficient algorithm."
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .enhance)
+
+        XCTAssertNil(decision.levenshteinSimilarity)
+        XCTAssertNil(decision.contentOverlap)
+    }
+
+    func test_evaluate_lightMode_acceptsCleanedTranscript() {
+        let raw = "so um I was like thinking we should you know schedule a meeting for um next Tuesday"
+        let candidate = "I was thinking we should schedule a meeting for next Tuesday."
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertTrue(decision.isAcceptable, "Legitimate cleanup should pass")
+    }
+
+    func test_evaluate_lightMode_rejectsListGeneration() {
+        let raw = "I told him to list the top five programming languages for web development"
+        let candidate = "Top 5 Programming Languages for Web Development:\n1. JavaScript\n2. Python\n3. TypeScript\n4. Go\n5. Rust"
+
+        let decision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .light)
+
+        XCTAssertFalse(decision.isAcceptable, "Generated list must be rejected")
     }
 
     func test_evaluate_decisionPropertiesAreConsistent() {

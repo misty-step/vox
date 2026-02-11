@@ -6,3 +6,8 @@ DerivedData/
 
 .env*
 !.env.example
+
+# Eval framework
+evals/output/
+evals/.promptfoo-cache/
+node_modules/

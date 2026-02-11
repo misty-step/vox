@@ -1,0 +1,60 @@
+name: 'Eval: Nightly'
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  eval:
+    name: Full Rewrite Evaluation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install promptfoo
+        run: npm install -g promptfoo@latest
+
+      - name: Run Full Suite
+        continue-on-error: true
+        run: |
+          promptfoo eval \
+            --config evals/promptfooconfig.yaml \
+            --tests evals/datasets/smoke.yaml \
+            --tests evals/datasets/injection.yaml \
+            --no-progress-bar \
+            -o evals/output/results.json
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Generate Report
+        run: node evals/scripts/format-report.js < evals/output/results.json > evals/output/report.md
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results-${{ github.run_number }}
+          path: evals/output/
+          retention-days: 30
+
+      - name: Check Results
+        if: always()
+        run: |
+          # Nightly runs both smoke + injection (20 tests).
+          # Known smoke failures (2): haiku injection + system prompt leak.
+          # Injection suite may have additional model-vulnerability failures.
+          KNOWN_FAILURES=4
+          FAILED=$(node -e "const d = require('./evals/output/results.json'); const f = d.results.results.filter(r => !r.success).length; process.stdout.write(String(f))")
+          TOTAL=$(node -e "const d = require('./evals/output/results.json'); process.stdout.write(String(d.results.results.length))")
+          echo "Eval results: ${FAILED}/${TOTAL} failed (known baseline: ${KNOWN_FAILURES})"
+          if [ "$FAILED" -gt "$KNOWN_FAILURES" ]; then
+            echo "::error::Regression detected — ${FAILED} failures exceeds known baseline of ${KNOWN_FAILURES}"
+            exit 1
+          fi
