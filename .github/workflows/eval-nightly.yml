@@ -48,9 +48,9 @@ jobs:
         if: always()
         run: |
           # Nightly runs both smoke + injection (20 tests).
-          # Known failures: haiku, system override, system prompt leak (smoke)
-          # + possible injection failures. Baseline set conservatively.
-          KNOWN_FAILURES=5
+          # Known smoke failures (2): haiku injection + system prompt leak.
+          # Injection suite may have additional model-vulnerability failures.
+          KNOWN_FAILURES=4
           FAILED=$(node -e "const d = require('./evals/output/results.json'); const f = d.results.results.filter(r => !r.success).length; process.stdout.write(String(f))")
           TOTAL=$(node -e "const d = require('./evals/output/results.json'); process.stdout.write(String(d.results.results.length))")
           echo "Eval results: ${FAILED}/${TOTAL} failed (known baseline: ${KNOWN_FAILURES})"

@@ -13,7 +13,12 @@ providers:
 
 defaultTest:
   options:
-    provider: openrouter:deepseek/deepseek-v3.2
+    provider:
+      id: openrouter:deepseek/deepseek-v3.2
+      config:
+        temperature: 0
+        response_format:
+          type: json_object
   assert:
     - type: llm-rubric
       value: |
