@@ -231,6 +231,36 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 1)
     }
 
+    @Test("Rewrite timeout falls back to raw transcript and still pastes")
+    func process_rewriteTimeout_fallsBackToRawTranscript() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Hello, world!")]
+        rewriter.delay = 0.05
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .light
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableOpus: false,
+            rewriteStageTimeouts: RewriteStageTimeouts(lightSeconds: 0.01, aggressiveSeconds: 0.01, enhanceSeconds: 0.01)
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(rewriter.callCount == 1)
+        #expect(paster.lastText == "hello world")
+    }
+
     @Test("Process converts CAF to OGG before STT")
     func process_enableOpus_passesOggToSTT() async throws {
         let stt = MockSTTProvider()

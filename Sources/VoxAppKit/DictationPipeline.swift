@@ -48,6 +48,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     private let prefs: PreferencesReading
     private let rewriteCache: RewriteResultCache
     private let pipelineTimeout: TimeInterval
+    private let rewriteStageTimeouts: RewriteStageTimeouts
     private let enableOpus: Bool
     private let opusBypassThreshold: Int
     private let enableRewriteCache: Bool
@@ -97,6 +98,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         },
         opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
+        rewriteStageTimeouts: RewriteStageTimeouts = .default,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
     ) {
         self.stt = stt
@@ -109,6 +111,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         self.opusBypassThreshold = opusBypassThreshold
         self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
+        self.rewriteStageTimeouts = rewriteStageTimeouts
         self.timingHandler = timingHandler
     }
 
@@ -224,11 +227,13 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                     #endif
                 } else {
                     let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
-                    let candidate = try await rewriter.rewrite(
-                        transcript: transcript,
-                        systemPrompt: prompt,
-                        model: model
-                    )
+                    let candidate = try await withRewriteTimeout(seconds: rewriteStageTimeouts.seconds(for: level)) {
+                        try await self.rewriter.rewrite(
+                            transcript: transcript,
+                            systemPrompt: prompt,
+                            model: model
+                        )
+                    }
                     let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                     if decision.isAcceptable {
                         output = candidate
@@ -247,6 +252,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                 }
             } catch is CancellationError {
                 throw CancellationError()
+            } catch let error as RewriteError where error == .timeout {
+                let waited = CFAbsoluteTimeGetCurrent() - rewriteStart
+                print("[Pipeline] Rewrite timed out after \(String(format: "%.2f", waited))s, using raw transcript")
+                output = transcript
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
                 output = transcript
@@ -277,7 +286,7 @@ private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds)
+    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds, context: "pipeline")
 
     return try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask {
@@ -296,16 +305,64 @@ private func withPipelineTimeout<T: Sendable>(
     }
 }
 
-private func validatedTimeoutNanoseconds(seconds: TimeInterval) throws -> UInt64 {
+private func withRewriteTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds, context: "rewrite")
+
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            throw RewriteError.timeout
+        }
+        guard let result = try await group.next() else {
+            group.cancelAll()
+            throw RewriteError.timeout
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
+private func validatedTimeoutNanoseconds(seconds: TimeInterval, context: String) throws -> UInt64 {
     guard seconds > 0, seconds.isFinite else {
-        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+        throw VoxError.internalError("Invalid \(context) timeout: \(seconds)")
     }
 
     let nanoseconds = seconds * 1_000_000_000
     // Keep conversion strict: values rounding up to 2^64 must be rejected.
     guard nanoseconds.isFinite, nanoseconds >= 0, nanoseconds < Double(UInt64.max) else {
-        throw VoxError.internalError("Invalid pipeline timeout: \(seconds)")
+        throw VoxError.internalError("Invalid \(context) timeout: \(seconds)")
     }
 
     return UInt64(nanoseconds)
+}
+
+struct RewriteStageTimeouts: Sendable {
+    let lightSeconds: TimeInterval
+    let aggressiveSeconds: TimeInterval
+    let enhanceSeconds: TimeInterval
+
+    static let `default` = RewriteStageTimeouts(
+        lightSeconds: 6,
+        aggressiveSeconds: 8,
+        enhanceSeconds: 10
+    )
+
+    func seconds(for level: ProcessingLevel) -> TimeInterval {
+        switch level {
+        case .off:
+            return 0
+        case .light:
+            return lightSeconds
+        case .aggressive:
+            return aggressiveSeconds
+        case .enhance:
+            return enhanceSeconds
+        }
+    }
 }
