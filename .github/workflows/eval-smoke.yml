@@ -29,11 +29,51 @@ jobs:
           key: ${{ runner.os }}-promptfoo-${{ hashFiles('evals/promptfooconfig.yaml') }}
           restore-keys: ${{ runner.os }}-promptfoo-
 
+      - name: Install promptfoo
+        run: npm install -g promptfoo@latest
+
       - name: Run Evaluation
-        uses: promptfoo/promptfoo-action@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          config: evals/promptfooconfig.yaml
-          no-progress-bar: true
+        run: |
+          promptfoo eval \
+            --config evals/promptfooconfig.yaml \
+            --no-progress-bar \
+            -o evals/output/results.json
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Generate Report
+        if: always()
+        run: node evals/scripts/format-report.js < evals/output/results.json > evals/output/report.md
+
+      - name: Post PR Comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete previous eval comment if it exists
+          COMMENT_ID=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.body | startswith("## ")) | select(.body | contains("Rewrite Eval Report")) | .id' \
+            2>/dev/null | head -1)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID -X DELETE 2>/dev/null || true
+          fi
+          # Post new comment
+          gh pr comment ${{ github.event.pull_request.number }} --body-file evals/output/report.md
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-smoke-${{ github.run_number }}
+          path: evals/output/
+          retention-days: 30
+
+      - name: Check Results
+        run: |
+          # Fail the job if any tests failed
+          FAILED=$(node -e "const d = require('./evals/output/results.json'); const f = d.results.results.filter(r => !r.success).length; process.stdout.write(String(f))")
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED eval test(s) failed"
+            exit 1
+          fi

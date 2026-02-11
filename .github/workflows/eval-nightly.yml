@@ -9,9 +9,6 @@ jobs:
   eval:
     name: Full Rewrite Evaluation
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: evals
 
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +22,18 @@ jobs:
 
       - name: Run Full Suite
         run: |
-          promptfoo eval --config promptfooconfig.yaml --tests datasets/smoke.yaml --tests datasets/injection.yaml -o output/results.json
+          promptfoo eval \
+            --config evals/promptfooconfig.yaml \
+            --tests evals/datasets/smoke.yaml \
+            --tests evals/datasets/injection.yaml \
+            --no-progress-bar \
+            -o evals/output/results.json
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Generate Report
+        if: always()
+        run: node evals/scripts/format-report.js < evals/output/results.json > evals/output/report.md
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
