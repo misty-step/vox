@@ -15,10 +15,6 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
-    defaults:
-      run:
-        working-directory: evals
-
     steps:
       - uses: actions/checkout@v4
 
@@ -37,8 +33,7 @@ jobs:
         uses: promptfoo/promptfoo-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          config-path: evals/promptfooconfig.yaml
-          cache: true
+          config: evals/promptfooconfig.yaml
           no-progress-bar: true
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
