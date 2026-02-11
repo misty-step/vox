@@ -238,7 +238,8 @@ struct DictationPipelineTests {
 
         let rewriter = MockRewriteProvider()
         rewriter.results = [.success("Hello, world!")]
-        rewriter.delay = 0.05
+        // CI can oversleep small Task.sleep deadlines; keep a wide gap so timeout wins deterministically.
+        rewriter.delay = 1.0
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
@@ -251,7 +252,7 @@ struct DictationPipelineTests {
             prefs: prefs,
             rewriteCache: makeRewriteCache(),
             enableOpus: false,
-            rewriteStageTimeouts: RewriteStageTimeouts(lightSeconds: 0.01, aggressiveSeconds: 0.01, enhanceSeconds: 0.01)
+            rewriteStageTimeouts: RewriteStageTimeouts(lightSeconds: 0.05, aggressiveSeconds: 0.05, enhanceSeconds: 0.05)
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
