@@ -77,15 +77,23 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makePipeline() -> DictationProcessing {
-        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         return DictationPipeline(
             stt: makeSTTProvider(),
-            rewriter: OpenRouterClient(apiKey: openRouterKey),
+            rewriter: makeRewriteProvider(),
             paster: ClipboardPaster(),
             prefs: prefs,
             enableRewriteCache: true,
             enableOpus: hasCloudProviders
         )
+    }
+
+    private func makeRewriteProvider() -> RewriteProvider {
+        let geminiKey = prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !geminiKey.isEmpty {
+            return GeminiClient(apiKey: geminiKey)
+        }
+        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return OpenRouterClient(apiKey: openRouterKey)
     }
 
     private func makeSTTProvider() -> STTProvider {

@@ -109,4 +109,5 @@ public protocol PreferencesReading: AnyObject, Sendable {
     var openRouterAPIKey: String { get }
     var deepgramAPIKey: String { get }
     var openAIAPIKey: String { get }
+    var geminiAPIKey: String { get }
 }

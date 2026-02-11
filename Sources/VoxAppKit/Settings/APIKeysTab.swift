@@ -28,8 +28,13 @@ public struct APIKeysTab: View {
                 }
 
                 Section("Rewrite Provider") {
-                    SecureField("OpenRouter API Key", text: binding(for: \.openRouterAPIKey))
+                    SecureField("Gemini API Key", text: binding(for: \.geminiAPIKey))
                         .textContentType(.password)
+                    SecureField("OpenRouter API Key (fallback)", text: binding(for: \.openRouterAPIKey))
+                        .textContentType(.password)
+                    Text("Gemini direct is faster. OpenRouter is used if no Gemini key is set.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

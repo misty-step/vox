@@ -46,6 +46,11 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         set { setAPIKey(newValue, for: .openAIAPIKey) }
     }
 
+    public var geminiAPIKey: String {
+        get { apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey) }
+        set { setAPIKey(newValue, for: .geminiAPIKey) }
+    }
+
     private func apiKey(env: String, keychain: KeychainHelper.Key) -> String {
         if let envKey = ProcessInfo.processInfo.environment[env], !envKey.isEmpty {
             return envKey

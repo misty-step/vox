@@ -60,9 +60,11 @@ public final class OpenRouterClient: RewriteProvider {
         model: String
     ) async throws -> String {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+        // OpenRouter requires provider-prefixed model names (e.g. "google/gemini-2.5-flash-lite")
+        let routerModel = model.contains("/") ? model : "google/\(model)"
 
         let body: [String: Any] = [
-            "model": model,
+            "model": routerModel,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": transcript]

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VOX_ENV="${SCRIPT_DIR}/../.env.local"
 
 if [ -f "$VOX_ENV" ]; then
-    export $(grep -E '^(ELEVENLABS_API_KEY|OPENROUTER_API_KEY)=' "$VOX_ENV" | xargs)
+    export $(grep -E '^(ELEVENLABS_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|DEEPGRAM_API_KEY|OPENAI_API_KEY)=' "$VOX_ENV" | xargs)
 fi
 
 exec "${SCRIPT_DIR}/../.build/debug/Vox" "$@"
