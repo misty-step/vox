@@ -254,7 +254,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                         }
                     } else {
                         output = transcript
-                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                        let levStr = decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? ""
+                        let ovlStr = decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? ""
+                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio))\(levStr)\(ovlStr))")
                     }
                 }
             } catch is CancellationError {

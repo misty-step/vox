@@ -1016,10 +1016,11 @@ struct DictationPipelineTests {
     @Test("Rewrite cache key includes processing level/model")
     func process_rewriteCache_levelChange_missesCache() async throws {
         let stt = MockSTTProvider()
-        stt.results = [.success("cache phrase two"), .success("cache phrase two")]
+        stt.results = [.success("um so the cache phrase two is ready"), .success("um so the cache phrase two is ready")]
 
         let rewriter = MockRewriteProvider()
-        rewriter.results = [.success("Hello, world!"), .success("HELLO WORLD!")]
+        // Rewrites must pass quality gate: keep content words, just clean up
+        rewriter.results = [.success("The cache phrase two is ready."), .success("Cache phrase two is ready.")]
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
@@ -1039,8 +1040,8 @@ struct DictationPipelineTests {
         prefs.processingLevel = .aggressive
         let second = try await pipeline.process(audioURL: audioURL)
 
-        #expect(first == "Hello, world!")
-        #expect(second == "HELLO WORLD!")
+        #expect(first == "The cache phrase two is ready.")
+        #expect(second == "Cache phrase two is ready.")
         #expect(rewriter.callCount == 2)
     }
 
@@ -1058,7 +1059,8 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        // Use enhance mode: distance checks are skipped so synthetic strings pass quality gate
+        prefs.processingLevel = .enhance
 
         let pipeline = DictationPipeline(
             stt: stt,
