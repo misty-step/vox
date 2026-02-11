@@ -227,7 +227,14 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                     #endif
                 } else {
                     let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
-                    let candidate = try await withRewriteTimeout(seconds: rewriteStageTimeouts.seconds(for: level)) {
+                    guard let rewriteTimeoutSeconds = rewriteStageTimeouts.seconds(for: level) else {
+                        throw VoxError.internalError("Rewrite timeout requested for level: \(level)")
+                    }
+                    let candidate = try await withTimeout(
+                        seconds: rewriteTimeoutSeconds,
+                        context: .rewrite,
+                        timeoutError: RewriteStageTimeoutError.deadlineExceeded
+                    ) {
                         try await self.rewriter.rewrite(
                             transcript: transcript,
                             systemPrompt: prompt,
@@ -252,12 +259,12 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                 }
             } catch is CancellationError {
                 throw CancellationError()
-            } catch let error as RewriteError where error == .timeout {
+            } catch is RewriteStageTimeoutError {
                 let waited = CFAbsoluteTimeGetCurrent() - rewriteStart
                 print("[Pipeline] Rewrite timed out after \(String(format: "%.2f", waited))s, using raw transcript")
                 output = transcript
             } catch {
-                print("[Pipeline] Rewrite failed, using raw transcript: \(error.localizedDescription)")
+                print("[Pipeline] Rewrite failed, using raw transcript: \(rewriteFailureSummary(error))")
                 output = transcript
             }
             rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
@@ -280,63 +287,56 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
 
 // MARK: - Timeout Helper
 
+private enum TimeoutContext: String, Sendable {
+    case pipeline
+    case rewrite
+}
+
+private enum RewriteStageTimeoutError: Error, Sendable {
+    case deadlineExceeded
+}
+
 /// Wraps an async operation with a deadline.
 /// Used to cap total multi-provider STT attempts (4 providers × retries = 360s worst-case without this).
 private func withPipelineTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds, context: "pipeline")
-
-    return try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
-        }
-        group.addTask {
-            try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            throw VoxError.pipelineTimeout
-        }
-        guard let result = try await group.next() else {
-            group.cancelAll()
-            throw VoxError.pipelineTimeout
-        }
-        group.cancelAll()
-        return result
-    }
+    try await withTimeout(seconds: seconds, context: .pipeline, timeoutError: VoxError.pipelineTimeout, operation: operation)
 }
 
-private func withRewriteTimeout<T: Sendable>(
+private func withTimeout<T: Sendable, TimeoutError: Error & Sendable>(
     seconds: TimeInterval,
+    context: TimeoutContext,
+    timeoutError: TimeoutError,
     operation: @escaping @Sendable () async throws -> T
 ) async throws -> T {
-    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds, context: "rewrite")
+    let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: seconds, context: context)
 
     return try await withThrowingTaskGroup(of: T.self) { group in
+        defer { group.cancelAll() }
+
         group.addTask {
             try await operation()
         }
         group.addTask {
             try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            throw RewriteError.timeout
+            throw timeoutError
         }
-        guard let result = try await group.next() else {
-            group.cancelAll()
-            throw RewriteError.timeout
-        }
-        group.cancelAll()
+        guard let result = try await group.next() else { throw timeoutError }
         return result
     }
 }
 
-private func validatedTimeoutNanoseconds(seconds: TimeInterval, context: String) throws -> UInt64 {
+private func validatedTimeoutNanoseconds(seconds: TimeInterval, context: TimeoutContext) throws -> UInt64 {
     guard seconds > 0, seconds.isFinite else {
-        throw VoxError.internalError("Invalid \(context) timeout: \(seconds)")
+        throw VoxError.internalError("Invalid \(context.rawValue) timeout: \(seconds)")
     }
 
     let nanoseconds = seconds * 1_000_000_000
     // Keep conversion strict: values rounding up to 2^64 must be rejected.
     guard nanoseconds.isFinite, nanoseconds >= 0, nanoseconds < Double(UInt64.max) else {
-        throw VoxError.internalError("Invalid \(context) timeout: \(seconds)")
+        throw VoxError.internalError("Invalid \(context.rawValue) timeout: \(seconds)")
     }
 
     return UInt64(nanoseconds)
@@ -353,16 +353,39 @@ struct RewriteStageTimeouts: Sendable {
         enhanceSeconds: 10
     )
 
-    func seconds(for level: ProcessingLevel) -> TimeInterval {
+    func seconds(for level: ProcessingLevel) -> TimeInterval? {
         switch level {
-        case .off:
-            return 0
         case .light:
             return lightSeconds
         case .aggressive:
             return aggressiveSeconds
         case .enhance:
             return enhanceSeconds
+        case .off:
+            return nil
         }
     }
+}
+
+private func rewriteFailureSummary(_ error: Error) -> String {
+    if let rewriteError = error as? RewriteError {
+        switch rewriteError {
+        case .auth:
+            return "auth"
+        case .quotaExceeded:
+            return "quotaExceeded"
+        case .throttled:
+            return "throttled"
+        case .invalidRequest:
+            return "invalidRequest"
+        case .network:
+            return "network"
+        case .timeout:
+            return "providerTimeout"
+        case .unknown:
+            return "unknown"
+        }
+    }
+    // Avoid logging free-form error text in release; keep it coarse.
+    return String(describing: type(of: error))
 }
