@@ -33,6 +33,9 @@ jobs:
         run: npm install -g promptfoo@latest
 
       - name: Run Evaluation
+        # promptfoo exits 100 when any test fails. Don't let that fail the job —
+        # the Check Results step is the actual gate with known-failure baseline.
+        continue-on-error: true
         run: |
           promptfoo eval \
             --config evals/promptfooconfig.yaml \
@@ -43,7 +46,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Generate Report
-        if: always()
         run: node evals/scripts/format-report.js < evals/output/results.json > evals/output/report.md
 
       - name: Post PR Comment
@@ -71,6 +73,7 @@ jobs:
           retention-days: 30
 
       - name: Check Results
+        if: always()
         run: |
           # Known failures: haiku injection (model follows "write a haiku") and
           # system prompt leak (Gemini Flash Lite vulnerable to direct extraction).
