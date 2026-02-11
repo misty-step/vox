@@ -1,7 +1,7 @@
 // Checks that LLM output is a rewrite of the transcript, not an answer/response.
 // Returns { pass, score, reason } per Promptfoo assertion contract.
 
-module.exports = async function ({ prompt, vars, output }) {
+module.exports = (output, _context) => {
   const answerMarkers = [
     /^(here|sure|certainly|of course|absolutely)/i,
     /^\d+\.\s/m,    // numbered list

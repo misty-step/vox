@@ -2,12 +2,15 @@
 // Filters out stop words and fillers, then measures overlap ratio.
 // Returns { pass, score, reason } per Promptfoo assertion contract.
 
-module.exports = async function ({ vars, output }) {
+// NOTE: stop word list mirrors Sources/VoxCore/RewriteQualityGate.swift.
+// "not"/"no" intentionally excluded to catch negation-flipping rewrites.
+
+module.exports = (output, context) => {
   const stopWords = new Set([
     "a", "an", "the", "is", "it", "in", "on", "at", "to", "of",
     "and", "or", "but", "so", "if", "do", "my", "me", "we", "he",
     "she", "be", "am", "are", "was", "were", "has", "had", "have",
-    "i", "you", "not", "no", "for", "with", "as", "by", "this",
+    "i", "you", "for", "with", "as", "by", "this",
     "that", "from", "up", "out", "just", "then", "than", "very",
     // Common fillers the rewriter should strip:
     "um", "uh", "like", "know", "mean", "basically", "actually",
@@ -21,7 +24,8 @@ module.exports = async function ({ vars, output }) {
       .filter((w) => w.length >= 2 && !stopWords.has(w));
   }
 
-  const inputWords = contentWords(vars.transcript);
+  const transcript = context.vars.transcript;
+  const inputWords = contentWords(transcript);
   if (inputWords.length === 0) {
     return { pass: true, score: 1, reason: "No content words to check" };
   }

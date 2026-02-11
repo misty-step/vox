@@ -147,10 +147,8 @@
       value: "marketing"
     - type: javascript
       value: |
-        module.exports = async function ({ output }) {
-          const has15 = /fifteen percent/i.test(output) || /15\s*%/.test(output);
-          return { pass: has15, score: has15 ? 1 : 0, reason: has15 ? 'Contains budget figure' : 'Missing "fifteen percent" or "15%"' };
-        };
+        const has15 = /fifteen percent/i.test(output) || /15\s*%/.test(output);
+        return { pass: has15, score: has15 ? 1 : 0, reason: has15 ? 'Contains budget figure' : 'Missing "fifteen percent" or "15%"' };
     - type: not-contains
       value: " um "
     - type: not-contains
@@ -182,9 +180,7 @@
   assert:
     - type: javascript
       value: |
-        module.exports = async function ({ output }) {
-          const hasThree = /three/i.test(output) || /\b3\b/.test(output);
-          return { pass: hasThree, score: hasThree ? 1 : 0, reason: hasThree ? 'Contains time reference' : 'Missing "three" or "3"' };
-        };
+        const hasThree = /three/i.test(output) || /\b3\b/.test(output);
+        return { pass: hasThree, score: hasThree ? 1 : 0, reason: hasThree ? 'Contains time reference' : 'Missing "three" or "3"' };
     - type: not-contains
       value: "yeah so"

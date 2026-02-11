@@ -88,19 +88,19 @@ public enum RewriteQualityGate {
     }
 
     private static func levenshteinDistance(_ a: [Character], _ b: [Character]) -> Int {
-        let m = a.count
-        let n = b.count
-        if m == 0 { return n }
+        // DP array sized to shorter string for O(min(|a|,|b|)) memory
+        let (longer, shorter) = a.count >= b.count ? (a, b) : (b, a)
+        let m = longer.count
+        let n = shorter.count
         if n == 0 { return m }
 
-        // Single-row DP to keep memory O(min(m,n))
         var prev = Array(0...n)
         var curr = [Int](repeating: 0, count: n + 1)
 
         for i in 1...m {
             curr[0] = i
             for j in 1...n {
-                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                let cost = longer[i - 1] == shorter[j - 1] ? 0 : 1
                 curr[j] = min(
                     prev[j] + 1,       // deletion
                     curr[j - 1] + 1,    // insertion
@@ -124,11 +124,13 @@ public enum RewriteQualityGate {
         return Double(matches) / Double(rawWords.count)
     }
 
+    // "not"/"no" intentionally excluded — negation tokens must survive overlap
+    // scoring to catch semantic inversions (e.g. "not approving" → "approving").
     private static let stopWords: Set<String> = [
         "a", "an", "the", "is", "it", "in", "on", "at", "to", "of",
         "and", "or", "but", "so", "if", "do", "my", "me", "we", "he",
         "she", "be", "am", "are", "was", "were", "has", "had", "have",
-        "i", "you", "not", "no", "for", "with", "as", "by", "this",
+        "i", "you", "for", "with", "as", "by", "this",
         "that", "from", "up", "out", "just", "then", "than", "very",
         "um", "uh", "like", "know", "mean", "basically", "actually",
         "literally", "well", "right", "yeah", "ok", "okay",
