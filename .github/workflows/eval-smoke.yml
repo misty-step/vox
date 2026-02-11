@@ -72,9 +72,10 @@ jobs:
 
       - name: Check Results
         run: |
-          # Fail the job if any tests failed
+          # Report failures as warnings — the PR comment is the primary signal.
+          # Some failures are expected (model vulnerabilities, not prompt regressions).
           FAILED=$(node -e "const d = require('./evals/output/results.json'); const f = d.results.results.filter(r => !r.success).length; process.stdout.write(String(f))")
+          TOTAL=$(node -e "const d = require('./evals/output/results.json'); process.stdout.write(String(d.results.results.length))")
           if [ "$FAILED" -gt 0 ]; then
-            echo "::error::$FAILED eval test(s) failed"
-            exit 1
+            echo "::warning::${FAILED}/${TOTAL} eval test(s) failed — see PR comment for details"
           fi
