@@ -1,0 +1,44 @@
+name: 'Eval: Smoke Tests'
+
+on:
+  pull_request:
+    paths:
+      - 'Sources/VoxProviders/RewritePrompts.swift'
+      - 'Sources/VoxCore/RewriteQualityGate.swift'
+      - 'evals/**'
+  workflow_dispatch:
+
+jobs:
+  eval:
+    name: Rewrite Smoke Tests
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    defaults:
+      run:
+        working-directory: evals
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Cache Promptfoo
+        uses: actions/cache@v4
+        with:
+          path: ~/.promptfoo
+          key: ${{ runner.os }}-promptfoo-${{ hashFiles('evals/promptfooconfig.yaml') }}
+          restore-keys: ${{ runner.os }}-promptfoo-
+
+      - name: Run Evaluation
+        uses: promptfoo/promptfoo-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          config-path: evals/promptfooconfig.yaml
+          cache: true
+          no-progress-bar: true
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

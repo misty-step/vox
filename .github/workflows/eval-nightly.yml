@@ -1,0 +1,38 @@
+name: 'Eval: Nightly'
+
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  eval:
+    name: Full Rewrite Evaluation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install promptfoo
+        run: npm install -g promptfoo@latest
+
+      - name: Run Full Suite
+        run: |
+          promptfoo eval --config promptfooconfig.yaml --tests datasets/smoke.yaml --tests datasets/injection.yaml -o output/results.json
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results-${{ github.run_number }}
+          path: evals/output/
+          retention-days: 30
