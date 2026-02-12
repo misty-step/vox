@@ -96,6 +96,7 @@ private extension ProcessingLevel {
 public final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
+    private let onSetupChecklist: () -> Void
     private let onSettings: () -> Void
     private let onQuit: () -> Void
     private let prefs = PreferencesStore.shared
@@ -104,8 +105,14 @@ public final class StatusBarController: NSObject {
 
     private var currentState: StatusBarState = .idle(processingLevel: .off)
 
-    public init(onToggle: @escaping () -> Void, onSettings: @escaping () -> Void, onQuit: @escaping () -> Void) {
+    public init(
+        onToggle: @escaping () -> Void,
+        onSetupChecklist: @escaping () -> Void,
+        onSettings: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) {
         self.onToggle = onToggle
+        self.onSetupChecklist = onSetupChecklist
         self.onSettings = onSettings
         self.onQuit = onQuit
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -198,6 +205,10 @@ public final class StatusBarController: NSObject {
         menu.addItem(processingItem)
         menu.addItem(.separator())
 
+        let setupItem = NSMenuItem(title: "Setup Checklist...", action: #selector(openSetupChecklist), keyEquivalent: "")
+        setupItem.target = self
+        menu.addItem(setupItem)
+
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -258,6 +269,7 @@ public final class StatusBarController: NSObject {
     }
 
     @objc private func toggleRecording() { onToggle() }
+    @objc private func openSetupChecklist() { onSetupChecklist() }
     @objc private func openSettings() { onSettings() }
     @objc private func quitApp() { onQuit() }
 }
