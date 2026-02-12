@@ -6,7 +6,9 @@ VOX_ENV="${SCRIPT_DIR}/../.env.local"
 ROOT_DIR="${SCRIPT_DIR}/.."
 
 if [ -f "$VOX_ENV" ]; then
-    export $(grep -E '^(ELEVENLABS_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|DEEPGRAM_API_KEY|OPENAI_API_KEY)=' "$VOX_ENV" | xargs)
+    while IFS= read -r line; do
+        [ -n "$line" ] && export "$line"
+    done < <(grep -E '^(ELEVENLABS_API_KEY|GEMINI_API_KEY|OPENROUTER_API_KEY|DEEPGRAM_API_KEY|OPENAI_API_KEY)=' "$VOX_ENV" || true)
 fi
 
 if [ -z "${VOX_APP_VERSION:-}" ]; then
