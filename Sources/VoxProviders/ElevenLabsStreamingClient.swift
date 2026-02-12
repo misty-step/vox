@@ -1,85 +1,71 @@
 import Foundation
 import VoxCore
 
-protocol DeepgramWebSocketTransport: Sendable {
+protocol ElevenLabsWebSocketTransport: Sendable {
     func connect() async throws
-    func sendData(_ data: Data) async throws
     func sendText(_ text: String) async throws
-    func receive() async throws -> DeepgramWebSocketMessage
+    func receive() async throws -> String
     func close()
 }
 
-enum DeepgramWebSocketMessage: Sendable {
-    case text(String)
-    case data(Data)
-}
-
-public final class DeepgramStreamingClient: StreamingSTTProvider {
+public final class ElevenLabsStreamingClient: StreamingSTTProvider {
     private let apiKey: String
-    private let model: String
     private let sessionFinalizationTimeout: TimeInterval
-    private let transportFactory: @Sendable (URLRequest) -> any DeepgramWebSocketTransport
+    private let transportFactory: @Sendable (URLRequest) -> any ElevenLabsWebSocketTransport
 
     public convenience init(
         apiKey: String,
-        model: String = "nova-3",
         session: URLSession = .shared
     ) {
         self.init(
             apiKey: apiKey,
-            model: model,
             sessionFinalizationTimeout: 5.0,
             transportFactory: { request in
-                URLSessionWebSocketTransport(task: session.webSocketTask(with: request))
+                URLSessionElevenLabsTransport(task: session.webSocketTask(with: request))
             }
         )
     }
 
     init(
         apiKey: String,
-        model: String = "nova-3",
         sessionFinalizationTimeout: TimeInterval = 5.0,
-        transportFactory: @escaping @Sendable (URLRequest) -> any DeepgramWebSocketTransport
+        transportFactory: @escaping @Sendable (URLRequest) -> any ElevenLabsWebSocketTransport
     ) {
         self.apiKey = apiKey
-        self.model = model
         self.sessionFinalizationTimeout = sessionFinalizationTimeout
         self.transportFactory = transportFactory
     }
 
     public func makeSession() async throws -> any StreamingSTTSession {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw StreamingSTTError.connectionFailed("Deepgram API key is missing")
+            throw StreamingSTTError.connectionFailed("ElevenLabs API key is missing")
         }
-        var components = URLComponents(string: "wss://api.deepgram.com/v1/listen")!
+        var components = URLComponents(string: "wss://api.elevenlabs.io/v1/speech-to-text/realtime")!
         components.queryItems = [
-            URLQueryItem(name: "model", value: model),
-            URLQueryItem(name: "encoding", value: "linear16"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "channels", value: "1"),
-            URLQueryItem(name: "interim_results", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "model_id", value: "scribe_v2_realtime"),
+            URLQueryItem(name: "audio_format", value: "pcm_16000"),
+            URLQueryItem(name: "commit_strategy", value: "manual"),
         ]
         guard let url = components.url else {
-            throw StreamingSTTError.connectionFailed("Invalid Deepgram WebSocket URL")
+            throw StreamingSTTError.connectionFailed("Invalid ElevenLabs WebSocket URL")
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
         let transport = transportFactory(request)
         do {
             try await transport.connect()
         } catch {
             throw StreamingSTTError.connectionFailed(error.localizedDescription)
         }
-        return DeepgramStreamingSession(
+        return ElevenLabsStreamingSession(
             transport: transport,
             finalizationTimeout: sessionFinalizationTimeout
         )
     }
 }
 
-private final class URLSessionWebSocketTransport: DeepgramWebSocketTransport, @unchecked Sendable {
+private final class URLSessionElevenLabsTransport: ElevenLabsWebSocketTransport, @unchecked Sendable {
     private let task: URLSessionWebSocketTask
 
     init(task: URLSessionWebSocketTask) {
@@ -90,23 +76,19 @@ private final class URLSessionWebSocketTransport: DeepgramWebSocketTransport, @u
         task.resume()
     }
 
-    func sendData(_ data: Data) async throws {
-        try await task.send(.data(data))
-    }
-
     func sendText(_ text: String) async throws {
         try await task.send(.string(text))
     }
 
-    func receive() async throws -> DeepgramWebSocketMessage {
+    func receive() async throws -> String {
         let message = try await task.receive()
         switch message {
         case .string(let text):
-            return .text(text)
+            return text
         case .data(let data):
-            return .data(data)
+            return String(data: data, encoding: .utf8) ?? ""
         @unknown default:
-            return .text("")
+            return ""
         }
     }
 
@@ -115,23 +97,23 @@ private final class URLSessionWebSocketTransport: DeepgramWebSocketTransport, @u
     }
 }
 
-private actor DeepgramStreamingSession: StreamingSTTSession {
+private actor ElevenLabsStreamingSession: StreamingSTTSession {
     nonisolated let partialTranscripts: AsyncStream<PartialTranscript>
 
-    private let transport: any DeepgramWebSocketTransport
+    private let transport: any ElevenLabsWebSocketTransport
     private let continuation: AsyncStream<PartialTranscript>.Continuation
     private let finalizationTimeout: TimeInterval
     private var receiveTask: Task<Void, Never>?
-    private var finalSegments: [String] = []
     private var latestPartial: String = ""
+    private var committedSegments: [String] = []
     private var receiveError: StreamingSTTError?
     private var sendError: StreamingSTTError?
-    private var finishRequested = false
+    private var commitSent = false
     private var finished = false
     private var receiveLoopCompleted = false
 
     init(
-        transport: any DeepgramWebSocketTransport,
+        transport: any ElevenLabsWebSocketTransport,
         finalizationTimeout: TimeInterval = 5.0
     ) {
         self.transport = transport
@@ -154,8 +136,12 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
         if let sendError {
             throw sendError
         }
+        let base64 = chunk.pcm16LEData.base64EncodedString()
+        let json = """
+        {"message_type":"input_audio_chunk","audio_base_64":"\(base64)","commit":false,"sample_rate":\(chunk.sampleRate)}
+        """
         do {
-            try await transport.sendData(chunk.pcm16LEData)
+            try await transport.sendText(json)
         } catch is CancellationError {
             let error = StreamingSTTError.cancelled
             sendError = error
@@ -173,13 +159,17 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             throw StreamingSTTError.invalidState("finish() already called")
         }
         finished = true
-        finishRequested = true
+        commitSent = true
 
         if let sendError {
             throw sendError
         }
+        // Send commit message — ElevenLabs guarantees a committed_transcript response
+        let commitJSON = """
+        {"message_type":"input_audio_chunk","audio_base_64":"","commit":true,"sample_rate":16000}
+        """
         do {
-            try await transport.sendText("{\"type\":\"CloseStream\"}")
+            try await transport.sendText(commitJSON)
         } catch is CancellationError {
             throw StreamingSTTError.cancelled
         } catch {
@@ -192,18 +182,15 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             transport.close()
             continuation.finish()
 
-            // Recover accumulated transcript instead of falling back to batch.
-            // During real-time streaming, finalSegments/latestPartial already
-            // contain most or all of the transcript — only the trailing words
-            // after the Finalize signal may be missing.
-            let assembledFinal = finalSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !assembledFinal.isEmpty {
-                print("[Deepgram] Finalize timed out, returning accumulated transcript (\(assembledFinal.count) chars)")
-                return assembledFinal
+            // Recover accumulated committed segments first, then partials
+            let assembled = committedSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !assembled.isEmpty {
+                print("[ElevenLabs] Commit timed out, returning accumulated segments (\(assembled.count) chars)")
+                return assembled
             }
             let partialFallback = latestPartial.trimmingCharacters(in: .whitespacesAndNewlines)
             if !partialFallback.isEmpty {
-                print("[Deepgram] Finalize timed out, returning latest partial (\(partialFallback.count) chars)")
+                print("[ElevenLabs] Commit timed out, returning latest partial (\(partialFallback.count) chars)")
                 return partialFallback
             }
             throw error
@@ -216,9 +203,9 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             throw receiveError
         }
 
-        let assembledFinal = finalSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !assembledFinal.isEmpty {
-            return assembledFinal
+        let assembled = committedSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !assembled.isEmpty {
+            return assembled
         }
         let fallback = latestPartial.trimmingCharacters(in: .whitespacesAndNewlines)
         if !fallback.isEmpty {
@@ -237,9 +224,7 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
     }
 
     private func ensureReceiveLoopStarted() {
-        guard receiveTask == nil else {
-            return
-        }
+        guard receiveTask == nil else { return }
         receiveTask = Task { [weak self] in
             await self?.receiveLoop()
         }
@@ -248,8 +233,8 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
     private func receiveLoop() async {
         while !Task.isCancelled {
             do {
-                let message = try await transport.receive()
-                if try await shouldStopReceiving(after: message) {
+                let text = try await transport.receive()
+                if handleTextMessage(text) {
                     continuation.finish()
                     receiveLoopCompleted = true
                     return
@@ -268,61 +253,59 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
         receiveLoopCompleted = true
     }
 
-    private func shouldStopReceiving(after message: DeepgramWebSocketMessage) async throws -> Bool {
-        switch message {
-        case .data:
-            return false
-        case .text(let text):
-            return handleTextMessage(text)
-        }
-    }
-
     private func handleTextMessage(_ text: String) -> Bool {
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
         }
 
-        if let message = object["error"] as? String {
-            receiveError = .provider(message)
-            return true
-        }
+        let messageType = object["message_type"] as? String
 
-        if let transcript = transcript(from: object) {
-            let isFinal = (object["is_final"] as? Bool) ?? false
-            latestPartial = transcript
-            continuation.yield(PartialTranscript(text: transcript, isFinal: isFinal))
-            if isFinal {
-                finalSegments.append(transcript)
+        // Error responses
+        if messageType == "error" {
+            let errorType = object["error_type"] as? String ?? "unknown"
+            let detail = object["error_message"] as? String ?? errorType
+            switch errorType {
+            case "auth_error":
+                receiveError = .connectionFailed(detail)
+            case "quota_exceeded", "rate_limited":
+                receiveError = .provider(detail)
+            default:
+                receiveError = .provider(detail)
             }
-            // Don't early-exit on is_final after CloseStream — Deepgram may send
-            // multiple trailing finals before the definitive Metadata message.
+            return true
         }
 
-        let type = (object["type"] as? String)?.lowercased()
-        if type == "metadata" {
-            return true
+        // Partial transcript
+        if messageType == "partial_transcript" {
+            if let transcript = object["text"] as? String {
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    latestPartial = trimmed
+                    continuation.yield(PartialTranscript(text: trimmed, isFinal: false))
+                }
+            }
+            return false
         }
-        if finishRequested && type == "utteranceend" {
-            return true
+
+        // Committed transcript — may arrive mid-session (auto-commit on silence/safety valve)
+        // or as response to our manual commit. Only stop loop on OUR commit response.
+        if messageType == "committed_transcript" {
+            if let transcript = object["text"] as? String {
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    committedSegments.append(trimmed)
+                    continuation.yield(PartialTranscript(text: trimmed, isFinal: true))
+                }
+            }
+            return commitSent
         }
+
         return false
     }
 
-    private func transcript(from object: [String: Any]) -> String? {
-        guard let channel = object["channel"] as? [String: Any],
-              let alternatives = channel["alternatives"] as? [[String: Any]],
-              let transcript = alternatives.first?["transcript"] as? String else {
-            return nil
-        }
-        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     private func awaitReceiveLoop(timeout: TimeInterval) async throws {
-        guard receiveTask != nil else {
-            return
-        }
+        guard receiveTask != nil else { return }
         let timeoutNanoseconds = try validatedTimeoutNanoseconds(seconds: timeout)
         let sleepInterval: UInt64 = 10_000_000
         var waited: UInt64 = 0

@@ -43,12 +43,16 @@ public enum AudioConverter {
         return try await runConversion(arguments: arguments, outputURL: outputURL)
     }
 
+    private static let processTimeout: TimeInterval = 30
+
     private static func runConversion(arguments: [String], outputURL: URL) async throws -> URL {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
         process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
 
         do {
             try await withTaskCancellationHandler {
@@ -57,6 +61,12 @@ public enum AudioConverter {
                         if proc.terminationStatus == 0 {
                             continuation.resume()
                         } else {
+                            let stderrData = stderrPipe.fileHandleForReading.availableData
+                            let stderr = String(data: stderrData, encoding: .utf8)?
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if let stderr, !stderr.isEmpty {
+                                print("[AudioConverter] afconvert stderr: \(String(stderr.prefix(500)))")
+                            }
                             continuation.resume(
                                 throwing: AudioConversionError.conversionFailed(exitCode: proc.terminationStatus)
                             )
@@ -64,6 +74,13 @@ public enum AudioConverter {
                     }
                     do {
                         try process.run()
+                        // Enforce process timeout
+                        DispatchQueue.global().asyncAfter(deadline: .now() + processTimeout) {
+                            if process.isRunning {
+                                print("[AudioConverter] afconvert timed out after \(Int(processTimeout))s, killing")
+                                process.terminate()
+                            }
+                        }
                     } catch {
                         continuation.resume(throwing: AudioConversionError.launchFailed(underlying: error))
                     }

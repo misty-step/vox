@@ -28,7 +28,6 @@ public final class VoxSession: ObservableObject {
     private let errorPresenter: (String) -> Void
     private let pipeline: DictationProcessing?
     private let streamingSTTProvider: StreamingSTTProvider?
-    private let streamingFinalizeTimeout: TimeInterval
     private var streamingSetupTask: Task<Void, Never>?
     private let streamingSetupTimeout: TimeInterval
     private var levelTimer: Timer?
@@ -44,7 +43,6 @@ public final class VoxSession: ObservableObject {
         requestMicrophoneAccess: (() async -> Bool)? = nil,
         errorPresenter: ((String) -> Void)? = nil,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingFinalizeTimeout: TimeInterval = 1.5,
         streamingSetupTimeout: TimeInterval = 3.0
     ) {
         self.recorder = recorder ?? AudioRecorder()
@@ -63,7 +61,6 @@ public final class VoxSession: ObservableObject {
             alert.runModal()
         }
         self.streamingSTTProvider = streamingSTTProvider
-        self.streamingFinalizeTimeout = streamingFinalizeTimeout
         self.streamingSetupTimeout = streamingSetupTimeout
     }
 
@@ -241,11 +238,17 @@ public final class VoxSession: ObservableObject {
         guard Self.isStreamingAllowed(environment: ProcessInfo.processInfo.environment) else {
             return nil
         }
-        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !deepgramKey.isEmpty else {
-            return nil
+        // Prefer ElevenLabs (150ms latency, guaranteed commit response)
+        let elevenLabsKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !elevenLabsKey.isEmpty {
+            return ElevenLabsStreamingClient(apiKey: elevenLabsKey)
         }
-        return DeepgramStreamingClient(apiKey: deepgramKey)
+        // Fall back to Deepgram streaming
+        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !deepgramKey.isEmpty {
+            return DeepgramStreamingClient(apiKey: deepgramKey)
+        }
+        return nil
     }
 
     nonisolated static func isHedgedRoutingSelected(environment: [String: String]) -> Bool {
@@ -489,7 +492,7 @@ public final class VoxSession: ObservableObject {
         audioURL: URL
     ) async throws -> String {
         do {
-            let transcript = try await bridge.finish(timeout: streamingFinalizeTimeout)
+            let transcript = try await bridge.finish()
             let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalized.isEmpty else {
                 throw VoxError.noTranscript
@@ -592,7 +595,7 @@ private final class StreamingAudioBridge: @unchecked Sendable {
         }
     }
 
-    func finish(timeout: TimeInterval) async throws -> String {
+    func finish() async throws -> String {
         let (activeDrain, capturedPump) = queueLock.withLock {
             () -> (Task<Void, Never>?, StreamingSessionPump?) in
             acceptsChunks = false
@@ -604,7 +607,7 @@ private final class StreamingAudioBridge: @unchecked Sendable {
         guard let capturedPump else {
             throw StreamingSTTError.connectionFailed("Streaming session was not established")
         }
-        return try await capturedPump.finish(timeout: timeout)
+        return try await capturedPump.finish()
     }
 
     func cancel() async {
@@ -698,7 +701,7 @@ private actor StreamingSessionPump {
         }
     }
 
-    func finish(timeout: TimeInterval) async throws -> String {
+    func finish() async throws -> String {
         ensurePartialReaderStarted()
         guard state == .open else {
             throw StreamingSTTError.invalidState("Streaming pump already finished")
@@ -708,14 +711,9 @@ private actor StreamingSessionPump {
             throw sendError
         }
 
-        let transcript: String
-        do {
-            transcript = try await withStreamingFinalizeTimeout(seconds: timeout) {
-                try await self.session.finish()
-            }
-        } catch {
-            throw error
-        }
+        // Session handles its own finalization timeout + transcript recovery.
+        // No outer timeout race — single timeout avoids discarding recovered transcripts.
+        let transcript = try await session.finish()
 
         state = .closed
         let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -761,28 +759,6 @@ private func withStreamingSetupTimeout<T: Sendable>(
         }
         guard let result = try await group.next() else {
             throw StreamingSTTError.connectionFailed("Streaming setup timed out")
-        }
-        group.cancelAll()
-        return result
-    }
-}
-
-private func withStreamingFinalizeTimeout<T: Sendable>(
-    seconds: TimeInterval,
-    operation: @escaping @Sendable () async throws -> T
-) async throws -> T {
-    let timeoutNanoseconds = try validatedStreamingTimeoutNanoseconds(seconds: seconds)
-    return try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
-        }
-        group.addTask {
-            try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            throw StreamingSTTError.finalizationTimeout
-        }
-        guard let result = try await group.next() else {
-            group.cancelAll()
-            throw StreamingSTTError.finalizationTimeout
         }
         group.cancelAll()
         return result
