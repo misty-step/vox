@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-02-12T17:01:41Z",
+  "audio_file": "/tmp/stt-eval-test-tone.wav",
+  "duration_s": 3.0024375,
+  "iterations": 1,
+  "results": {
+    "ElevenLabs Scribe v2": [
+      {
+        "iteration": 1,
+        "transcript": "[beep]",
+        "latency": 0.38661404186859727,
+        "chars": 6
+      }
+    ],
+    "Deepgram Nova-3": [
+      {
+        "iteration": 1,
+        "transcript": "",
+        "latency": 0.6107634170912206,
+        "chars": 0
+      }
+    ],
+    "OpenAI gpt-4o-mini-transcribe": [
+      {
+        "iteration": 1,
+        "transcript": "",
+        "latency": 0.9461424169130623,
+        "chars": 0
+      }
+    ],
+    "OpenAI whisper-1": [
+      {
+        "iteration": 1,
+        "transcript": "",
+        "latency": 4.613741625100374,
+        "chars": 0
+      }
+    ]
+  },
+  "consensus": "[beep]"
+}
