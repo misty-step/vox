@@ -13,7 +13,7 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
                      VoxAppKit (library)
  ┌─────────────────────────────────────────────────────────────────────┐
  │ AppDelegate • VoxSession • DictationPipeline • StatusBarController   │
- │ SettingsWindowController • PreferencesStore • ProcessingTab          │
+ │ SettingsWindowController • PreferencesStore • SettingsView           │
  └─────────────────────────────────────────────────────────────────────┘
                 ▲                         ▲
                 │                         │
@@ -25,8 +25,9 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 │ HotkeyMonitor            │     │ WhisperClient (STT)            │
  │ HUDController / HUDView  │     │ AppleSpeechClient (STT)        │
  │ ClipboardPaster          │     │ AudioConverter (CAF→WAV)       │
- │ KeychainHelper           │     │ OpenRouterClient (rewrite)     │
- │ PermissionManager        │     │ RewritePrompts                 │
+ │ KeychainHelper           │     │ GeminiClient (rewrite)         │
+ │ PermissionManager        │     │ OpenRouterClient (rewrite)     │
+ │                          │     │ RewritePrompts                 │
  └──────────────────────────┘     └───────────────────────────────┘
                 ▲                         ▲
                 └──────────────┬──────────┘
@@ -46,7 +47,20 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 
 ## STT Resilience Chain
 
-Providers are wrapped in decorators. The default runtime path uses `HedgedSTTProvider` for staggered parallel launch.
+Providers are wrapped in decorators.
+
+Default routing: sequential primary → fallback → Apple Speech safety net.
+
+```text
+                         ConcurrencyLimit(8 default)
+                                   │
+                                   ▼
+                     Sequential FallbackSTTProvider chain
+                                   │
+      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Whisper(Timeout+Retry) → Apple Speech
+```
+
+Opt-in hedged routing: `VOX_STT_ROUTING=hedged` runs a staggered parallel race.
 
 ```text
                                  ConcurrencyLimit(8 default)
@@ -60,9 +74,10 @@ Providers are wrapped in decorators. The default runtime path uses `HedgedSTTPro
 Each decorator is a `STTProvider`:
 - **TimeoutSTTProvider**: races transcription against a dynamic deadline (`max(baseTimeout, baseTimeout + fileSizeMB * secondsPerMB)`); current cloud wiring uses `baseTimeout: 30`, `secondsPerMB: 2`
 - **RetryingSTTProvider**: retries on `.isRetryable` errors with exponential backoff + jitter
-- **HedgedSTTProvider**: launches providers with stagger delays and returns first success
+- **FallbackSTTProvider**: sequential primary → fallback on eligible errors
+- **HedgedSTTProvider**: launches providers with stagger delays and returns first success (opt-in)
 - **ConcurrencyLimitedSTTProvider**: bounds in-flight STT requests and queues overflow
-- **HealthAwareSTTProvider / FallbackSTTProvider**: retained for alternative routing strategies and tests
+- **HealthAwareSTTProvider**: retained for adaptive routing strategies and tests
 
 Error classification is centralized in `STTError.isRetryable`, `STTError.isFallbackEligible`, and `STTError.isTransientForHealthScoring`.
 
@@ -74,8 +89,8 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioEngine` (default backend) and emits PCM chunks when available
 5) If Deepgram streaming is available (key present) and not disabled (`VOX_DISABLE_STREAMING_STT`), `VoxSession` forwards PCM chunks to a `StreamingSTTSession`
 6) On stop, `VoxSession` attempts streaming `finish()` with bounded timeout
-7) If streaming is unavailable, setup fails, or finalize fails/times out, fallback to hedged batch STT router (Apple Speech + staggered cloud hedges)
-8) Transcript → `OpenRouterClient` rewrite (if `ProcessingLevel` = light/aggressive/enhance)
+7) If streaming is unavailable, setup fails, or finalize fails/times out, fallback to batch STT router (default sequential; opt-in `VOX_STT_ROUTING=hedged`)
+8) Transcript → rewrite (Gemini, fallback OpenRouter) when `ProcessingLevel` = light/aggressive/enhance
 9) `RewriteQualityGate` validates output length ratio
 10) Result → `ClipboardPaster` → text insertion
 
@@ -170,11 +185,13 @@ Primary seams:
 
 BYOK. `PreferencesStore` reads env first, then Keychain:
 - `ELEVENLABS_API_KEY` — primary STT (ElevenLabs Scribe v2)
-- `OPENROUTER_API_KEY` — rewriting
-- `DEEPGRAM_API_KEY` — hedged cloud STT (Deepgram Nova-3, launches at 5s)
-- `OPENAI_API_KEY` — hedged cloud STT (Whisper, launches at 10s)
+- `GEMINI_API_KEY` — primary rewriting
+- `OPENROUTER_API_KEY` — rewrite fallback
+- `DEEPGRAM_API_KEY` — STT fallback + optional streaming STT
+- `OPENAI_API_KEY` — STT fallback via Whisper
 - `VOX_MAX_CONCURRENT_STT` — optional global in-flight STT limit (default: `8`)
 - `VOX_DISABLE_STREAMING_STT` — kill switch to force batch-only STT (`1`/`true`)
+- `VOX_STT_ROUTING` — set to `hedged` for staggered parallel STT race (default: sequential fallback)
 - `VOX_AUDIO_BACKEND` — `recorder` for legacy AVAudioRecorder (default: engine)
 
 Endpoints:
@@ -193,7 +210,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Entry point | VoxApp | `main.swift` |
 | App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift`, `StatusBarIconRenderer.swift` |
 | Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
-| Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `ProcessingTab.swift`, `APIKeysTab.swift` |
+| Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `BasicsSection.swift`, `CloudProvidersSection.swift`, `CloudKeysSheet.swift`, `CloudProviderCatalog.swift` |
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |

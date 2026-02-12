@@ -11,7 +11,7 @@ SuperWhisper alternative that's simpler and smarter.
 ## Features
 
 - **Press Option+Space** to start/stop recording
-- **Hedged STT racing**: Apple Speech + cloud providers run in a staggered race (ElevenLabs `0s`, Deepgram `5s`, Whisper `10s`)
+- **STT resilience**: sequential fallback (ElevenLabs → Deepgram → Whisper → Apple Speech); opt-in hedged routing via `VOX_STT_ROUTING=hedged`
 - **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
 - **Four processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite), Enhance (structured prompt upgrade)
 - **Microphone selection**: choose input device from Settings
@@ -30,12 +30,13 @@ git clone https://github.com/misty-step/vox.git
 cd vox
 swift build
 
-# Set API keys (or configure in Settings after launch)
-export ELEVENLABS_API_KEY=your-key
-export OPENROUTER_API_KEY=your-key
+# Configure keys
+cp .env.example .env.local
+# edit .env.local
+# (or configure in Settings after launch)
 
 # Run
-swift run Vox
+./scripts/run.sh
 ```
 
 Grant Accessibility permissions when prompted. Press Option+Space to dictate.
@@ -48,10 +49,11 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 - Swift 5.9+
 - [SwiftLint](https://github.com/realm/SwiftLint) (development only, `brew install swiftlint`)
 - [ElevenLabs API key](https://elevenlabs.io) for primary transcription
-- [OpenRouter API key](https://openrouter.ai) for AI rewriting
-- [Deepgram API key](https://console.deepgram.com) (optional) for hedged cloud transcription
-- [OpenAI API key](https://platform.openai.com) (optional) for Whisper hedged cloud transcription
-- Apple Speech is always available and launches at hedge start (no key needed)
+- [Gemini API key](https://ai.google.dev/) for AI rewriting
+- [OpenRouter API key](https://openrouter.ai) (optional) for rewrite fallback
+- [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription and streaming STT
+- [OpenAI API key](https://platform.openai.com) (optional) for Whisper fallback transcription
+- Apple Speech is always available as an on-device fallback (no key needed)
 
 ### Installation
 
@@ -90,10 +92,14 @@ API keys can be provided two ways:
 **Environment variables** (recommended for development):
 ```bash
 export ELEVENLABS_API_KEY=your-key
-export OPENROUTER_API_KEY=your-key
-export DEEPGRAM_API_KEY=your-key  # optional fallback
-export OPENAI_API_KEY=your-key    # optional Whisper fallback
-export VOX_MAX_CONCURRENT_STT=8   # optional global STT in-flight limit
+export GEMINI_API_KEY=your-key
+export OPENROUTER_API_KEY=your-key         # optional rewrite fallback
+export DEEPGRAM_API_KEY=your-key           # optional STT fallback + streaming
+export OPENAI_API_KEY=your-key             # optional Whisper fallback
+export VOX_MAX_CONCURRENT_STT=8            # optional global STT in-flight limit
+export VOX_DISABLE_STREAMING_STT=1         # optional: disable streaming STT path
+export VOX_STT_ROUTING=hedged              # optional: parallel race w stagger delays
+export VOX_AUDIO_BACKEND=recorder          # optional: legacy file-only audio backend
 ```
 
 **Settings window** (persisted in Keychain):
@@ -123,15 +129,15 @@ swift build -c release
 # CI-equivalent strict tests with hang timeout
 ./scripts/run-tests-ci.sh
 
-# Run with verbose output
-swift run Vox
+# Run (loads .env.local)
+./scripts/run.sh
 ```
 
 ### Project Structure
 
 ```
 Sources/
-  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/hedged racing/health-aware)
+  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/routing/health-aware)
   VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
   VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
   VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
@@ -152,7 +158,7 @@ Available via OpenRouter:
 
 ## Product Standards
 
-- **Version/build in-app**: shown in Settings footer (with deterministic debug fallback values).
+- **Version/build in-app**: shown in Settings footer (release build via Info.plist; dev can set `VOX_APP_VERSION`/`VOX_BUILD_NUMBER`).
 - **Attribution**: Vox by Misty Step.
 - **Contact/help**: open a support issue at https://github.com/misty-step/vox/issues.
 
