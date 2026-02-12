@@ -31,10 +31,17 @@ struct CloudProvidersSection: View {
                     Button("Manage Keys…", action: onManageKeys)
                 }
 
-                Text("Tip: env vars override Keychain (development). Edits here save to Keychain.")
+                Text("Keys are stored securely in macOS Keychain.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+#if DEBUG
+                Text("Development: env vars override Keychain.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+#endif
             }
             .padding(12)
         }

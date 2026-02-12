@@ -8,10 +8,17 @@ struct CloudKeysSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Cloud Provider Keys")
                     .font(.title3.weight(.semibold))
-                Text("Optional. Keys are loaded from environment variables first, then Keychain.")
+                Text("Optional. Keys are stored securely in macOS Keychain.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+#if DEBUG
+                Text("Development: env vars override Keychain.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+#endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
