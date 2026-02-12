@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CloudKeysSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var prefs = PreferencesStore.shared
 
     var body: some View {
@@ -87,6 +88,15 @@ struct CloudKeysSheet: View {
                 }
                 .padding(16)
             }
+
+            Divider()
+
+            HStack {
+                Spacer(minLength: 0)
+                Button("Close") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(16)
         }
     }
 
