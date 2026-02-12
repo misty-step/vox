@@ -168,6 +168,10 @@ Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, cod
 
 Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && ./scripts/run-tests-ci.sh`, submit PR.
 
+## Use as a Library
+
+Vox publishes `VoxCore`, `VoxProviders`, `VoxMac`, and `VoxAppKit` as SwiftPM library products. See [Wrapper Integration Points](docs/ARCHITECTURE.md#wrapper-integration-points) for dependency setup and extension seams.
+
 ## Docs
 
 - Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

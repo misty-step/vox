@@ -171,7 +171,28 @@ App wires concrete providers in `DictationPipeline`. Swap implementations withou
 
 Vox is designed for composition. Wrappers should import Vox modules and add behavior through seams, not by forking `VoxSession` or `DictationPipeline`.
 
-Primary seams:
+### SwiftPM Dependency
+
+```swift
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/misty-step/vox.git", from: "1.7.0"),
+],
+targets: [
+    .target(
+        name: "YourTarget",
+        dependencies: [
+            .product(name: "VoxAppKit", package: "vox"),
+            // Or pick individual layers:
+            // .product(name: "VoxCore", package: "vox"),
+            // .product(name: "VoxProviders", package: "vox"),
+            // .product(name: "VoxMac", package: "vox"),
+        ]
+    ),
+]
+```
+
+### Primary seams
 - Decorate `STTProvider` / `RewriteProvider` for network policy, retries, and metering.
 - Replace `PreferencesReading` and key providers for managed configuration.
 - Implement `SessionExtension` to add:

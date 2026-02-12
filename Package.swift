@@ -7,6 +7,10 @@ let package = Package(
     products: [
         .executable(name: "Vox", targets: ["VoxApp"]),
         .executable(name: "VoxBenchmarks", targets: ["VoxBenchmarks"]),
+        .library(name: "VoxCore", targets: ["VoxCore"]),
+        .library(name: "VoxProviders", targets: ["VoxProviders"]),
+        .library(name: "VoxMac", targets: ["VoxMac"]),
+        .library(name: "VoxAppKit", targets: ["VoxAppKit"]),
     ],
     targets: [
         .target(name: "VoxCore"),
