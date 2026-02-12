@@ -409,14 +409,14 @@ private func rewriteFailureSummary(_ error: Error) -> String {
             return "quotaExceeded"
         case .throttled:
             return "throttled"
-        case .invalidRequest:
-            return "invalidRequest"
-        case .network:
-            return "network"
+        case .invalidRequest(let msg):
+            return "invalidRequest(\(msg))"
+        case .network(let msg):
+            return "network(\(msg))"
         case .timeout:
             return "providerTimeout"
-        case .unknown:
-            return "unknown"
+        case .unknown(let msg):
+            return "unknown(\(msg))"
         }
     }
     // Avoid logging free-form error text in release; keep it coarse.
