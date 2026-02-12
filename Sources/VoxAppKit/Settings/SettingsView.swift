@@ -12,7 +12,7 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Vox Settings")
                     .font(.title3.weight(.semibold))
-                Text("Configure providers, processing mode, and input routing.")
+                Text("Works out of the box. Option+Space to dictate. Add cloud keys only if you want a boost.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -21,11 +21,9 @@ public struct SettingsView: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
 
-            TabView {
-                APIKeysTab()
-                    .tabItem { Label("API & Providers", systemImage: "key.horizontal.fill") }
-                ProcessingTab()
-                    .tabItem { Label("Dictation", systemImage: "waveform") }
+            Form {
+                BasicsSection()
+                CloudBoostSection()
             }
             .padding(.horizontal, 8)
 
