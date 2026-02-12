@@ -103,12 +103,16 @@ public final class VoxSession: ObservableObject {
         }
 
         // Fallback: OpenRouter with internal model fallback chain
+        // Model selection per bakeoff (docs/performance/rewrite-model-bakeoff-2026-02-09-expanded.md):
+        //   gemini-2.5-flash-lite: 100% quality, p95 0.711s (primary)
+        //   gemini-2.5-flash:      100% quality, p95 0.896s (fallback 1)
+        //   gemini-2.0-flash-001:  100% quality, p95 0.928s (fallback 2)
         if !openRouterKey.isEmpty {
             let openRouter = OpenRouterClient(
                 apiKey: openRouterKey,
                 fallbackModels: [
-                    "google/gemini-2.0-flash-lite-001",
-                    "openai/gpt-4o-mini",
+                    "google/gemini-2.5-flash",
+                    "google/gemini-2.0-flash-001",
                 ]
             )
             entries.append(.init(
