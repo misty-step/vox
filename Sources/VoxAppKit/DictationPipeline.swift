@@ -56,6 +56,11 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     // Invoked once per process call. On failures it receives partial stage timings.
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
+    #if DEBUG
+    private nonisolated(unsafe) var gateAccepts = 0
+    private nonisolated(unsafe) var gateRejects = 0
+    #endif
+
     @MainActor
     public convenience init(
         stt: STTProvider,
@@ -252,11 +257,37 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                                 model: model
                             )
                         }
+                        #if DEBUG
+                        gateAccepts += 1
+                        let nearMisses = qualityGateNearMisses(decision)
+                        let warnSuffix = nearMisses.isEmpty ? "" : " \(ANSIColor.yellow)⚠ near: \(nearMisses.joined(separator: ", "))\(ANSIColor.reset)"
+                        print("\(ANSIColor.green)[QualityGate]\(ANSIColor.reset) level=\(level) | \(ANSIColor.green)ACCEPT\(ANSIColor.reset) (ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? ""))\(warnSuffix) [\(gateAccepts)✓ \(gateRejects)✗]")
+                        #endif
                     } else {
                         output = transcript
-                        let levStr = decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? ""
-                        let ovlStr = decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? ""
-                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio))\(levStr)\(ovlStr))")
+                        #if DEBUG
+                        gateRejects += 1
+                        let failures = qualityGateFailures(decision)
+                        let maxStr = decision.maximumRatio.map { String(format: "%.2f", $0) } ?? "none"
+                        let ratioPass = decision.ratio >= decision.minimumRatio
+                            && (decision.maximumRatio == nil || decision.ratio <= decision.maximumRatio!)
+                        print("\(ANSIColor.red)[QualityGate]\(ANSIColor.reset) level=\(level) | \(ANSIColor.red)REJECT\(ANSIColor.reset) (failed: \(failures.joined(separator: ", "))) [\(gateAccepts)✓ \(gateRejects)✗]")
+                        print("  ratio: \(String(format: "%.2f", decision.ratio)) (min: \(String(format: "%.2f", decision.minimumRatio)), max: \(maxStr)) \(ratioPass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
+                        if let lev = decision.levenshteinSimilarity, let levT = decision.levenshteinThreshold {
+                            let pass = lev >= levT
+                            print("  lev:   \(String(format: "%.2f", lev)) (min: \(String(format: "%.2f", levT))) \(pass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
+                        }
+                        if let ovl = decision.contentOverlap, let ovlT = decision.contentOverlapThreshold {
+                            let pass = ovl >= ovlT
+                            print("  overlap: \(String(format: "%.2f", ovl)) (min: \(String(format: "%.2f", ovlT))) \(pass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
+                        }
+                        let rawPreview = String(transcript.prefix(80))
+                        let candPreview = String(candidate.prefix(80))
+                        print("  raw(\(transcript.count)): \"\(rawPreview)\(transcript.count > 80 ? "..." : "")\"")
+                        print("  candidate(\(candidate.count)): \"\(candPreview)\(candidate.count > 80 ? "..." : "")\"")
+                        #else
+                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                        #endif
                     }
                 }
             } catch is CancellationError {
@@ -391,3 +422,48 @@ private func rewriteFailureSummary(_ error: Error) -> String {
     // Avoid logging free-form error text in release; keep it coarse.
     return String(describing: type(of: error))
 }
+
+// MARK: - Debug Diagnostics
+
+#if DEBUG
+private enum ANSIColor {
+    static let green = "\u{001B}[32m"
+    static let red = "\u{001B}[31m"
+    static let yellow = "\u{001B}[33m"
+    static let reset = "\u{001B}[0m"
+}
+
+/// Metrics that passed but are within 0.10 of their threshold.
+private func qualityGateNearMisses(_ d: RewriteQualityGate.Decision) -> [String] {
+    var warns: [String] = []
+    let nearMargin = 0.10
+
+    // Ratio near minimum
+    if d.ratio >= d.minimumRatio && (d.ratio - d.minimumRatio) < nearMargin {
+        warns.append("ratio")
+    }
+    // Ratio near maximum
+    if let max = d.maximumRatio, d.ratio <= max && (max - d.ratio) < nearMargin {
+        warns.append("ratio-max")
+    }
+    // Levenshtein near threshold
+    if let lev = d.levenshteinSimilarity, let t = d.levenshteinThreshold, lev >= t && (lev - t) < nearMargin {
+        warns.append("lev")
+    }
+    // Overlap near threshold
+    if let ovl = d.contentOverlap, let t = d.contentOverlapThreshold, ovl >= t && (ovl - t) < nearMargin {
+        warns.append("overlap")
+    }
+    return warns
+}
+
+/// Which metrics caused rejection.
+private func qualityGateFailures(_ d: RewriteQualityGate.Decision) -> [String] {
+    var fails: [String] = []
+    if d.ratio < d.minimumRatio { fails.append("ratio<min") }
+    if let max = d.maximumRatio, d.ratio > max { fails.append("ratio>max") }
+    if let lev = d.levenshteinSimilarity, let t = d.levenshteinThreshold, lev < t { fails.append("lev") }
+    if let ovl = d.contentOverlap, let t = d.contentOverlapThreshold, ovl < t { fails.append("overlap") }
+    return fails
+}
+#endif
