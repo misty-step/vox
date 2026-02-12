@@ -12,7 +12,10 @@ public final class GeminiClient: RewriteProvider {
 
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
         let start = CFAbsoluteTimeGetCurrent()
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
+        guard let encodedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(encodedModel):generateContent") else {
+            throw RewriteError.invalidRequest("Invalid model name: \(model)")
+        }
 
         let body: [String: Any] = [
             "systemInstruction": [
@@ -28,6 +31,7 @@ public final class GeminiClient: RewriteProvider {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 15
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -124,6 +124,7 @@ public final class VoxSession: ObservableObject {
 
         guard let first = entries.first else {
             // No keys — return a bare OpenRouter client (will fail on auth)
+            print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
             return OpenRouterClient(apiKey: openRouterKey)
         }
 
