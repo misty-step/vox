@@ -36,7 +36,14 @@ public final class ElevenLabsClient: STTProvider {
         request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.upload(for: request, fromFile: uploadFileURL)
+        let processingTimeoutSeconds = BatchSTTTimeouts.processingTimeoutSeconds(forExpectedBytes: Int64(fileSize))
+        let (data, response) = try await session.uploadWithPhaseAwareSTTTimeout(
+            for: request,
+            fromFile: uploadFileURL,
+            expectedBytes: Int64(fileSize),
+            uploadStallTimeoutSeconds: BatchSTTTimeouts.uploadStallTimeoutSeconds,
+            processingTimeoutSeconds: processingTimeoutSeconds
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")

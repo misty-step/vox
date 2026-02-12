@@ -141,8 +141,7 @@ public final class VoxSession: ObservableObject {
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
-            let timed = TimeoutSTTProvider(provider: eleven, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs") { [weak self] attempt, maxRetries, delay in
+            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs") { [weak self] attempt, maxRetries, delay in
                 let delayStr = String(format: "%.1fs", delay)
                 Task { @MainActor in
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
@@ -154,8 +153,7 @@ public final class VoxSession: ObservableObject {
         let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !deepgramKey.isEmpty {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
-            let timed = TimeoutSTTProvider(provider: deepgram, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Deepgram") { [weak self] attempt, maxRetries, delay in
+            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram") { [weak self] attempt, maxRetries, delay in
                 let delayStr = String(format: "%.1fs", delay)
                 Task { @MainActor in
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
@@ -167,8 +165,7 @@ public final class VoxSession: ObservableObject {
         let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !openAIKey.isEmpty {
             let whisper = WhisperClient(apiKey: openAIKey)
-            let timed = TimeoutSTTProvider(provider: whisper, baseTimeout: 30, secondsPerMB: 2)
-            let retried = RetryingSTTProvider(provider: timed, maxRetries: 2, baseDelay: 0.5, name: "Whisper") { [weak self] attempt, maxRetries, delay in
+            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper") { [weak self] attempt, maxRetries, delay in
                 let delayStr = String(format: "%.1fs", delay)
                 Task { @MainActor in
                     self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")

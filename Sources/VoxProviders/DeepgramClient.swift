@@ -36,7 +36,14 @@ public final class DeepgramClient: STTProvider {
         request.setValue("Token \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.upload(for: request, fromFile: uploadURL)
+        let processingTimeoutSeconds = BatchSTTTimeouts.processingTimeoutSeconds(forExpectedBytes: Int64(fileSize))
+        let (data, response) = try await session.uploadWithPhaseAwareSTTTimeout(
+            for: request,
+            fromFile: uploadURL,
+            expectedBytes: Int64(fileSize),
+            uploadStallTimeoutSeconds: BatchSTTTimeouts.uploadStallTimeoutSeconds,
+            processingTimeoutSeconds: processingTimeoutSeconds
+        )
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
         }
