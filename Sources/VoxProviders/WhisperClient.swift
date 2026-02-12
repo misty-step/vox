@@ -39,7 +39,7 @@ public final class WhisperClient: STTProvider {
         }
 
         // Build multipart form data as a temporary file for streaming upload
-        let (multipartURL, _) = try MultipartFileBuilder.build(
+        let (multipartURL, multipartSizeBytes) = try MultipartFileBuilder.build(
             audioURL: fileURL,
             mimeType: mimeType,
             boundary: boundary,
@@ -52,7 +52,14 @@ public final class WhisperClient: STTProvider {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let (data, response) = try await session.upload(for: request, fromFile: multipartURL)
+        let processingTimeoutSeconds = BatchSTTTimeouts.processingTimeoutSeconds(forExpectedBytes: Int64(fileSize))
+        let (data, response) = try await session.uploadWithPhaseAwareSTTTimeout(
+            for: request,
+            fromFile: multipartURL,
+            expectedBytes: Int64(multipartSizeBytes),
+            uploadStallTimeoutSeconds: BatchSTTTimeouts.uploadStallTimeoutSeconds,
+            processingTimeoutSeconds: processingTimeoutSeconds
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw STTError.network("Invalid response")
