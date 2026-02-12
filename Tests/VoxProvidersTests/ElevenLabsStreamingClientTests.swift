@@ -28,7 +28,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -77,7 +77,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -108,7 +108,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -133,7 +133,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -155,7 +155,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -175,7 +175,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.2,
+            finalizationTimeoutPolicy: .constant(0.2),
             transportFactory: { _ in transport }
         )
 
@@ -194,7 +194,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.05,
+            finalizationTimeoutPolicy: .constant(0.05),
             transportFactory: { _ in transport }
         )
 
@@ -224,7 +224,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -251,7 +251,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.5,
+            finalizationTimeoutPolicy: .constant(0.5),
             transportFactory: { _ in transport }
         )
 
@@ -275,7 +275,7 @@ final class ElevenLabsStreamingClientTests: XCTestCase {
         )
         let client = ElevenLabsStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.2,
+            finalizationTimeoutPolicy: .constant(0.2),
             transportFactory: { _ in transport }
         )
 
