@@ -17,12 +17,12 @@ struct CloudProvidersSection: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 LabeledContent("Transcription") {
-                    Text(transcriptionStatus)
+                    Text(CloudProviderCatalog.transcriptionSummary(prefs: prefs))
                         .foregroundStyle(.secondary)
                 }
 
                 LabeledContent("Rewrite") {
-                    Text(rewriteStatus)
+                    Text(CloudProviderCatalog.rewriteSummary(prefs: prefs))
                         .foregroundStyle(.secondary)
                 }
 
@@ -46,35 +46,5 @@ struct CloudProvidersSection: View {
             .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var transcriptionStatus: String {
-        let configured = sttProviders
-        if configured.isEmpty { return "Apple Speech (on-device)" }
-        return "\(configured.joined(separator: " → ")) → Apple Speech"
-    }
-
-    private var rewriteStatus: String {
-        let chain = rewriteProviders
-        return chain.isEmpty ? "Off" : chain
-    }
-
-    private var sttProviders: [String] {
-        var providers: [String] = []
-
-        if !prefs.elevenLabsAPIKey.isEmpty { providers.append("ElevenLabs") }
-        if !prefs.deepgramAPIKey.isEmpty { providers.append("Deepgram") }
-        if !prefs.openAIAPIKey.isEmpty { providers.append("Whisper") }
-
-        return providers
-    }
-
-    private var rewriteProviders: String {
-        [
-            !prefs.geminiAPIKey.isEmpty ? "Gemini" : nil,
-            !prefs.openRouterAPIKey.isEmpty ? "OpenRouter" : nil,
-        ]
-        .compactMap { $0 }
-        .joined(separator: " → ")
     }
 }

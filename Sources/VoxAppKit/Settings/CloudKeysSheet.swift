@@ -37,23 +37,13 @@ struct CloudKeysSheet: View {
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            KeyField(
-                                title: "ElevenLabs",
-                                detail: "Primary cloud transcription.",
-                                text: binding(for: \.elevenLabsAPIKey)
-                            )
-
-                            KeyField(
-                                title: "Deepgram",
-                                detail: "Optional fallback transcription.",
-                                text: binding(for: \.deepgramAPIKey)
-                            )
-
-                            KeyField(
-                                title: "OpenAI (Whisper)",
-                                detail: "Optional fallback transcription via Whisper.",
-                                text: binding(for: \.openAIAPIKey)
-                            )
+                            ForEach(CloudProviderCatalog.transcriptionKeys) { key in
+                                KeyField(
+                                    title: key.title,
+                                    detail: key.detail,
+                                    text: binding(for: key.keyPath)
+                                )
+                            }
                         }
                         .padding(12)
                     }
@@ -66,23 +56,19 @@ struct CloudKeysSheet: View {
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            KeyField(
-                                title: "Gemini",
-                                detail: "Primary rewrite provider.",
-                                text: binding(for: \.geminiAPIKey)
-                            )
-
-                            KeyField(
-                                title: "OpenRouter",
-                                detail: "Fallback rewrite provider.",
-                                text: binding(for: \.openRouterAPIKey)
-                            )
+                            ForEach(CloudProviderCatalog.rewriteKeys) { key in
+                                KeyField(
+                                    title: key.title,
+                                    detail: key.detail,
+                                    text: binding(for: key.keyPath)
+                                )
+                            }
                         }
                         .padding(12)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Link("Setup guide", destination: URL(string: "https://github.com/misty-step/vox#configuration")!)
+                    Link("Setup guide", destination: CloudProviderCatalog.setupGuideURL)
                         .font(.subheadline.weight(.semibold))
                         .padding(.top, 6)
                 }
