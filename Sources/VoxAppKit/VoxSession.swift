@@ -89,11 +89,45 @@ public final class VoxSession: ObservableObject {
 
     private func makeRewriteProvider() -> RewriteProvider {
         let geminiKey = prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !geminiKey.isEmpty {
-            return GeminiClient(apiKey: geminiKey)
-        }
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        return OpenRouterClient(apiKey: openRouterKey)
+
+        var entries: [FallbackRewriteProvider.Entry] = []
+
+        // Fastest: Gemini direct API (no proxy overhead)
+        if !geminiKey.isEmpty {
+            entries.append(.init(
+                provider: GeminiClient(apiKey: geminiKey),
+                model: "gemini-2.5-flash-lite",
+                label: "Gemini direct"
+            ))
+        }
+
+        // Fallback: OpenRouter with internal model fallback chain
+        if !openRouterKey.isEmpty {
+            let openRouter = OpenRouterClient(
+                apiKey: openRouterKey,
+                fallbackModels: [
+                    "google/gemini-2.0-flash-lite-001",
+                    "openai/gpt-4o-mini",
+                ]
+            )
+            entries.append(.init(
+                provider: openRouter,
+                model: "google/gemini-2.5-flash-lite",
+                label: "OpenRouter"
+            ))
+        }
+
+        guard let first = entries.first else {
+            // No keys — return a bare OpenRouter client (will fail on auth)
+            return OpenRouterClient(apiKey: openRouterKey)
+        }
+
+        if entries.count == 1 {
+            return first.provider
+        }
+
+        return FallbackRewriteProvider(entries: entries)
     }
 
     private func makeSTTProvider() -> STTProvider {

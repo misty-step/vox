@@ -381,9 +381,9 @@ struct RewriteStageTimeouts: Sendable {
     let enhanceSeconds: TimeInterval
 
     static let `default` = RewriteStageTimeouts(
-        lightSeconds: 6,
-        aggressiveSeconds: 8,
-        enhanceSeconds: 10
+        lightSeconds: 15,
+        aggressiveSeconds: 20,
+        enhanceSeconds: 30
     )
 
     func seconds(for level: ProcessingLevel) -> TimeInterval? {
