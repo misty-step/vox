@@ -28,7 +28,7 @@ public final class DeepgramStreamingClient: StreamingSTTProvider {
         self.init(
             apiKey: apiKey,
             model: model,
-            sessionFinalizationTimeout: 1.5,
+            sessionFinalizationTimeout: 5.0,
             transportFactory: { request in
                 URLSessionWebSocketTransport(task: session.webSocketTask(with: request))
             }
@@ -38,7 +38,7 @@ public final class DeepgramStreamingClient: StreamingSTTProvider {
     init(
         apiKey: String,
         model: String = "nova-3",
-        sessionFinalizationTimeout: TimeInterval = 1.5,
+        sessionFinalizationTimeout: TimeInterval = 5.0,
         transportFactory: @escaping @Sendable (URLRequest) -> any DeepgramWebSocketTransport
     ) {
         self.apiKey = apiKey
@@ -132,7 +132,7 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
 
     init(
         transport: any DeepgramWebSocketTransport,
-        finalizationTimeout: TimeInterval = 1.5
+        finalizationTimeout: TimeInterval = 5.0
     ) {
         self.transport = transport
         self.finalizationTimeout = finalizationTimeout
@@ -191,6 +191,21 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
         } catch {
             transport.close()
             continuation.finish()
+
+            // Recover accumulated transcript instead of falling back to batch.
+            // During real-time streaming, finalSegments/latestPartial already
+            // contain most or all of the transcript — only the trailing words
+            // after the Finalize signal may be missing.
+            let assembledFinal = finalSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !assembledFinal.isEmpty {
+                print("[Deepgram] Finalize timed out, returning accumulated transcript (\(assembledFinal.count) chars)")
+                return assembledFinal
+            }
+            let partialFallback = latestPartial.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !partialFallback.isEmpty {
+                print("[Deepgram] Finalize timed out, returning latest partial (\(partialFallback.count) chars)")
+                return partialFallback
+            }
             throw error
         }
 

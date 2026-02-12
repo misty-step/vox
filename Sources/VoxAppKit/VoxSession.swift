@@ -44,7 +44,7 @@ public final class VoxSession: ObservableObject {
         requestMicrophoneAccess: (() async -> Bool)? = nil,
         errorPresenter: ((String) -> Void)? = nil,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingFinalizeTimeout: TimeInterval = 1.5,
+        streamingFinalizeTimeout: TimeInterval = 5.0,
         streamingSetupTimeout: TimeInterval = 3.0
     ) {
         self.recorder = recorder ?? AudioRecorder()
