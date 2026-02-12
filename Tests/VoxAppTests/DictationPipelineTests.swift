@@ -565,8 +565,8 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 1)
     }
 
-    @Test("Rewrite quality gate rejection uses raw transcript")
-    func process_rewriteQualityGateRejection_usesRawTranscript() async throws {
+    @Test("Rewrite candidate is used even when significantly shorter than raw")
+    func process_rewriteShorterCandidate_usesCandidateDirectly() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
@@ -587,7 +587,7 @@ struct DictationPipelineTests {
 
         let result = try await pipeline.process(audioURL: audioURL)
 
-        #expect(result == "hello world")
+        #expect(result == "hi")
         #expect(stt.callCount == 1)
         #expect(rewriter.callCount == 1)
         #expect(paster.callCount == 1)

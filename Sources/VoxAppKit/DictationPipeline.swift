@@ -57,12 +57,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
     #if DEBUG
-    // Debug-only counters for quality gate diagnostics. nonisolated(unsafe) is
-    // acceptable here: only mutated on the pipeline's serial call path, never
-    // read concurrently. A benign race on a debug counter is not worth the
-    // overhead of atomic synchronization.
     private nonisolated(unsafe) var gateAccepts = 0
-    private nonisolated(unsafe) var gateRejects = 0
     #endif
 
     @MainActor
@@ -250,8 +245,11 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                             model: model
                         )
                     }
-                    let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                    if decision.isAcceptable {
+                    let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedCandidate.isEmpty {
+                        print("[Pipeline] Rewrite returned empty, using raw transcript")
+                        output = transcript
+                    } else {
                         output = candidate
                         if enableRewriteCache {
                             await rewriteCache.store(
@@ -262,33 +260,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                             )
                         }
                         #if DEBUG
+                        let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
                         gateAccepts += 1
-                        let nearMisses = qualityGateNearMisses(decision)
-                        let warnSuffix = nearMisses.isEmpty ? "" : " \(ANSIColor.yellow)⚠ near: \(nearMisses.joined(separator: ", "))\(ANSIColor.reset)"
-                        print("\(ANSIColor.green)[QualityGate]\(ANSIColor.reset) level=\(level) | \(ANSIColor.green)ACCEPT\(ANSIColor.reset) (ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? ""))\(warnSuffix) [\(gateAccepts)✓ \(gateRejects)✗]")
-                        #endif
-                    } else {
-                        output = transcript
-                        #if DEBUG
-                        gateRejects += 1
-                        let failures = qualityGateFailures(decision)
-                        let maxStr = decision.maximumRatio.map { String(format: "%.2f", $0) } ?? "none"
-                        let ratioPass = decision.ratio >= decision.minimumRatio
-                            && (decision.maximumRatio == nil || decision.ratio <= decision.maximumRatio!)
-                        print("\(ANSIColor.red)[QualityGate]\(ANSIColor.reset) level=\(level) | \(ANSIColor.red)REJECT\(ANSIColor.reset) (failed: \(failures.joined(separator: ", "))) [\(gateAccepts)✓ \(gateRejects)✗]")
-                        print("  ratio: \(String(format: "%.2f", decision.ratio)) (min: \(String(format: "%.2f", decision.minimumRatio)), max: \(maxStr)) \(ratioPass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
-                        if let lev = decision.levenshteinSimilarity, let levT = decision.levenshteinThreshold {
-                            let pass = lev >= levT
-                            print("  lev:   \(String(format: "%.2f", lev)) (min: \(String(format: "%.2f", levT))) \(pass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
-                        }
-                        if let ovl = decision.contentOverlap, let ovlT = decision.contentOverlapThreshold {
-                            let pass = ovl >= ovlT
-                            print("  overlap: \(String(format: "%.2f", ovl)) (min: \(String(format: "%.2f", ovlT))) \(pass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
-                        }
-                        print("  raw: \(transcript.count) chars")
-                        print("  candidate: \(candidate.count) chars")
-                        #else
-                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
+                        print("\(ANSIColor.green)[Rewrite]\(ANSIColor.reset) level=\(level) | ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? "")) [\(gateAccepts) rewrites]")
                         #endif
                     }
                 }
@@ -435,37 +409,4 @@ private enum ANSIColor {
     static let reset = "\u{001B}[0m"
 }
 
-/// Metrics that passed but are within 0.10 of their threshold.
-private func qualityGateNearMisses(_ d: RewriteQualityGate.Decision) -> [String] {
-    var warns: [String] = []
-    let nearMargin = 0.10
-
-    // Ratio near minimum
-    if d.ratio >= d.minimumRatio && (d.ratio - d.minimumRatio) < nearMargin {
-        warns.append("ratio")
-    }
-    // Ratio near maximum
-    if let max = d.maximumRatio, d.ratio <= max && (max - d.ratio) < nearMargin {
-        warns.append("ratio-max")
-    }
-    // Levenshtein near threshold
-    if let lev = d.levenshteinSimilarity, let t = d.levenshteinThreshold, lev >= t && (lev - t) < nearMargin {
-        warns.append("lev")
-    }
-    // Overlap near threshold
-    if let ovl = d.contentOverlap, let t = d.contentOverlapThreshold, ovl >= t && (ovl - t) < nearMargin {
-        warns.append("overlap")
-    }
-    return warns
-}
-
-/// Which metrics caused rejection.
-private func qualityGateFailures(_ d: RewriteQualityGate.Decision) -> [String] {
-    var fails: [String] = []
-    if d.ratio < d.minimumRatio { fails.append("ratio<min") }
-    if let max = d.maximumRatio, d.ratio > max { fails.append("ratio>max") }
-    if let lev = d.levenshteinSimilarity, let t = d.levenshteinThreshold, lev < t { fails.append("lev") }
-    if let ovl = d.contentOverlap, let t = d.contentOverlapThreshold, ovl < t { fails.append("overlap") }
-    return fails
-}
 #endif
