@@ -18,13 +18,18 @@ final class DeepgramStreamingClientTests: XCTestCase {
     }
 
     func test_finish_returnsFinalTranscriptAndSendsFinalizeSignal() async throws {
-        let transport = MockDeepgramWebSocketTransport(messages: [
-            .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello\"}]},\"is_final\":false}"),
-            .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello world\"}]},\"is_final\":true}"),
-        ])
+        // Partial arrives during streaming; final arrives after Finalize (like real Deepgram)
+        let transport = MockDeepgramWebSocketTransport(
+            messages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello\"}]},\"is_final\":false}"),
+            ],
+            postFinalizeMessages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello world\"}]},\"is_final\":true}"),
+            ]
+        )
         let client = DeepgramStreamingClient(
             apiKey: "test-key",
-            sessionFinalizationTimeout: 0.2,
+            sessionFinalizationTimeout: 0.5,
             transportFactory: { _ in transport }
         )
 
@@ -59,7 +64,7 @@ final class DeepgramStreamingClientTests: XCTestCase {
         XCTAssertTrue(transport.didClose)
     }
 
-    func test_finish_timeout_throwsFinalizationTimeout() async throws {
+    func test_finish_timeout_noTranscript_throwsFinalizationTimeout() async throws {
         let transport = MockDeepgramWebSocketTransport(messages: [], holdReceiveForever: true)
         let client = DeepgramStreamingClient(
             apiKey: "test-key",
@@ -79,23 +84,85 @@ final class DeepgramStreamingClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func test_finish_timeout_withAccumulatedFinals_returnsTranscript() async throws {
+        // Simulate real-time streaming: deliver partial + final segments, then hold forever
+        let transport = MockDeepgramWebSocketTransport(
+            messages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello\"}]},\"is_final\":true}"),
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"world\"}]},\"is_final\":true}"),
+            ],
+            holdAfterDrained: true
+        )
+        let client = DeepgramStreamingClient(
+            apiKey: "test-key",
+            sessionFinalizationTimeout: 0.2,
+            transportFactory: { _ in transport }
+        )
+
+        let session = try await client.makeSession()
+        try await session.sendAudioChunk(AudioChunk(pcm16LEData: Data([0x01, 0x02])))
+        // Allow receive loop to consume messages
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let transcript = try await session.finish()
+        XCTAssertEqual(transcript, "hello world")
+    }
+
+    func test_finish_timeout_withOnlyPartials_returnsLatestPartial() async throws {
+        // Only non-final partials received before timeout
+        let transport = MockDeepgramWebSocketTransport(
+            messages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello wor\"}]},\"is_final\":false}"),
+            ],
+            holdAfterDrained: true
+        )
+        let client = DeepgramStreamingClient(
+            apiKey: "test-key",
+            sessionFinalizationTimeout: 0.2,
+            transportFactory: { _ in transport }
+        )
+
+        let session = try await client.makeSession()
+        try await session.sendAudioChunk(AudioChunk(pcm16LEData: Data([0x01, 0x02])))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let transcript = try await session.finish()
+        XCTAssertEqual(transcript, "hello wor")
+    }
 }
 
 private final class MockDeepgramWebSocketTransport: DeepgramWebSocketTransport, @unchecked Sendable {
+    private let lock = NSLock()
     private var queuedMessages: [DeepgramWebSocketMessage]
+    private var postFinalizeMessages: [DeepgramWebSocketMessage]
     private let holdReceiveForever: Bool
+    private let holdAfterDrained: Bool
+    private var finalizeReceived = false
     private(set) var didConnect = false
     private(set) var didClose = false
     private(set) var sentTexts: [String] = []
     private var sentDataPayloads: [Data] = []
 
-    init(messages: [DeepgramWebSocketMessage], holdReceiveForever: Bool = false) {
+    /// - Parameters:
+    ///   - messages: Delivered during streaming (before Finalize)
+    ///   - postFinalizeMessages: Enqueued after Finalize signal is sent (simulates Deepgram's final response)
+    ///   - holdReceiveForever: Block all receives indefinitely
+    ///   - holdAfterDrained: Block receives after all queued messages are consumed
+    init(
+        messages: [DeepgramWebSocketMessage],
+        postFinalizeMessages: [DeepgramWebSocketMessage] = [],
+        holdReceiveForever: Bool = false,
+        holdAfterDrained: Bool = false
+    ) {
         self.queuedMessages = messages
+        self.postFinalizeMessages = postFinalizeMessages
         self.holdReceiveForever = holdReceiveForever
+        self.holdAfterDrained = holdAfterDrained
     }
 
     var sentDataCount: Int {
-        return sentDataPayloads.count
+        lock.withLock { sentDataPayloads.count }
     }
 
     func connect() async throws {
@@ -103,11 +170,18 @@ private final class MockDeepgramWebSocketTransport: DeepgramWebSocketTransport, 
     }
 
     func sendData(_ data: Data) async throws {
-        sentDataPayloads.append(data)
+        lock.withLock { sentDataPayloads.append(data) }
     }
 
     func sendText(_ text: String) async throws {
-        sentTexts.append(text)
+        lock.withLock {
+            sentTexts.append(text)
+            if text.contains("Finalize") && !finalizeReceived {
+                finalizeReceived = true
+                queuedMessages.append(contentsOf: postFinalizeMessages)
+                postFinalizeMessages.removeAll()
+            }
+        }
     }
 
     func receive() async throws -> DeepgramWebSocketMessage {
@@ -118,10 +192,26 @@ private final class MockDeepgramWebSocketTransport: DeepgramWebSocketTransport, 
             }
         }
 
-        if queuedMessages.isEmpty {
+        // Poll for messages. When queue is empty, wait if:
+        // - postFinalizeMessages are pending (Finalize hasn't arrived yet), or
+        // - holdAfterDrained is set
+        while true {
+            try Task.checkCancellation()
+            let (msg, shouldWait) = lock.withLock {
+                () -> (DeepgramWebSocketMessage?, Bool) in
+                if !queuedMessages.isEmpty {
+                    return (queuedMessages.removeFirst(), false)
+                }
+                let waitForFinalize = !finalizeReceived && !postFinalizeMessages.isEmpty
+                return (nil, waitForFinalize || holdAfterDrained)
+            }
+            if let msg { return msg }
+            if shouldWait {
+                try await Task.sleep(nanoseconds: 10_000_000)
+                continue
+            }
             throw StreamingSTTError.receiveFailed("No queued messages")
         }
-        return queuedMessages.removeFirst()
     }
 
     func close() {
