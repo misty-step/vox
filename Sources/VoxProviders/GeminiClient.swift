@@ -53,8 +53,8 @@ public final class GeminiClient: RewriteProvider {
             throw RewriteError.auth
         case 429:
             throw RewriteError.throttled
-        case 503:
-            throw RewriteError.network("HTTP 503")
+        case 502, 503:
+            throw RewriteError.network("HTTP \(httpResponse.statusCode)")
         default:
             throw RewriteError.unknown("HTTP \(httpResponse.statusCode)")
         }

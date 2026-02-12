@@ -57,6 +57,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
     #if DEBUG
+    // Debug-only counters for quality gate diagnostics. nonisolated(unsafe) is
+    // acceptable here: only mutated on the pipeline's serial call path, never
+    // read concurrently. A benign race on a debug counter is not worth the
+    // overhead of atomic synchronization.
     private nonisolated(unsafe) var gateAccepts = 0
     private nonisolated(unsafe) var gateRejects = 0
     #endif
@@ -281,10 +285,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                             let pass = ovl >= ovlT
                             print("  overlap: \(String(format: "%.2f", ovl)) (min: \(String(format: "%.2f", ovlT))) \(pass ? "\(ANSIColor.green)✓\(ANSIColor.reset)" : "\(ANSIColor.red)✗\(ANSIColor.reset)")")
                         }
-                        let rawPreview = String(transcript.prefix(80))
-                        let candPreview = String(candidate.prefix(80))
-                        print("  raw(\(transcript.count)): \"\(rawPreview)\(transcript.count > 80 ? "..." : "")\"")
-                        print("  candidate(\(candidate.count)): \"\(candPreview)\(candidate.count > 80 ? "..." : "")\"")
+                        print("  raw: \(transcript.count) chars")
+                        print("  candidate: \(candidate.count) chars")
                         #else
                         print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio)))")
                         #endif

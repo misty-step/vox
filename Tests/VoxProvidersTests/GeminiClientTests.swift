@@ -205,6 +205,25 @@ struct GeminiClientTests {
         }
     }
 
+    @Test("Maps 502 to network error")
+    func maps502() async throws {
+        GeminiStub.handler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 502, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        let client = GeminiClient(apiKey: "key", session: makeGeminiSession())
+        do {
+            _ = try await client.rewrite(transcript: "t", systemPrompt: "p", model: "m")
+            Issue.record("Expected error")
+        } catch let error as RewriteError {
+            if case .network(let msg) = error {
+                #expect(msg == "HTTP 502")
+            } else {
+                Issue.record("Expected network error, got \(error)")
+            }
+        }
+    }
+
     @Test("Maps 400 to invalidRequest with error message")
     func maps400() async throws {
         GeminiStub.handler = { request in

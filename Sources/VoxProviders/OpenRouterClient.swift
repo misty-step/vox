@@ -108,7 +108,10 @@ public final class OpenRouterClient: RewriteProvider {
 
     private func isRetryable(_ error: Error) -> Bool {
         if error is CancellationError { return false }
-        guard let rewriteError = error as? RewriteError else { return true }
+        guard let rewriteError = error as? RewriteError else {
+            // Only retry known transient network errors, not arbitrary failures
+            return error is URLError
+        }
         switch rewriteError {
         case .throttled, .network: return true
         case .auth, .invalidRequest, .quotaExceeded, .timeout: return false
