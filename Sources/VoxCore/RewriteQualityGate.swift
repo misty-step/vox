@@ -8,6 +8,8 @@ public enum RewriteQualityGate {
         public let maximumRatio: Double?
         public let levenshteinSimilarity: Double?
         public let contentOverlap: Double?
+        public let levenshteinThreshold: Double?
+        public let contentOverlapThreshold: Double?
 
         public init(
             isAcceptable: Bool,
@@ -15,7 +17,9 @@ public enum RewriteQualityGate {
             minimumRatio: Double,
             maximumRatio: Double?,
             levenshteinSimilarity: Double? = nil,
-            contentOverlap: Double? = nil
+            contentOverlap: Double? = nil,
+            levenshteinThreshold: Double? = nil,
+            contentOverlapThreshold: Double? = nil
         ) {
             self.isAcceptable = isAcceptable
             self.ratio = ratio
@@ -23,6 +27,8 @@ public enum RewriteQualityGate {
             self.maximumRatio = maximumRatio
             self.levenshteinSimilarity = levenshteinSimilarity
             self.contentOverlap = contentOverlap
+            self.levenshteinThreshold = levenshteinThreshold
+            self.contentOverlapThreshold = contentOverlapThreshold
         }
     }
 
@@ -49,6 +55,8 @@ public enum RewriteQualityGate {
         let skipDistanceChecks = (level == .enhance || level == .off)
         var levSim: Double?
         var overlap: Double?
+        var levThresh: Double?
+        var ovlThresh: Double?
 
         if !skipDistanceChecks {
             let lev = normalizedLevenshteinSimilarity(raw: trimmedRaw, candidate: trimmedCandidate)
@@ -56,10 +64,12 @@ public enum RewriteQualityGate {
             levSim = lev
             overlap = ovl
 
-            let levThreshold = levenshteinThreshold(for: level)
-            let overlapThreshold = contentOverlapThreshold(for: level)
+            let lt = levenshteinThreshold(for: level)
+            let ot = contentOverlapThreshold(for: level)
+            levThresh = lt
+            ovlThresh = ot
 
-            if lev < levThreshold || ovl < overlapThreshold {
+            if lev < lt || ovl < ot {
                 ratioAcceptable = false
             }
         }
@@ -70,7 +80,9 @@ public enum RewriteQualityGate {
             minimumRatio: minRatio,
             maximumRatio: maxRatio,
             levenshteinSimilarity: levSim,
-            contentOverlap: overlap
+            contentOverlap: overlap,
+            levenshteinThreshold: levThresh,
+            contentOverlapThreshold: ovlThresh
         )
     }
 
@@ -163,7 +175,7 @@ public enum RewriteQualityGate {
 
     private static func levenshteinThreshold(for level: ProcessingLevel) -> Double {
         switch level {
-        case .light: return 0.4
+        case .light: return 0.3
         case .aggressive: return 0.2
         case .off, .enhance: return 0
         }
@@ -171,7 +183,7 @@ public enum RewriteQualityGate {
 
     private static func contentOverlapThreshold(for level: ProcessingLevel) -> Double {
         switch level {
-        case .light: return 0.5
+        case .light: return 0.4
         case .aggressive: return 0.3
         case .off, .enhance: return 0
         }

@@ -56,6 +56,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     // Invoked once per process call. On failures it receives partial stage timings.
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
+    #if DEBUG
+    private nonisolated(unsafe) var gateAccepts = 0
+    #endif
+
     @MainActor
     public convenience init(
         stt: STTProvider,
@@ -241,8 +245,11 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                             model: model
                         )
                     }
-                    let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                    if decision.isAcceptable {
+                    let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmedCandidate.isEmpty {
+                        print("[Pipeline] Rewrite returned empty, using raw transcript")
+                        output = transcript
+                    } else {
                         output = candidate
                         if enableRewriteCache {
                             await rewriteCache.store(
@@ -252,11 +259,11 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                                 model: model
                             )
                         }
-                    } else {
-                        output = transcript
-                        let levStr = decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? ""
-                        let ovlStr = decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? ""
-                        print("[Pipeline] Rewrite rejected by quality gate (ratio: \(String(format: "%.2f", decision.ratio))\(levStr)\(ovlStr))")
+                        #if DEBUG
+                        let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
+                        gateAccepts += 1
+                        print("\(ANSIColor.green)[Rewrite]\(ANSIColor.reset) level=\(level) | ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? "")) [\(gateAccepts) rewrites]")
+                        #endif
                     }
                 }
             } catch is CancellationError {
@@ -350,9 +357,9 @@ struct RewriteStageTimeouts: Sendable {
     let enhanceSeconds: TimeInterval
 
     static let `default` = RewriteStageTimeouts(
-        lightSeconds: 6,
-        aggressiveSeconds: 8,
-        enhanceSeconds: 10
+        lightSeconds: 15,
+        aggressiveSeconds: 20,
+        enhanceSeconds: 30
     )
 
     func seconds(for level: ProcessingLevel) -> TimeInterval? {
@@ -378,16 +385,28 @@ private func rewriteFailureSummary(_ error: Error) -> String {
             return "quotaExceeded"
         case .throttled:
             return "throttled"
-        case .invalidRequest:
-            return "invalidRequest"
-        case .network:
-            return "network"
+        case .invalidRequest(let msg):
+            return "invalidRequest(\(msg))"
+        case .network(let msg):
+            return "network(\(msg))"
         case .timeout:
             return "providerTimeout"
-        case .unknown:
-            return "unknown"
+        case .unknown(let msg):
+            return "unknown(\(msg))"
         }
     }
     // Avoid logging free-form error text in release; keep it coarse.
     return String(describing: type(of: error))
 }
+
+// MARK: - Debug Diagnostics
+
+#if DEBUG
+private enum ANSIColor {
+    static let green = "\u{001B}[32m"
+    static let red = "\u{001B}[31m"
+    static let yellow = "\u{001B}[33m"
+    static let reset = "\u{001B}[0m"
+}
+
+#endif

@@ -20,7 +20,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
         let hasOpenAI = !prefs.openAIAPIKey.isEmpty
         print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Whisper \(hasOpenAI ? "✓" : "–") | Apple Speech ✓")
-        print("[Vox] Rewrite: OpenRouter \(hasOpenRouter ? "✓" : "–")")
+        let hasGemini = !prefs.geminiAPIKey.isEmpty
+        let rewriteChain = [
+            hasGemini ? "Gemini" : nil,
+            hasOpenRouter ? "OpenRouter" : nil,
+        ].compactMap { $0 }.joined(separator: " → ")
+        print("[Vox] Rewrite: \(rewriteChain.isEmpty ? "–" : rewriteChain)")
         print("[Vox] Processing level: \(prefs.processingLevel.rawValue)")
 
         PermissionManager.promptForAccessibilityIfNeeded()
