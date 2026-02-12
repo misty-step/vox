@@ -39,4 +39,17 @@ struct ProductInfoTests {
         #expect(productInfo.version == "0.0.0-dev")
         #expect(productInfo.build == "local")
     }
+
+    @Test("Uses runtime environment overrides when bundle info is missing")
+    func current_usesEnvironmentOverrides() {
+        let environment = [
+            "VOX_APP_VERSION": "9.9.9",
+            "VOX_BUILD_NUMBER": "12345",
+        ]
+
+        let productInfo = ProductInfo.resolved(infoDictionary: nil, environment: environment)
+
+        #expect(productInfo.version == "9.9.9")
+        #expect(productInfo.build == "12345")
+    }
 }

@@ -4,7 +4,7 @@
 
 [Proposed | Accepted | Deprecated | Superseded]
 
-If superseded, link to the replacement: [ADR-XXXX](./XXXX-title.md)
+If superseded, link to the replacement (example): `ADR-0002` at `./0002-title.md`
 
 ## Context
 
