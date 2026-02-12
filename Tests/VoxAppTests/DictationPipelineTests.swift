@@ -660,7 +660,7 @@ struct DictationPipelineTests {
     func process_cancellation_propagates() async {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
-        stt.delay = 0.5
+        stt.delay = 2.0
 
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
@@ -679,8 +679,10 @@ struct DictationPipelineTests {
             try await pipeline.process(audioURL: audioURL)
         }
 
-        // Give the task time to enter the pipeline before cancelling
-        try? await Task.sleep(nanoseconds: 10_000_000)
+        // Give the task time to enter the STT stage before cancelling.
+        // 100ms is generous enough for slow CI runners; 2s mock delay
+        // ensures the pipeline is still blocked when cancel arrives.
+        try? await Task.sleep(nanoseconds: 100_000_000)
         task.cancel()
 
         do {
