@@ -25,6 +25,7 @@ final class DeepgramStreamingClientTests: XCTestCase {
             ],
             postFinalizeMessages: [
                 .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello world\"}]},\"is_final\":true}"),
+                .text("{\"type\":\"Metadata\",\"request_id\":\"test\",\"duration\":1.0}"),
             ]
         )
         let client = DeepgramStreamingClient(
@@ -59,7 +60,7 @@ final class DeepgramStreamingClientTests: XCTestCase {
         XCTAssertEqual(partials.map(\.text), ["hello", "hello world"])
         XCTAssertEqual(partials.map(\.isFinal), [false, true])
         XCTAssertEqual(transport.sentDataCount, 1)
-        XCTAssertEqual(transport.sentTexts, ["{\"type\":\"Finalize\"}"])
+        XCTAssertEqual(transport.sentTexts, ["{\"type\":\"CloseStream\"}"])
         XCTAssertTrue(transport.didConnect)
         XCTAssertTrue(transport.didClose)
     }
@@ -109,6 +110,31 @@ final class DeepgramStreamingClientTests: XCTestCase {
         XCTAssertEqual(transcript, "hello world")
     }
 
+    func test_finish_stopsOnMetadataMessage() async throws {
+        // CloseStream causes Deepgram to send a Metadata message as definitive stop
+        let transport = MockDeepgramWebSocketTransport(
+            messages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello\"}]},\"is_final\":true}"),
+            ],
+            postFinalizeMessages: [
+                .text("{\"type\":\"Metadata\",\"request_id\":\"abc\",\"duration\":2.5}"),
+            ]
+        )
+        let client = DeepgramStreamingClient(
+            apiKey: "test-key",
+            sessionFinalizationTimeout: 0.5,
+            transportFactory: { _ in transport }
+        )
+
+        let session = try await client.makeSession()
+        try await session.sendAudioChunk(AudioChunk(pcm16LEData: Data([0x01, 0x02])))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let transcript = try await session.finish()
+        XCTAssertEqual(transcript, "hello")
+        XCTAssertEqual(transport.sentTexts, ["{\"type\":\"CloseStream\"}"])
+    }
+
     func test_finish_timeout_withOnlyPartials_returnsLatestPartial() async throws {
         // Only non-final partials received before timeout
         let transport = MockDeepgramWebSocketTransport(
@@ -129,6 +155,32 @@ final class DeepgramStreamingClientTests: XCTestCase {
 
         let transcript = try await session.finish()
         XCTAssertEqual(transcript, "hello wor")
+    }
+    func test_finish_accumulatesMultipleFinalsAfterCloseStream() async throws {
+        // CloseStream triggers two is_final segments then Metadata
+        let transport = MockDeepgramWebSocketTransport(
+            messages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"hello\"}]},\"is_final\":true}"),
+            ],
+            postFinalizeMessages: [
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"world\"}]},\"is_final\":true}"),
+                .text("{\"channel\":{\"alternatives\":[{\"transcript\":\"today\"}]},\"is_final\":true}"),
+                .text("{\"type\":\"Metadata\",\"request_id\":\"abc\",\"duration\":5.0}"),
+            ]
+        )
+        let client = DeepgramStreamingClient(
+            apiKey: "test-key",
+            sessionFinalizationTimeout: 0.5,
+            transportFactory: { _ in transport }
+        )
+
+        let session = try await client.makeSession()
+        try await session.sendAudioChunk(AudioChunk(pcm16LEData: Data([0x01, 0x02])))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let transcript = try await session.finish()
+        // All three finals accumulated: pre-CloseStream + two post-CloseStream
+        XCTAssertEqual(transcript, "hello world today")
     }
 }
 
@@ -176,7 +228,7 @@ private final class MockDeepgramWebSocketTransport: DeepgramWebSocketTransport, 
     func sendText(_ text: String) async throws {
         lock.withLock {
             sentTexts.append(text)
-            if text.contains("Finalize") && !finalizeReceived {
+            if text.contains("CloseStream") && !finalizeReceived {
                 finalizeReceived = true
                 queuedMessages.append(contentsOf: postFinalizeMessages)
                 postFinalizeMessages.removeAll()

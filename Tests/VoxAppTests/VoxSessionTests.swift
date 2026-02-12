@@ -524,8 +524,7 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.5
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
@@ -556,8 +555,7 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.5
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
@@ -589,8 +587,7 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.1
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
@@ -610,7 +607,8 @@ struct VoxSessionDITests {
         let pipeline = MockPipeline()
         pipeline.result = "batch timeout fallback transcript"
         let streamingSession = MockStreamingSession()
-        streamingSession.finishDelay = 1.0
+        // Session handles its own timeout — simulate it throwing finalizationTimeout
+        streamingSession.finishResult = .failure(StreamingSTTError.finalizationTimeout)
         let streamingProvider = MockStreamingProvider(session: streamingSession)
 
         let session = VoxSession(
@@ -620,8 +618,7 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.1
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
@@ -652,8 +649,7 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.5
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
@@ -688,7 +684,6 @@ struct VoxSessionDITests {
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
             streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 1.0,
             streamingSetupTimeout: 2.0
         )
 
@@ -725,7 +720,6 @@ struct VoxSessionDITests {
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
             streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.5,
             streamingSetupTimeout: 1.0
         )
 
@@ -756,7 +750,6 @@ struct VoxSessionDITests {
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
             streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.5,
             streamingSetupTimeout: 0.1
         )
 
@@ -771,7 +764,7 @@ struct VoxSessionDITests {
     }
 
     @Test("Streaming bridge cleanup runs when recorder stop fails")
-    @MainActor func test_streamingStopFailure_cleansUpBridge() async {
+    @MainActor func test_streamingStopFailure_cleansUpBridge() async throws {
         let recorder = MockRecorder()
         recorder.stopError = VoxError.internalError("stop failed")
         let pipeline = MockPipeline()
@@ -786,12 +779,13 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { errors.append($0) },
-            streamingSTTProvider: streamingProvider,
-            streamingFinalizeTimeout: 0.1
+            streamingSTTProvider: streamingProvider
         )
 
         await session.toggleRecording()
         recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x10, 0x11])))
+        // Allow streaming setup task to complete before stopping
+        try await Task.sleep(nanoseconds: 50_000_000)
         await session.toggleRecording()
 
         let sentBefore = streamingSession.sentChunks.count
