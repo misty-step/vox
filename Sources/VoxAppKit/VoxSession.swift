@@ -449,7 +449,8 @@ public final class VoxSession: ObservableObject {
                 output = try await processWithStreamingFallback(
                     bridge: streamingBridge,
                     batchPipeline: active,
-                    audioURL: url
+                    audioURL: url,
+                    recordingDurationSeconds: recordingDuration
                 )
             } else {
                 output = try await active.process(audioURL: url)
@@ -489,8 +490,48 @@ public final class VoxSession: ObservableObject {
     private func processWithStreamingFallback(
         bridge: StreamingAudioBridge,
         batchPipeline: DictationProcessing,
-        audioURL: URL
+        audioURL: URL,
+        recordingDurationSeconds: TimeInterval
     ) async throws -> String {
+        let finalizeStart = CFAbsoluteTimeGetCurrent()
+        func logFinalize(outcome: String, reason: String, transcriptChars: Int? = nil) {
+            let waitedMs = Int((CFAbsoluteTimeGetCurrent() - finalizeStart) * 1000)
+            let durationStr = String(format: "%.2f", recordingDurationSeconds)
+            if let transcriptChars {
+                print("[Vox] Streaming finalize outcome=\(outcome) waited_ms=\(waitedMs) recording_s=\(durationStr) reason=\(reason) transcript_chars=\(transcriptChars)")
+            } else {
+                print("[Vox] Streaming finalize outcome=\(outcome) waited_ms=\(waitedMs) recording_s=\(durationStr) reason=\(reason)")
+            }
+        }
+        func reasonCode(for error: Error) -> String {
+            if let streamingError = error as? StreamingSTTError {
+                switch streamingError {
+                case .finalizationTimeout:
+                    return "finalization_timeout"
+                case .connectionFailed:
+                    return "connection_failed"
+                case .sendFailed:
+                    return "send_failed"
+                case .receiveFailed:
+                    return "receive_failed"
+                case .provider:
+                    return "provider_error"
+                case .cancelled:
+                    return "cancelled"
+                case .invalidState:
+                    return "invalid_state"
+                }
+            }
+            if let voxError = error as? VoxError {
+                switch voxError {
+                case .noTranscript:
+                    return "no_transcript"
+                default:
+                    return "vox_error"
+                }
+            }
+            return "unknown"
+        }
         do {
             let transcript = try await bridge.finish()
             let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -501,14 +542,18 @@ public final class VoxSession: ObservableObject {
                 #if DEBUG
                 print("[Vox] Streaming transcript finalized (\(normalized.count) chars)")
                 #endif
+                logFinalize(outcome: "success", reason: "ok", transcriptChars: normalized.count)
                 return try await transcriptPipeline.process(transcript: normalized)
             }
+            logFinalize(outcome: "batch_fallback", reason: "missing_transcript_pipeline")
             print("[Vox] Streaming finalized, but pipeline lacks TranscriptProcessing; falling back to batch STT")
         } catch let streamingError as StreamingSTTError
             where !streamingError.isFallbackEligible {
+            logFinalize(outcome: "error", reason: reasonCode(for: streamingError))
             await bridge.cancel()
             throw streamingError
         } catch {
+            logFinalize(outcome: "batch_fallback", reason: reasonCode(for: error))
             print("[Vox] Streaming finalize failed, falling back to batch STT: \(error.localizedDescription)")
         }
 

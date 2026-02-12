@@ -17,7 +17,7 @@ enum DeepgramWebSocketMessage: Sendable {
 public final class DeepgramStreamingClient: StreamingSTTProvider {
     private let apiKey: String
     private let model: String
-    private let sessionFinalizationTimeout: TimeInterval
+    private let finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy
     private let transportFactory: @Sendable (URLRequest) -> any DeepgramWebSocketTransport
 
     public convenience init(
@@ -28,7 +28,7 @@ public final class DeepgramStreamingClient: StreamingSTTProvider {
         self.init(
             apiKey: apiKey,
             model: model,
-            sessionFinalizationTimeout: 5.0,
+            finalizationTimeoutPolicy: .default,
             transportFactory: { request in
                 URLSessionWebSocketTransport(task: session.webSocketTask(with: request))
             }
@@ -38,12 +38,12 @@ public final class DeepgramStreamingClient: StreamingSTTProvider {
     init(
         apiKey: String,
         model: String = "nova-3",
-        sessionFinalizationTimeout: TimeInterval = 5.0,
+        finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy = .default,
         transportFactory: @escaping @Sendable (URLRequest) -> any DeepgramWebSocketTransport
     ) {
         self.apiKey = apiKey
         self.model = model
-        self.sessionFinalizationTimeout = sessionFinalizationTimeout
+        self.finalizationTimeoutPolicy = finalizationTimeoutPolicy
         self.transportFactory = transportFactory
     }
 
@@ -74,7 +74,7 @@ public final class DeepgramStreamingClient: StreamingSTTProvider {
         }
         return DeepgramStreamingSession(
             transport: transport,
-            finalizationTimeout: sessionFinalizationTimeout
+            finalizationTimeoutPolicy: finalizationTimeoutPolicy
         )
     }
 }
@@ -120,7 +120,7 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
 
     private let transport: any DeepgramWebSocketTransport
     private let continuation: AsyncStream<PartialTranscript>.Continuation
-    private let finalizationTimeout: TimeInterval
+    private let finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy
     private var receiveTask: Task<Void, Never>?
     private var finalSegments: [String] = []
     private var latestPartial: String = ""
@@ -129,13 +129,14 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
     private var finishRequested = false
     private var finished = false
     private var receiveLoopCompleted = false
+    private var streamedAudioSeconds: TimeInterval = 0
 
     init(
         transport: any DeepgramWebSocketTransport,
-        finalizationTimeout: TimeInterval = 5.0
+        finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy = .default
     ) {
         self.transport = transport
-        self.finalizationTimeout = finalizationTimeout
+        self.finalizationTimeoutPolicy = finalizationTimeoutPolicy
         var continuation: AsyncStream<PartialTranscript>.Continuation?
         self.partialTranscripts = AsyncStream<PartialTranscript> { streamContinuation in
             continuation = streamContinuation
@@ -156,6 +157,7 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
         }
         do {
             try await transport.sendData(chunk.pcm16LEData)
+            recordStreamedAudioDuration(chunk)
         } catch is CancellationError {
             let error = StreamingSTTError.cancelled
             sendError = error
@@ -186,11 +188,17 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             throw StreamingSTTError.sendFailed(error.localizedDescription)
         }
 
+        let timeout = finalizationTimeoutPolicy.timeoutSeconds(forStreamedAudioSeconds: streamedAudioSeconds)
+        let finalizeStart = CFAbsoluteTimeGetCurrent()
         do {
-            try await awaitReceiveLoop(timeout: finalizationTimeout)
+            try await awaitReceiveLoop(timeout: timeout)
         } catch {
             transport.close()
             continuation.finish()
+
+            let waitedMs = Int((CFAbsoluteTimeGetCurrent() - finalizeStart) * 1000)
+            let audioSeconds = String(format: "%.2f", streamedAudioSeconds)
+            let timeoutSeconds = String(format: "%.2f", timeout)
 
             // Recover accumulated transcript instead of falling back to batch.
             // During real-time streaming, finalSegments/latestPartial already
@@ -198,12 +206,12 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             // after the Finalize signal may be missing.
             let assembledFinal = finalSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             if !assembledFinal.isEmpty {
-                print("[Deepgram] Finalize timed out, returning accumulated transcript (\(assembledFinal.count) chars)")
+                print("[Deepgram] Finalize failed, returning accumulated transcript (\(assembledFinal.count) chars) waited_ms=\(waitedMs) audio_s=\(audioSeconds) timeout_s=\(timeoutSeconds)")
                 return assembledFinal
             }
             let partialFallback = latestPartial.trimmingCharacters(in: .whitespacesAndNewlines)
             if !partialFallback.isEmpty {
-                print("[Deepgram] Finalize timed out, returning latest partial (\(partialFallback.count) chars)")
+                print("[Deepgram] Finalize failed, returning latest partial (\(partialFallback.count) chars) waited_ms=\(waitedMs) audio_s=\(audioSeconds) timeout_s=\(timeoutSeconds)")
                 return partialFallback
             }
             throw error
@@ -338,6 +346,22 @@ private actor DeepgramStreamingSession: StreamingSTTSession {
             receiveTask?.cancel()
             throw StreamingSTTError.finalizationTimeout
         }
+    }
+
+    private func recordStreamedAudioDuration(_ chunk: AudioChunk) {
+        guard chunk.sampleRate > 0, chunk.channels > 0 else {
+            return
+        }
+        let bytesPerFrame = chunk.channels * MemoryLayout<Int16>.size
+        guard bytesPerFrame > 0 else {
+            return
+        }
+        let frames = Double(chunk.pcm16LEData.count) / Double(bytesPerFrame)
+        let seconds = frames / Double(chunk.sampleRate)
+        guard seconds.isFinite, seconds > 0 else {
+            return
+        }
+        streamedAudioSeconds += seconds
     }
 }
 

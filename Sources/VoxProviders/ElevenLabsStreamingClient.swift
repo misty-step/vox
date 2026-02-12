@@ -10,7 +10,7 @@ protocol ElevenLabsWebSocketTransport: Sendable {
 
 public final class ElevenLabsStreamingClient: StreamingSTTProvider {
     private let apiKey: String
-    private let sessionFinalizationTimeout: TimeInterval
+    private let finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy
     private let transportFactory: @Sendable (URLRequest) -> any ElevenLabsWebSocketTransport
 
     public convenience init(
@@ -19,7 +19,7 @@ public final class ElevenLabsStreamingClient: StreamingSTTProvider {
     ) {
         self.init(
             apiKey: apiKey,
-            sessionFinalizationTimeout: 5.0,
+            finalizationTimeoutPolicy: .default,
             transportFactory: { request in
                 URLSessionElevenLabsTransport(task: session.webSocketTask(with: request))
             }
@@ -28,11 +28,11 @@ public final class ElevenLabsStreamingClient: StreamingSTTProvider {
 
     init(
         apiKey: String,
-        sessionFinalizationTimeout: TimeInterval = 5.0,
+        finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy = .default,
         transportFactory: @escaping @Sendable (URLRequest) -> any ElevenLabsWebSocketTransport
     ) {
         self.apiKey = apiKey
-        self.sessionFinalizationTimeout = sessionFinalizationTimeout
+        self.finalizationTimeoutPolicy = finalizationTimeoutPolicy
         self.transportFactory = transportFactory
     }
 
@@ -60,7 +60,7 @@ public final class ElevenLabsStreamingClient: StreamingSTTProvider {
         }
         return ElevenLabsStreamingSession(
             transport: transport,
-            finalizationTimeout: sessionFinalizationTimeout
+            finalizationTimeoutPolicy: finalizationTimeoutPolicy
         )
     }
 }
@@ -102,7 +102,7 @@ private actor ElevenLabsStreamingSession: StreamingSTTSession {
 
     private let transport: any ElevenLabsWebSocketTransport
     private let continuation: AsyncStream<PartialTranscript>.Continuation
-    private let finalizationTimeout: TimeInterval
+    private let finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy
     private var receiveTask: Task<Void, Never>?
     private var latestPartial: String = ""
     private var committedSegments: [String] = []
@@ -111,13 +111,14 @@ private actor ElevenLabsStreamingSession: StreamingSTTSession {
     private var commitSent = false
     private var finished = false
     private var receiveLoopCompleted = false
+    private var streamedAudioSeconds: TimeInterval = 0
 
     init(
         transport: any ElevenLabsWebSocketTransport,
-        finalizationTimeout: TimeInterval = 5.0
+        finalizationTimeoutPolicy: StreamingFinalizationTimeoutPolicy = .default
     ) {
         self.transport = transport
-        self.finalizationTimeout = finalizationTimeout
+        self.finalizationTimeoutPolicy = finalizationTimeoutPolicy
         var continuation: AsyncStream<PartialTranscript>.Continuation?
         self.partialTranscripts = AsyncStream<PartialTranscript> { streamContinuation in
             continuation = streamContinuation
@@ -142,6 +143,7 @@ private actor ElevenLabsStreamingSession: StreamingSTTSession {
         """
         do {
             try await transport.sendText(json)
+            recordStreamedAudioDuration(chunk)
         } catch is CancellationError {
             let error = StreamingSTTError.cancelled
             sendError = error
@@ -176,21 +178,27 @@ private actor ElevenLabsStreamingSession: StreamingSTTSession {
             throw StreamingSTTError.sendFailed(error.localizedDescription)
         }
 
+        let timeout = finalizationTimeoutPolicy.timeoutSeconds(forStreamedAudioSeconds: streamedAudioSeconds)
+        let finalizeStart = CFAbsoluteTimeGetCurrent()
         do {
-            try await awaitReceiveLoop(timeout: finalizationTimeout)
+            try await awaitReceiveLoop(timeout: timeout)
         } catch {
             transport.close()
             continuation.finish()
 
+            let waitedMs = Int((CFAbsoluteTimeGetCurrent() - finalizeStart) * 1000)
+            let audioSeconds = String(format: "%.2f", streamedAudioSeconds)
+            let timeoutSeconds = String(format: "%.2f", timeout)
+
             // Recover accumulated committed segments first, then partials
             let assembled = committedSegments.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             if !assembled.isEmpty {
-                print("[ElevenLabs] Commit timed out, returning accumulated segments (\(assembled.count) chars)")
+                print("[ElevenLabs] Commit failed, returning accumulated segments (\(assembled.count) chars) waited_ms=\(waitedMs) audio_s=\(audioSeconds) timeout_s=\(timeoutSeconds)")
                 return assembled
             }
             let partialFallback = latestPartial.trimmingCharacters(in: .whitespacesAndNewlines)
             if !partialFallback.isEmpty {
-                print("[ElevenLabs] Commit timed out, returning latest partial (\(partialFallback.count) chars)")
+                print("[ElevenLabs] Commit failed, returning latest partial (\(partialFallback.count) chars) waited_ms=\(waitedMs) audio_s=\(audioSeconds) timeout_s=\(timeoutSeconds)")
                 return partialFallback
             }
             throw error
@@ -321,6 +329,22 @@ private actor ElevenLabsStreamingSession: StreamingSTTSession {
             receiveTask?.cancel()
             throw StreamingSTTError.finalizationTimeout
         }
+    }
+
+    private func recordStreamedAudioDuration(_ chunk: AudioChunk) {
+        guard chunk.sampleRate > 0, chunk.channels > 0 else {
+            return
+        }
+        let bytesPerFrame = chunk.channels * MemoryLayout<Int16>.size
+        guard bytesPerFrame > 0 else {
+            return
+        }
+        let frames = Double(chunk.pcm16LEData.count) / Double(bytesPerFrame)
+        let seconds = frames / Double(chunk.sampleRate)
+        guard seconds.isFinite, seconds > 0 else {
+            return
+        }
+        streamedAudioSeconds += seconds
     }
 }
 

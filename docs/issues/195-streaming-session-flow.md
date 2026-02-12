@@ -34,7 +34,7 @@ Make streaming STT the default runtime path when available, while keeping reliab
 - Streaming setup runs asynchronously with setup timeout protection.
 - `StreamingAudioBridge` buffers chunks until session attach, then drains to `StreamingSessionPump`.
 - `StreamingSessionPump` tracks latest non-empty partial transcript and uses it when `finish()` returns empty.
-- Stop flow finalizes streaming with `withStreamingFinalizeTimeout`; non-fatal failures route to batch pipeline.
+- Stop flow finalizes streaming with a bounded provider timeout (scaled by streamed audio duration); non-fatal failures route to batch pipeline.
 
 ### Module Boundaries
 - `VoxSession`: orchestration and fallback policy.
