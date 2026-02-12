@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct SettingsView: View {
     private let productInfo: ProductInfo
+    @State private var showingCloudKeys = false
 
     public init(productInfo: ProductInfo = .current()) {
         self.productInfo = productInfo
@@ -9,27 +10,33 @@ public struct SettingsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Vox Settings")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Press Option+Space to dictate")
                     .font(.title3.weight(.semibold))
-                Text("Works out of the box. Option+Space to dictate. Add cloud keys only if you want a boost.")
+                Text("Pick a microphone. Add cloud keys only if you want faster transcription and rewriting.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 10)
 
-            Form {
-                BasicsSection()
-                CloudBoostSection()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    BasicsSection()
+                    CloudProvidersSection(onManageKeys: { showingCloudKeys = true })
+                }
+                .padding(16)
             }
-            .padding(.horizontal, 8)
 
             ProductStandardsFooter(productInfo: productInfo)
         }
         .frame(minWidth: 560, minHeight: 420)
-        .padding(6)
+        .sheet(isPresented: $showingCloudKeys) {
+            CloudKeysSheet()
+                .frame(minWidth: 640, minHeight: 520)
+        }
     }
 }

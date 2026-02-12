@@ -23,10 +23,10 @@ Vox Settings
   Hotkey: Option+Space
   Microphone: [System Default v]
 
-[Cloud Boost (Optional)]    Status: STT 0/3, Rewrite 0/2
-  > Add / edit cloud keys
-      STT: ElevenLabs, Deepgram, OpenAI
-      Rewrite: Gemini, OpenRouter
+[Cloud Providers (Optional)]
+  Transcription: Apple Speech (on-device) OR Cloud enabled
+  Rewrite: Off OR Gemini → OpenRouter
+  [Manage Keys…] (opens sheet)
 
 (footer: version, attribution, contact)
 ```
@@ -37,7 +37,7 @@ Pros:
 - Minimal implementation churn (reuse existing key bindings).
 
 Cons:
-- Long if expanded (needs scroll).
+- Manage Keys opens a sheet (another surface).
 
 ## Layout B: Sidebar Categories (NavigationSplitView)
 
@@ -73,4 +73,4 @@ Cons:
 ## Decision
 
 Pick Layout A. Keep everything on one page, but collapse cloud keys by default.
-
+Implementation tweak: use a Manage Keys sheet instead of an in-page disclosure so the close control is always reachable.

@@ -6,24 +6,30 @@ struct BasicsSection: View {
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
-        Section("Basics") {
-            HStack(spacing: 12) {
-                Text("Hotkey")
-                Spacer(minLength: 0)
-                Text("Option + Space")
-                    .font(.system(.body, design: .monospaced))
-            }
-
-            Picker("Microphone", selection: $prefs.selectedInputDeviceUID) {
-                Text("System Default").tag(nil as String?)
-                ForEach(devices) { device in
-                    Text(device.name).tag(device.id as String?)
+        GroupBox("Basics") {
+            VStack(alignment: .leading, spacing: 12) {
+                LabeledContent("Hotkey") {
+                    Text("Option + Space")
+                        .font(.system(.body, design: .monospaced))
                 }
-            }
 
-            Text("Vox falls back to the system default route if a selected device is unavailable.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                LabeledContent("Microphone") {
+                    Picker("", selection: $prefs.selectedInputDeviceUID) {
+                        Text("System Default").tag(nil as String?)
+                        ForEach(devices) { device in
+                            Text(device.name).tag(device.id as String?)
+                        }
+                    }
+                    .labelsHidden()
+                }
+
+                Text("Falls back to system default if the selected device is unavailable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, -2)
+            }
+            .padding(12)
         }
         .onAppear { devices = AudioDeviceManager.inputDevices() }
     }
