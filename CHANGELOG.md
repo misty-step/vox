@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/misty-step/vox/compare/v1.7.0...v1.8.0) (2026-02-12)
+
+
+### Features
+
+* **stt:** phase-aware batch upload timeouts ([#237](https://github.com/misty-step/vox/issues/237)) ([9d08d31](https://github.com/misty-step/vox/commit/9d08d3174427baddba643d9067e02c9a217b76fd))
+
 # [1.7.0](https://github.com/misty-step/vox/compare/v1.6.4...v1.7.0) (2026-02-12)
 
 
