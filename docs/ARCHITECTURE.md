@@ -176,7 +176,7 @@ Vox is designed for composition. Wrappers should import Vox modules and add beha
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/misty-step/vox.git", from: "1.0.0"),
+    .package(url: "https://github.com/misty-step/vox.git", from: "1.7.0"),
 ],
 targets: [
     .target(
