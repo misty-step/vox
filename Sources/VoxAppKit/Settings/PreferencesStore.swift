@@ -52,14 +52,23 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     }
 
     private func apiKey(env: String, keychain: KeychainHelper.Key) -> String {
-        if let envKey = ProcessInfo.processInfo.environment[env], !envKey.isEmpty {
-            return envKey
+        if let rawEnvKey = ProcessInfo.processInfo.environment[env] {
+            let envKey = rawEnvKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !envKey.isEmpty {
+                return envKey
+            }
         }
-        return KeychainHelper.load(keychain) ?? ""
+        return (KeychainHelper.load(keychain) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func setAPIKey(_ value: String, for key: KeychainHelper.Key) {
-        KeychainHelper.save(value, for: key)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            KeychainHelper.delete(key)
+        } else {
+            KeychainHelper.save(trimmed, for: key)
+        }
         objectWillChange.send()
     }
 }
