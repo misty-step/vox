@@ -38,6 +38,7 @@ struct CloudProvidersSection: View {
             }
             .padding(12)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var transcriptionStatus: String {

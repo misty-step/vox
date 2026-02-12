@@ -23,6 +23,8 @@ public struct SettingsView: View {
             .padding(.top, 14)
             .padding(.bottom, 10)
 
+            Divider()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     BasicsSection()

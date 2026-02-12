@@ -16,6 +16,9 @@ struct CloudKeysSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -46,6 +49,7 @@ struct CloudKeysSheet: View {
                         }
                         .padding(12)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     GroupBox("Rewrite") {
                         VStack(alignment: .leading, spacing: 12) {
@@ -68,6 +72,7 @@ struct CloudKeysSheet: View {
                         }
                         .padding(12)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Link("Setup guide", destination: URL(string: "https://github.com/misty-step/vox#configuration")!)
                         .font(.subheadline.weight(.semibold))
@@ -98,6 +103,7 @@ private struct KeyField: View {
 
             SecureField("API key", text: text)
                 .textContentType(.password)
+                .textFieldStyle(.roundedBorder)
 
             Text(detail)
                 .font(.caption)

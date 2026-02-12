@@ -27,10 +27,10 @@ struct BasicsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, -2)
             }
             .padding(12)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { devices = AudioDeviceManager.inputDevices() }
     }
 }
