@@ -1,0 +1,2457 @@
+{
+  "timestamp": "2026-02-12T15:29:51Z",
+  "iterations": 2,
+  "models": [
+    "google/gemini-2.5-flash-lite:nitro",
+    "google/gemini-2.5-flash-lite",
+    "qwen/qwen-turbo",
+    "qwen/qwen3-32b:nitro",
+    "amazon/nova-micro-v1:nitro",
+    "meta-llama/llama-4-maverick:nitro",
+    "morph/morph-v3-fast",
+    "inception/mercury-coder"
+  ],
+  "levels": [
+    "light",
+    "aggressive"
+  ],
+  "corpus_size": 30,
+  "results": {
+    "light": {
+      "google/gemini-2.5-flash-lite:nitro": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "text": "Okay, so today I want to talk about the release plan for Vox, like what we ship first and what we cut.",
+          "latency": 0.6416341247968376,
+          "cost": 0,
+          "ratio": 1.0,
+          "levenshtein": 0.9411764705882353,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "text": "The app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 0.6262908750213683,
+          "cost": 0,
+          "ratio": 0.819672131147541,
+          "levenshtein": 0.7131147540983607,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "text": "We should probably add a small warning if the API key is missing, and maybe say exactly which key, not just \"missing key.\"",
+          "latency": 0.5431425832211971,
+          "cost": 0,
+          "ratio": 1.0427350427350428,
+          "levenshtein": 0.9590163934426229,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 1.2716324590146542,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "text": "Note to self: Check the pipeline timing logs, encode, STT, rewrite, paste, and total, and make sure they add up.",
+          "latency": 0.5114776249974966,
+          "cost": 0,
+          "ratio": 1.0769230769230769,
+          "levenshtein": 0.9285714285714286,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "text": "The docs are out of date, and we should update them before release.",
+          "latency": 0.5053970417939126,
+          "cost": 0,
+          "ratio": 1.0806451612903225,
+          "levenshtein": 0.8656716417910448,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "text": "Basically, the goal is fast rewrite. No settings. Like, the user should not choose models at all.",
+          "latency": 2.1336566251702607,
+          "cost": 0,
+          "ratio": 1.0210526315789474,
+          "levenshtein": 0.9175257731958762,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "text": "I think we need retries on throttling, but not infinite retries. Maybe exponential backoff with jitter.",
+          "latency": 2.6390568329952657,
+          "cost": 0,
+          "ratio": 1.03,
+          "levenshtein": 0.970873786407767,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "text": "Add a benchmark command that anyone can run with an OpenRouter API key, and it should output a Markdown report.",
+          "latency": 2.1782767078839242,
+          "cost": 0,
+          "ratio": 1.0471698113207548,
+          "levenshtein": 0.954954954954955,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 2.1823603748343885,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "text": "Today, I want to talk about the release plan for Vox, like what we ship first and what we cut.",
+          "latency": 2.0064406250603497,
+          "cost": 0,
+          "ratio": 0.9215686274509803,
+          "levenshtein": 0.8627450980392157,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "text": "The bug is that the app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 3.098663540557027,
+          "cost": 0,
+          "ratio": 0.9508196721311475,
+          "levenshtein": 0.8442622950819672,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "text": "We should probably add a small warning if the API key is missing, and maybe say exactly which key, not just \"missing key.\"",
+          "latency": 2.884181166999042,
+          "cost": 0,
+          "ratio": 1.0427350427350428,
+          "levenshtein": 0.9590163934426229,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 0.6757135419175029,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "text": "Note to self: Check the pipeline timing logs. Encode, STT, rewrite, paste, and total. Make sure they add up.",
+          "latency": 2.8588068750686944,
+          "cost": 0,
+          "ratio": 1.0384615384615385,
+          "levenshtein": 0.8981481481481481,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "text": "The docs are out of date, and we should update them before release.",
+          "latency": 3.2252312498167157,
+          "cost": 0,
+          "ratio": 1.0806451612903225,
+          "levenshtein": 0.8656716417910448,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "text": "The goal is fast rewrite, no settings. The user should not choose models at all.",
+          "latency": 2.146175042260438,
+          "cost": 0,
+          "ratio": 0.8421052631578947,
+          "levenshtein": 0.7894736842105263,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "text": "I think we need retries on throttling, but not infinite retries. Maybe exponential backoff with jitter.",
+          "latency": 2.7644812087528408,
+          "cost": 0,
+          "ratio": 1.03,
+          "levenshtein": 0.970873786407767,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "text": "Add a benchmark command that anyone can run with an OpenAI API key and it should output a markdown report.",
+          "latency": 2.697906833142042,
+          "cost": 0,
+          "ratio": 1.0,
+          "levenshtein": 0.9056603773584906,
+          "content_overlap": 0.9230769230769231
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 0.4991488750092685,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        }
+      ],
+      "google/gemini-2.5-flash-lite": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "text": "Okay, so today I want to talk about the release plan for Vox. Like, what we ship first and what we cut.",
+          "latency": 0.5384743330068886,
+          "cost": 0,
+          "ratio": 1.0098039215686274,
+          "levenshtein": 0.9320388349514563,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "text": "The bug is that the app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 3.095111375208944,
+          "cost": 0,
+          "ratio": 0.9508196721311475,
+          "levenshtein": 0.8442622950819672,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "text": "We should probably add a small warning if the API key is missing and maybe say exactly which key, not just \"missing key.\"",
+          "latency": 2.7709557921625674,
+          "cost": 0,
+          "ratio": 1.0341880341880343,
+          "levenshtein": 0.9669421487603306,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 0.8375216252170503,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "text": "Note to self: Check the pipeline timing logs \u2013 encode, STT, rewrite, paste, and total \u2013 and make sure they add up.",
+          "latency": 0.6843737084418535,
+          "cost": 0,
+          "ratio": 1.0961538461538463,
+          "levenshtein": 0.9122807017543859,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "text": "The docs are out of date, and we should update them before the release.",
+          "latency": 0.45144600002095103,
+          "cost": 0,
+          "ratio": 1.1451612903225807,
+          "levenshtein": 0.8169014084507042,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "text": "The goal is fast rewrite, no settings. The user should not choose models at all.",
+          "latency": 3.3844716250896454,
+          "cost": 0,
+          "ratio": 0.8421052631578947,
+          "levenshtein": 0.7894736842105263,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "text": "I think we need retries on throttling, but not infinite retries. Maybe exponential backoff with jitter.",
+          "latency": 2.0769070419482887,
+          "cost": 0,
+          "ratio": 1.03,
+          "levenshtein": 0.970873786407767,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "text": "Add a benchmark command that anyone can run with an OpenRouter API key, and it should output a markdown report.",
+          "latency": 0.7204467081464827,
+          "cost": 0,
+          "ratio": 1.0471698113207548,
+          "levenshtein": 0.954954954954955,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 2.002863333094865,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "text": "Okay, so today I want to talk about the release plan for Vox. Like, what we ship first and what we cut.",
+          "latency": 0.5384040409699082,
+          "cost": 0,
+          "ratio": 1.0098039215686274,
+          "levenshtein": 0.9320388349514563,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "text": "The bug is that the app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 2.641873833257705,
+          "cost": 0,
+          "ratio": 0.9508196721311475,
+          "levenshtein": 0.8442622950819672,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "text": "We should probably add a small warning if the API key is missing, and maybe say exactly which key, not just \"missing key.\"",
+          "latency": 0.5529510420747101,
+          "cost": 0,
+          "ratio": 1.0427350427350428,
+          "levenshtein": 0.9590163934426229,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine. But the transcript had random commas and weird capitalization.",
+          "latency": 0.5835437090136111,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "text": "Note to self: Check pipeline timing logs: encode, STT, rewrite, paste, and total. Make sure they add up.",
+          "latency": 2.6986181656830013,
+          "cost": 0,
+          "ratio": 1.0,
+          "levenshtein": 0.8557692307692308,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "text": "The docs are out of date, and we should update them before release.",
+          "latency": 0.5602325829677284,
+          "cost": 0,
+          "ratio": 1.0806451612903225,
+          "levenshtein": 0.8656716417910448,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "text": "The goal is fast rewrite, no settings. The user should not choose models at all.",
+          "latency": 0.6805467908270657,
+          "cost": 0,
+          "ratio": 0.8421052631578947,
+          "levenshtein": 0.7894736842105263,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "text": "I think we need retries on throttling, but not infinite retries. Maybe exponential backoff with jitter.",
+          "latency": 0.652823958080262,
+          "cost": 0,
+          "ratio": 1.03,
+          "levenshtein": 0.970873786407767,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "text": "Add a benchmark command that anyone can run with an OpenRouter API key, and it should output a markdown report.",
+          "latency": 3.206285791937262,
+          "cost": 0,
+          "ratio": 1.0471698113207548,
+          "levenshtein": 0.954954954954955,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 0.48151829186826944,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        }
+      ],
+      "qwen/qwen-turbo": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.574094332754612
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08379008388146758
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08621004223823547
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08423975016921759
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 3.0098577081225812
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08380487514659762
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08718725014477968
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08160612499341369
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.628503500018269
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08107241569086909
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.3050932912155986
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08263308322057128
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08578858431428671
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.13412645924836397
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0860526249743998
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08996216719970107
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07916925009340048
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07262045796960592
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08484329096972942
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10082999989390373
+        }
+      ],
+      "qwen/qwen3-32b:nitro": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "text": "Today I want to talk about the release plan for Vox. Like what we ship first and what we cut.",
+          "latency": 2.2545614591799676,
+          "cost": 0,
+          "ratio": 0.9117647058823529,
+          "levenshtein": 0.8725490196078431,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "text": "The bug is that the app records, but sometimes the paste doesn't happen. I think it's a permissions issue, but I'm not sure.",
+          "latency": 2.6870150407776237,
+          "cost": 0,
+          "ratio": 1.0163934426229508,
+          "levenshtein": 0.782258064516129,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "text": "We should add a small warning if the API key is missing, and specify exactly which key is required instead of displaying just \"missing key\".",
+          "latency": 1.8196087498217821,
+          "cost": 0,
+          "ratio": 1.1965811965811965,
+          "levenshtein": 0.6357142857142857,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 3.158738332800567,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "text": "Note to self: Check the pipeline timing logs \u2014 encode, STT, rewrite, paste, and total \u2014 and make sure they add up.",
+          "latency": 3.714577583130449,
+          "cost": 0,
+          "ratio": 1.0961538461538463,
+          "levenshtein": 0.9122807017543859,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "text": "The docs are out of date and we should update them before release.",
+          "latency": 1.3192835422232747,
+          "cost": 0,
+          "ratio": 1.064516129032258,
+          "levenshtein": 0.8787878787878788,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "text": "The goal is a fast rewrite without settings; users should not have to choose models.",
+          "latency": 1.7895475840196013,
+          "cost": 0,
+          "ratio": 0.8842105263157894,
+          "levenshtein": 0.5157894736842106,
+          "content_overlap": 0.7272727272727273
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "text": "I think we need retries for throttling but not infinite retries. Exponential backoff with jitter.",
+          "latency": 1.5963152078911662,
+          "cost": 0,
+          "ratio": 0.97,
+          "levenshtein": 0.91,
+          "content_overlap": 0.9090909090909091
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "text": "create a benchmark command for the openrouter api that anyone with an api key can run, which outputs a markdown report with sections like \"overview,\" \"response_time,\" \"throughput,\" \"error_rate,\" \"model_compatibility,\" and \"latency_distribution,\" using tables and metrics in markdown format, ensuring the code includes the api key securely and handles authentication errors gracefully",
+          "latency": 3.7584682921878994,
+          "cost": 0,
+          "ratio": 3.6132075471698113,
+          "levenshtein": 0.2323759791122716,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 2.512472332920879,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "text": "Ok, today I want to talk about the release plan for Vox\u2014what we ship first and what we cut.",
+          "latency": 1.2567991246469319,
+          "cost": 0,
+          "ratio": 0.8921568627450981,
+          "levenshtein": 0.8529411764705882,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "text": "The app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 1.3178902920335531,
+          "cost": 0,
+          "ratio": 0.819672131147541,
+          "levenshtein": 0.7131147540983607,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "text": "We should add a warning if the API key is missing and specify which key is missing, not just the missing key.",
+          "latency": 2.5689234156161547,
+          "cost": 0,
+          "ratio": 0.9316239316239316,
+          "levenshtein": 0.6239316239316239,
+          "content_overlap": 0.6875
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "text": "I tried it on Bluetooth headphones and it sounded fine. But the transcript had random commas and weird capitalization.",
+          "latency": 1.435785208363086,
+          "cost": 0,
+          "ratio": 0.9752066115702479,
+          "levenshtein": 0.9421487603305785,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "text": "Note to self: Check the pipeline timing logs, encode STT, rewrite, paste, and total. Make sure they add up.",
+          "latency": 4.372132959309965,
+          "cost": 0,
+          "ratio": 1.0288461538461537,
+          "levenshtein": 0.9065420560747663,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "text": "The docs are out of date and we should update them before release.",
+          "latency": 3.9844281249679625,
+          "cost": 0,
+          "ratio": 1.064516129032258,
+          "levenshtein": 0.8787878787878788,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "text": "The goal is a fast rewrite with no settings\u2014users should not be allowed to choose models.",
+          "latency": 1.4759459160268307,
+          "cost": 0,
+          "ratio": 0.9368421052631579,
+          "levenshtein": 0.4631578947368421,
+          "content_overlap": 0.8181818181818182
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "text": "We need retries on throttling but not infinite retries. Consider exponential backoff with jitter.",
+          "latency": 2.1070800838060677,
+          "cost": 0,
+          "ratio": 0.97,
+          "levenshtein": 0.83,
+          "content_overlap": 0.8181818181818182
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "text": "Add a benchmark command that anyone can run using an OpenRouter API key, and it should output a Markdown report.",
+          "latency": 2.2067972500808537,
+          "cost": 0,
+          "ratio": 1.0566037735849056,
+          "levenshtein": 0.9196428571428571,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "text": "The app should never log actual transcript content in production logs. Just character counts.",
+          "latency": 1.4705064999870956,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        }
+      ],
+      "amazon/nova-micro-v1:nitro": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.091325709130615
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.11476704105734825
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0753053748048842
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 1.619365124963224
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10009991703554988
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08927412470802665
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07538337493315339
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10355383390560746
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07839849963784218
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.595953000243753
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.15806783316656947
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10888479230925441
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07473520888015628
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09387608291581273
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08612658316269517
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09658175008371472
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.085057417396456
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07515779184177518
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07452345779165626
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.05571349989622831
+        }
+      ],
+      "meta-llama/llama-4-maverick:nitro": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.1175283333286643
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.44002816593274474
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10656008310616016
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08341145887970924
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07793683325871825
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.4374449579045177
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09028112515807152
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.608153374865651
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.2549187089316547
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08787504164502025
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09597945818677545
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07594012469053268
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09257629187777638
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0784590421244502
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08728612493723631
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08304737508296967
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.12164316605776548
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08697279216721654
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.1215509157627821
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08520783297717571
+        }
+      ],
+      "morph/morph-v3-fast": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07545266579836607
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09121895907446742
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.34728308301419
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.06716062501072884
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07389033306390047
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07319825002923608
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.6572096250019968
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.1003218344412744
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.074970250017941
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08554474962875247
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.40070733288303
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08877683291211724
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10992920817807317
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.6457532080821693
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.05616008397191763
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09865362476557493
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0673197079449892
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.05856029177084565
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.12311462499201298
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07141091721132398
+        }
+      ],
+      "inception/mercury-coder": [
+        {
+          "entry_id": "light-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.32615758292376995
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.14470587484538555
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08258870802819729
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0810678331181407
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07052870793268085
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07197387516498566
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.6306031672284007
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.12893691705539823
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09305500006303191
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 1.6919453339651227
+        },
+        {
+          "entry_id": "light-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09391079191118479
+        },
+        {
+          "entry_id": "light-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08449829183518887
+        },
+        {
+          "entry_id": "light-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08748874999582767
+        },
+        {
+          "entry_id": "light-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08591983327642083
+        },
+        {
+          "entry_id": "light-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07842699997127056
+        },
+        {
+          "entry_id": "light-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.11038562515750527
+        },
+        {
+          "entry_id": "light-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07816779194399714
+        },
+        {
+          "entry_id": "light-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07492737518623471
+        },
+        {
+          "entry_id": "light-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09718741616234183
+        },
+        {
+          "entry_id": "light-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0683503751643002
+        }
+      ]
+    },
+    "aggressive": {
+      "google/gemini-2.5-flash-lite:nitro": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "text": "The app feels slow. It is not the speech-to-text, it is the rewrite step. The rewrite waits for the large language model. This takes two seconds sometimes.",
+          "latency": 0.6730972500517964,
+          "cost": 0,
+          "ratio": 0.8611111111111112,
+          "levenshtein": 0.5055555555555555,
+          "content_overlap": 0.4166666666666667
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "text": "More settings create a maze. Support becomes impossible then. I want good defaults.",
+          "latency": 0.6666270410642028,
+          "cost": 0,
+          "ratio": 0.5928571428571429,
+          "levenshtein": 0.4285714285714286,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "text": "Measure p50 and p95 in the bakeoff. Do not measure only the average. The long tail frustrates users.",
+          "latency": 0.9132772083394229,
+          "cost": 0,
+          "ratio": 0.9259259259259259,
+          "levenshtein": 0.37962962962962965,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "text": "For light cleanup, it should keep mostly the same words. Remove filler words like \"um\" and \"uh.\" Fix punctuation.",
+          "latency": 0.6326502077281475,
+          "cost": 0,
+          "ratio": 0.9576271186440678,
+          "levenshtein": 0.47457627118644063,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "text": "Pick the fast, stable model. If quality suffers, roll back. Change the processing level defaults in one file.",
+          "latency": 0.7477767080999911,
+          "cost": 0,
+          "ratio": 0.7676056338028169,
+          "levenshtein": 0.647887323943662,
+          "content_overlap": 0.8
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "text": "The report will show latency, cost, and pass rate by level. Each level will have a recommendation.",
+          "latency": 0.627257582731545,
+          "cost": 0,
+          "ratio": 0.7777777777777778,
+          "levenshtein": 0.3650793650793651,
+          "content_overlap": 0.5384615384615384
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "text": "Make this a small executable. Call OpenRouter. Write JSON and Markdown.",
+          "latency": 0.6190457921475172,
+          "cost": 0,
+          "ratio": 0.6761904761904762,
+          "levenshtein": 0.638095238095238,
+          "content_overlap": 0.5454545454545454
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "text": "If a model is missing or errors out, record it. Finish the run anyway. This allows for partial results.",
+          "latency": 0.4910194161348045,
+          "cost": 0,
+          "ratio": 0.9196428571428571,
+          "levenshtein": 0.6160714285714286,
+          "content_overlap": 0.6666666666666666
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "text": "Keep transcripts in the repository. They contain no user data. Keep the corpus small to minimize costs.",
+          "latency": 3.046629250049591,
+          "cost": 0,
+          "ratio": 0.8174603174603174,
+          "levenshtein": 0.5476190476190477,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "text": "After selecting new defaults, update the documentation. Run strict builds and strict tests. This will prevent breakage.",
+          "latency": 0.553102457895875,
+          "cost": 0,
+          "ratio": 1.0258620689655173,
+          "levenshtein": 0.5966386554621849,
+          "content_overlap": 0.5333333333333333
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "text": "The app feels slow. It is not the speech-to-text. It is the rewrite step. The app waits for the large language model. This takes two seconds.",
+          "latency": 0.5581578332930803,
+          "cost": 0,
+          "ratio": 0.7833333333333333,
+          "levenshtein": 0.4555555555555556,
+          "content_overlap": 0.375
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "text": "Too many settings create a maze. Support then becomes impossible. Defaults must be good.",
+          "latency": 0.7327568340115249,
+          "cost": 0,
+          "ratio": 0.6285714285714286,
+          "levenshtein": 0.44999999999999996,
+          "content_overlap": 0.5384615384615384
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "text": "We should measure P50 and P95. Not just the average. The long tail annoys users.",
+          "latency": 0.3943451251834631,
+          "cost": 0,
+          "ratio": 0.7407407407407407,
+          "levenshtein": 0.6296296296296297,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "text": "For light cleanup, it should mostly keep the same words. Fix punctuation. Remove filler words like \"um\" and \"uh.\"",
+          "latency": 0.6783212502487004,
+          "cost": 0,
+          "ratio": 0.9576271186440678,
+          "levenshtein": 0.8389830508474576,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "text": "Choose the model that is fast and stable. If quality suffers, change the processing level defaults in one file to roll back.",
+          "latency": 0.5830737911164761,
+          "cost": 0,
+          "ratio": 0.8732394366197183,
+          "levenshtein": 0.5985915492957746,
+          "content_overlap": 0.7333333333333333
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "text": "The report should be scannable.\nIt will contain a table.\nThe table will be organized by level.\nEach level will show latency, cost, and pass rate.\nA recommendation line will follow each entry.",
+          "latency": 0.5441731661558151,
+          "cost": 0,
+          "ratio": 1.5158730158730158,
+          "levenshtein": 0.37696335078534027,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "text": "Make a small executable. It will call OpenRouter. It will write JSON and Markdown.",
+          "latency": 0.5007118750363588,
+          "cost": 0,
+          "ratio": 0.780952380952381,
+          "levenshtein": 0.5333333333333333,
+          "content_overlap": 0.5454545454545454
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "text": "If a model is missing or errors out, record the event. Finish the run anyway. We need to see partial results.",
+          "latency": 0.4864700408652425,
+          "cost": 0,
+          "ratio": 0.9732142857142857,
+          "levenshtein": 0.6875,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "text": "Keep transcripts in the repository. Do not include user data. Keep the corpus small. This will reduce costs.",
+          "latency": 0.5754953329451382,
+          "cost": 0,
+          "ratio": 0.8571428571428571,
+          "levenshtein": 0.5158730158730158,
+          "content_overlap": 0.4375
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "text": "After choosing new defaults, update the documentation. Run strict builds and tests. This prevents breakage.",
+          "latency": 0.45979033317416906,
+          "cost": 0,
+          "ratio": 0.9224137931034483,
+          "levenshtein": 0.5517241379310345,
+          "content_overlap": 0.5333333333333333
+        }
+      ],
+      "google/gemini-2.5-flash-lite": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "text": "The app feels slow. The problem is not speech-to-text. The rewrite step causes the delay. It waits for the large language model. That can take two seconds.",
+          "latency": 3.1233512917533517,
+          "cost": 0,
+          "ratio": 0.8611111111111112,
+          "levenshtein": 0.4222222222222223,
+          "content_overlap": 0.4583333333333333
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "text": "More settings create a maze. They make support impossible. I want good defaults.",
+          "latency": 0.8968320828862488,
+          "cost": 0,
+          "ratio": 0.5714285714285714,
+          "levenshtein": 0.3857142857142857,
+          "content_overlap": 0.6153846153846154
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "text": "Measure P50 and P95. Do not just measure the average. The long tail annoys users.",
+          "latency": 0.45148437516763806,
+          "cost": 0,
+          "ratio": 0.75,
+          "levenshtein": 0.4814814814814815,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "text": "For light cleanup, it should mostly keep the same words. Just fix punctuation. Remove filler words.",
+          "latency": 0.5597120001912117,
+          "cost": 0,
+          "ratio": 0.8389830508474576,
+          "levenshtein": 0.7966101694915254,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "text": "Choose the model that is fast and stable. If quality suffers, roll back. Change the processing level defaults in one file.",
+          "latency": 0.4830576670356095,
+          "cost": 0,
+          "ratio": 0.8591549295774648,
+          "levenshtein": 0.7464788732394366,
+          "content_overlap": 0.7333333333333333
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "text": "The report should be a table. It should show latency, cost, and pass rate for each level. Include a recommendation line.",
+          "latency": 0.48241958301514387,
+          "cost": 0,
+          "ratio": 0.9523809523809523,
+          "levenshtein": 0.4920634920634921,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "text": "Build a small, executable program.\nIt will call OpenRouter.\nIt will write output as JSON and Markdown.",
+          "latency": 0.5416667917743325,
+          "cost": 0,
+          "ratio": 0.9714285714285714,
+          "levenshtein": 0.36190476190476195,
+          "content_overlap": 0.45454545454545453
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "text": "If a model is missing or errors out, record the failure. Finish the run anyway. See the partial results.",
+          "latency": 0.5422812500037253,
+          "cost": 0,
+          "ratio": 0.9285714285714286,
+          "levenshtein": 0.7053571428571428,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "text": "Keep transcripts in the repository. Use no user data. Keep the corpus small. This minimizes costs.",
+          "latency": 0.6188560421578586,
+          "cost": 0,
+          "ratio": 0.7777777777777778,
+          "levenshtein": 0.5714285714285714,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "text": "After we pick new defaults, update the documentation. Run strict builds and strict tests. This will prevent breakage.",
+          "latency": 0.7702631247229874,
+          "cost": 0,
+          "ratio": 1.0086206896551724,
+          "levenshtein": 0.6495726495726496,
+          "content_overlap": 0.6
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "text": "The app feels slow. It is not the speech-to-text. It is the rewrite step. The rewrite waits for the language model. This takes two seconds.",
+          "latency": 0.4588214582763612,
+          "cost": 0,
+          "ratio": 0.7722222222222223,
+          "levenshtein": 0.4722222222222222,
+          "content_overlap": 0.375
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "text": "More settings create a maze. Support then becomes impossible. I want good defaults.",
+          "latency": 0.44207354076206684,
+          "cost": 0,
+          "ratio": 0.5928571428571429,
+          "levenshtein": 0.40714285714285714,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "text": "We should measure p50 and p95 in the bakeoff. Not just the average. The long tail annoys users.",
+          "latency": 0.5336223752237856,
+          "cost": 0,
+          "ratio": 0.8796296296296297,
+          "levenshtein": 0.4907407407407407,
+          "content_overlap": 0.8461538461538461
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "text": "For light cleanup, it should keep mostly the same words. Fix punctuation. Remove filler words.",
+          "latency": 0.6725068329833448,
+          "cost": 0,
+          "ratio": 0.7966101694915254,
+          "levenshtein": 0.6694915254237288,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "text": "Pick the model that is fast and stable. If quality suffers, roll back. Change the processing level defaults in one file.",
+          "latency": 0.46323408419266343,
+          "cost": 0,
+          "ratio": 0.8450704225352113,
+          "levenshtein": 0.7605633802816901,
+          "content_overlap": 0.8
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "text": "The report should be a table. It should break down data by level. Each level should show latency, cost, and pass rate. Include a recommendation line for each level.",
+          "latency": 2.7954924167133868,
+          "cost": 0,
+          "ratio": 1.3015873015873016,
+          "levenshtein": 0.4817073170731707,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "text": "Make a small executable. It will call OpenRouter. It will write JSON and Markdown.",
+          "latency": 0.5300038340501487,
+          "cost": 0,
+          "ratio": 0.780952380952381,
+          "levenshtein": 0.5333333333333333,
+          "content_overlap": 0.5454545454545454
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "text": "Record when a model is missing or errors out. Finish the run regardless. See partial results.",
+          "latency": 0.5015933327376842,
+          "cost": 0,
+          "ratio": 0.8303571428571429,
+          "levenshtein": 0.5089285714285714,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "text": "Keep transcripts in the repository. Do not include user data. Keep the corpus small. This will reduce costs.",
+          "latency": 0.5328619168139994,
+          "cost": 0,
+          "ratio": 0.8571428571428571,
+          "levenshtein": 0.5158730158730158,
+          "content_overlap": 0.4375
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "text": "We will pick new defaults. Then we will update the documentation. We will run strict builds. We will run strict tests. This will prevent breakage.",
+          "latency": 0.49358733324334025,
+          "cost": 0,
+          "ratio": 1.2586206896551724,
+          "levenshtein": 0.5342465753424658,
+          "content_overlap": 0.5333333333333333
+        }
+      ],
+      "qwen/qwen-turbo": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.252706707920879
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07890079217031598
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.57814333261922
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08250362472608685
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0731329582631588
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07221791706979275
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.15783629193902016
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.3006822499446571
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09122374979779124
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08692962490022182
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07387587474659085
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07801691582426429
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07196408323943615
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07613324979320168
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07809158321470022
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08155012503266335
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08407820761203766
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0914301248267293
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09130420908331871
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08141162525862455
+        }
+      ],
+      "qwen/qwen3-32b:nitro": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "text": "The app feels slow. The problem isn't speech-to-text anymore. The rewrite step pauses. It waits for the language model. That wait can last two seconds.",
+          "latency": 1.9111256250180304,
+          "cost": 0,
+          "ratio": 0.8388888888888889,
+          "levenshtein": 0.4666666666666667,
+          "content_overlap": 0.4166666666666667
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "text": "Adding more settings creates a complex tangle. Support becomes unmanageable. I want defaults that work well.",
+          "latency": 2.211060209199786,
+          "cost": 0,
+          "ratio": 0.7714285714285715,
+          "levenshtein": 0.5142857142857142,
+          "content_overlap": 0.5384615384615384
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "text": "We need to measure p50 and p95 in any bakeoff. The average hides the tail. The long tail\u2014the high percentiles\u2014annoys users.",
+          "latency": 1.9783785832114518,
+          "cost": 0,
+          "ratio": 1.1388888888888888,
+          "levenshtein": 0.43089430894308944,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "text": "Light editing keeps most words the same but fixes punctuation and removes fillers like \"um\" or \"uh.\"",
+          "latency": 2.3714157920330763,
+          "cost": 0,
+          "ratio": 0.847457627118644,
+          "levenshtein": 0.5508474576271186,
+          "content_overlap": 0.4166666666666667
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "text": "Choose the fastest stable model. If quality drops, adjust one file's default settings to revert.",
+          "latency": 1.7890164577402174,
+          "cost": 0,
+          "ratio": 0.676056338028169,
+          "levenshtein": 0.3661971830985915,
+          "content_overlap": 0.3333333333333333
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "text": "Structure each report level as a table. List latency, cost, and pass rate as columns. Add a recommendation line at the end of each level\u2019s table. Use clear headings for each metric.",
+          "latency": 1.7020059591159225,
+          "cost": 0,
+          "ratio": 1.4365079365079365,
+          "levenshtein": 0.28729281767955805,
+          "content_overlap": 0.6923076923076923
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "text": "No large framework. A single executable that calls OpenRouter directly. Produces JSON and Markdown output.",
+          "latency": 1.3266901248134673,
+          "cost": 0,
+          "ratio": 1.0095238095238095,
+          "levenshtein": 0.5471698113207547,
+          "content_overlap": 0.5454545454545454
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "text": "If a model is missing or errors out, log it and complete the run regardless to review the partial results.",
+          "latency": 1.4323513330891728,
+          "cost": 0,
+          "ratio": 0.9464285714285714,
+          "levenshtein": 0.5803571428571428,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "text": "Keep synthetic transcripts in the repo. Use no user data. Keep the corpus small. Low cost to run.",
+          "latency": 2.109201000072062,
+          "cost": 0,
+          "ratio": 0.7698412698412699,
+          "levenshtein": 0.5873015873015873,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "text": "After selecting new defaults, update the documentation. Run strict builds and tests to avoid breaking anything.",
+          "latency": 3.775963333901018,
+          "cost": 0,
+          "ratio": 0.9568965517241379,
+          "levenshtein": 0.6120689655172413,
+          "content_overlap": 0.6
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "text": "I\u2019ve been thinking about the app\u2019s slowness.  \nIt\u2019s not the speech-to-text anymore.  \nThe rewrite step waits for the language model.  \nDelay: two seconds sometimes.",
+          "latency": 2.605190791655332,
+          "cost": 0,
+          "ratio": 0.9111111111111111,
+          "levenshtein": 0.5833333333333333,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "text": "The problem with adding more settings is that it creates a tangle. Support becomes unworkable. I want defaults that work well.",
+          "latency": 1.4436159171164036,
+          "cost": 0,
+          "ratio": 0.9,
+          "levenshtein": 0.7142857142857143,
+          "content_overlap": 0.6153846153846154
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "text": "For a bakeoff, measure p50 and p95. Don\u2019t use averages alone. The long tail causes user frustration.",
+          "latency": 1.8475056667812169,
+          "cost": 0,
+          "ratio": 0.9259259259259259,
+          "levenshtein": 0.5185185185185186,
+          "content_overlap": 0.46153846153846156
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "text": "For light cleanup, it should keep the same words while fixing punctuation and removing filler words like \"um\" and \"uh.\"",
+          "latency": 4.41718929214403,
+          "cost": 0,
+          "ratio": 1.0084745762711864,
+          "levenshtein": 0.773109243697479,
+          "content_overlap": 0.75
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "text": "Choose the fastest, most stable model. If quality suffers, fix it by changing the processing defaults in one file.",
+          "latency": 3.2880931249819696,
+          "cost": 0,
+          "ratio": 0.8028169014084507,
+          "levenshtein": 0.5845070422535211,
+          "content_overlap": 0.5333333333333333
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "text": "I want the report to be easy to scan. Use a table for each level. Include latency, cost, and pass rate. Each table should have a recommendation line.",
+          "latency": 4.980770375113934,
+          "cost": 0,
+          "ratio": 1.1825396825396826,
+          "levenshtein": 0.7046979865771812,
+          "content_overlap": 0.9230769230769231
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "text": "Don't make a big framework. Make a small executable. Let it call OpenRouter and write JSON and Markdown. No large frameworks. Keep it simple.",
+          "latency": 2.2632610839791596,
+          "cost": 0,
+          "ratio": 1.3428571428571427,
+          "levenshtein": 0.6028368794326241,
+          "content_overlap": 0.7272727272727273
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "text": "If a model is missing or fails, record the error and finish the run to see partial results.",
+          "latency": 2.7539501669816673,
+          "cost": 0,
+          "ratio": 0.8125,
+          "levenshtein": 0.6517857142857143,
+          "content_overlap": 0.6666666666666666
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "text": "We should use synthetic transcripts. Store them in the repo. Exclude all user data. Keep the corpus small enough to lower costs.",
+          "latency": 2.496783541981131,
+          "cost": 0,
+          "ratio": 1.0158730158730158,
+          "levenshtein": 0.5078125,
+          "content_overlap": 0.6875
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "text": "Select new defaults. Update the documentation. Run strict builds and tests. Prevent breakage.",
+          "latency": 2.537937458604574,
+          "cost": 0,
+          "ratio": 0.8017241379310345,
+          "levenshtein": 0.5431034482758621,
+          "content_overlap": 0.4666666666666667
+        }
+      ],
+      "amazon/nova-micro-v1:nitro": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.517023041844368
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07791733415797353
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07316995924338698
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.1734413327649236
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.1127332909964025
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09603741625323892
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0709494580514729
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09512737486511469
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07969833398237824
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07439558301120996
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0696649169549346
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08276333287358284
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08181624999269843
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.11460549989715219
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10984699986875057
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0876165833324194
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07035829173400998
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07408579206094146
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07336174976080656
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08533800020813942
+        }
+      ],
+      "meta-llama/llama-4-maverick:nitro": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07212291704490781
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07688674982637167
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07558645913377404
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08251262502744794
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0660287500359118
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07435887539759278
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07900945888832211
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0792659162543714
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09231737488880754
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07304441696032882
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07642791699618101
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08516787504777312
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08019370911642909
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07761629205197096
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10526399966329336
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08340995805338025
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09475970780476928
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09657212486490607
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.12372208386659622
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.11162087507545948
+        }
+      ],
+      "morph/morph-v3-fast": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08210745779797435
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09620387479662895
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09170054085552692
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08647633297368884
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.791153124999255
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08425204176455736
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.06686554057523608
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07377266604453325
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09722762508317828
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08378608338534832
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09294479200616479
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07370416587218642
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.06875425018370152
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08215370774269104
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08528758259490132
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08102983282878995
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10017054108902812
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0761749162338674
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.059748665895313025
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.1008180002681911
+        }
+      ],
+      "inception/mercury-coder": [
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.11122574983164668
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07005025027319789
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.06765933334827423
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08650429174304008
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07465204177424312
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08335291687399149
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0820267079398036
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09663045825436711
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08039479097351432
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 1,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.556592166889459
+        },
+        {
+          "entry_id": "aggressive-01",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09853404201567173
+        },
+        {
+          "entry_id": "aggressive-02",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.10477987490594387
+        },
+        {
+          "entry_id": "aggressive-03",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.08057995839044452
+        },
+        {
+          "entry_id": "aggressive-04",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07841508323326707
+        },
+        {
+          "entry_id": "aggressive-05",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.0693313330411911
+        },
+        {
+          "entry_id": "aggressive-06",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.09422866581007838
+        },
+        {
+          "entry_id": "aggressive-07",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07650779094547033
+        },
+        {
+          "entry_id": "aggressive-08",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 0.07093362510204315
+        },
+        {
+          "entry_id": "aggressive-09",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.6800123751163483
+        },
+        {
+          "entry_id": "aggressive-10",
+          "iteration": 2,
+          "error": "HTTP 404: {\"error\":{\"message\":\"No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection\",\"code\":404}",
+          "latency": 2.2299797502346337
+        }
+      ]
+    }
+  }
+}
