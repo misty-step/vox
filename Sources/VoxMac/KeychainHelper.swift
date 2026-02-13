@@ -10,6 +10,7 @@ public enum KeychainHelper {
         case deepgramAPIKey = "com.vox.deepgram.apikey"
         case openAIAPIKey = "com.vox.openai.apikey"
         case geminiAPIKey = "com.vox.gemini.apikey"
+        case voxCloudToken = "com.vox.cloud.token"
     }
 
     @discardableResult
