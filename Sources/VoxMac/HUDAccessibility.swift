@@ -15,8 +15,7 @@ enum HUDAccessibility {
         case .recording:
             return "Recording, \(formatDuration(recordingDuration))"
         case .processing:
-            let trimmed = processingMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "Processing" : "Processing, \(trimmed)"
+            return "Processing"
         case .success:
             return "Done"
         }

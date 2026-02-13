@@ -268,85 +268,48 @@ After 8 seconds in processing, one — and only one — status update: "Still wo
 
 ---
 
-## Recommendation: Concept 3 — Unified Capsule
+## Selected: Pure KITT
 
-### Rationale
+After three rounds of visual prototyping (HTML/CSS), **Pure KITT** was selected.
 
-1. **Fixes all three complaints.** Recording gets a quieter meter (4 vs 8 segments), processing loses the jargon cascade, done gets a 1.2s hold.
+### Design
 
-2. **Zero layout jank.** The fixed capsule eliminates the jarring size changes between states. This is the single biggest polish improvement available.
+260×44px fixed for all states. 20 segments. No text, no icons, no dots. Every state is communicated exclusively through the meter. The meter IS the HUD.
 
-3. **Narrative arc.** The ● → ◌ → ✓ morphing creates continuity. Each state feels like the next chapter of the same story, not a different UI component.
+| State | Visual | Duration |
+|-------|--------|----------|
+| Idle | 20 segments at 8% opacity, 3px | Hidden |
+| Recording | Segments respond to audio level + timer right-aligned | User-controlled |
+| Processing | KITT sweep (L→R scanning beam, 2s cycle, staggered 0.06s/segment) | Until done |
+| Success | Green cascade fills all 20 segments L→R (staggered 0.015s/segment) | 1.2s hold |
 
-4. **Moderate implementation effort.** The morphing animation is the main new work. Everything else simplifies the current code (fewer meter segments, fewer processing messages, longer done hold).
+### What Changed (from prior implementation)
 
-5. **Maintains identity.** The capsule shape, material treatment, and segmented meter are all carried forward from the current design. This is an evolution, not a redesign.
-
-### What Changes
-
-| Current | Proposed |
-|---------|----------|
-| 8-segment meter | 4-segment mini-meter |
-| "Retrying 2/3 (0.5s)" | "Transcribing…" (always) |
-| "Trying Deepgram…" | "Almost there…" (after 10s) |
+| Before | After |
+|--------|-------|
+| 8-segment meter | 20-segment full-width meter |
+| Red pulsing dot | No dot — meter IS the recording indicator |
+| Spinner + "Transcribing" text | KITT sweep animation (no text, no spinner) |
+| Green checkmark + "Done" text | Green cascade (no text, no icons) |
+| "Retrying 2/3 (0.5s)" | Provider names never surface |
+| "Trying Deepgram…" | Provider names never surface |
 | 0.5s success display | 1.2s success display |
-| 236×48 recording, varies by state | 220×44 fixed for all expanded states |
-| Distinct spinner component | Dot-to-spinner morph animation |
+| 236×48, varies by state | 260×44 fixed for all states |
+| VoiceOver: "Processing, Retrying 1/2" | VoiceOver: "Processing" (always) |
 
-### Fallback Copy
+### Reduced Motion
 
-| Duration | Message |
-|----------|---------|
-| 0–10s | "Transcribing…" |
-| 10–30s | "Almost there…" |
-| 30s+ | "Still working…" |
+- Recording: instant segment updates (no transition animation)
+- Processing: all segments at 30% opacity, 6px height (static, no sweep)
+- Success: all segments instantly green (no cascade stagger)
 
-One update at each threshold, max. No flickering between messages.
+### Files Changed
 
----
+- `Sources/VoxMac/HUDView.swift` — Full rewrite with Pure KITT components
+- `Sources/VoxAppKit/VoxSession.swift` — Removed provider-leaking HUD messages
+- `Sources/VoxMac/HUDAccessibility.swift` — Processing always says "Processing"
+- `Tests/VoxAppTests/HUDAccessibilityTests.swift` — Updated for new copy
 
-## Implementation Checklist
+### Rejected (Round 1–3)
 
-### HUD State Changes
-- [ ] Fix expanded dimensions to 220×44 for recording, processing, and success
-- [ ] Reduce `SegmentedMeter` from 8 to 4 segments
-- [ ] Add dot-to-spinner morph animation (scale + rotation + trim path)
-- [ ] Add spinner-to-check morph animation (trim path completion)
-- [ ] Increase `successDisplayDuration` from 0.5s to 1.2s
-- [ ] Ensure content crossfades within fixed capsule (no layout transition)
-
-### Processing Message Simplification
-- [ ] Remove provider-name callbacks from `VoxSession.makeSTTProvider()`
-- [ ] Remove retry-count callbacks from `RetryingSTTProvider` wiring
-- [ ] Add delayed message escalation in `HUDState`: 10s → "Almost there…", 30s → "Still working…"
-- [ ] Processing message timer resets on each `showProcessing()` call
-
-### Protocol/API Changes
-- [ ] `HUDDisplaying.showProcessing(message:)` — keep signature, change callers
-- [ ] Remove `message` parameter from retry/fallback callbacks (or stop passing HUD messages)
-- [ ] Add `processingStartTime` to `HUDState` for threshold-based message escalation
-
-### Tests
-- [ ] Update `HUDAccessibilityTests` for new message text
-- [ ] Add test: processing message escalation at 10s and 30s thresholds
-- [ ] Add test: success display duration is 1.2s
-- [ ] Add test: capsule dimensions are constant across recording/processing/success
-- [ ] Verify: retry/fallback callbacks no longer update HUD text
-- [ ] Verify: `VoiceOverAnnouncer` values match new copy
-
-### Accessibility
-- [ ] VoiceOver value for processing: "Processing, Transcribing" (unchanged)
-- [ ] VoiceOver value at 10s: "Processing, Almost there"
-- [ ] Success announcement timing matches new 1.2s hold
-
----
-
-## Appendix: Rejected Alternatives
-
-**Concept 1 (Red Dot)**: Too minimal. Removing the meter entirely eliminates the "is my mic working?" feedback that users depend on during recording. The dot-opacity modulation is too subtle to serve this purpose.
-
-**Concept 2 (Meter-First)**: The 260px width is too wide for a floating HUD. The KITT sweep during processing, while fun, adds complexity without solving the core problems.
-
-**Concept 4 (Status Line)**: Text-only loses the premium visual identity established in #190. Variable width creates new layout problems. No audio feedback is a regression.
-
-**Concept 5 (Phased Density)**: Closest to current but doesn't fix the layout jank between states. The width transition from 236px (recording) to 200px (processing) is the same class of problem we have today.
+All five initial concepts (Red Dot, Meter-First Hero, Unified Capsule, Status Line, Phased Density) were prototyped as HTML/CSS. Three rounds of iteration narrowed to two poles: bold sci-fi vs ultra-subdued. Six Round 3 designs (Pure KITT, Neon Scanner, Razor, Ghost, Terminal, Beam) were evaluated. Pure KITT selected for its committed aesthetic and zero-text design language.

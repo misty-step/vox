@@ -141,36 +141,21 @@ public final class VoxSession: ObservableObject {
         let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !elevenKey.isEmpty {
             let eleven = ElevenLabsClient(apiKey: elevenKey)
-            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs") { [weak self] attempt, maxRetries, delay in
-                let delayStr = String(format: "%.1fs", delay)
-                Task { @MainActor in
-                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
-                }
-            }
+            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs")
             cloudProviders.append((name: "ElevenLabs", provider: retried))
         }
 
         let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !deepgramKey.isEmpty {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
-            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram") { [weak self] attempt, maxRetries, delay in
-                let delayStr = String(format: "%.1fs", delay)
-                Task { @MainActor in
-                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
-                }
-            }
+            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
             cloudProviders.append((name: "Deepgram", provider: retried))
         }
 
         let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         if !openAIKey.isEmpty {
             let whisper = WhisperClient(apiKey: openAIKey)
-            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper") { [weak self] attempt, maxRetries, delay in
-                let delayStr = String(format: "%.1fs", delay)
-                Task { @MainActor in
-                    self?.hud.showProcessing(message: "Retrying \(attempt)/\(maxRetries) (\(delayStr))")
-                }
-            }
+            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
             cloudProviders.append((name: "Whisper", provider: retried))
         }
 
@@ -186,12 +171,7 @@ public final class VoxSession: ObservableObject {
             for (i, cp) in cloudProviders.enumerated() {
                 hedgedEntries.append(.init(name: cp.name, provider: cp.provider, delay: delays[min(i, delays.count - 1)]))
             }
-            chain = HedgedSTTProvider(entries: hedgedEntries) { [weak self] providerName in
-                guard providerName != "Apple Speech" && providerName != "ElevenLabs" else { return }
-                Task { @MainActor in
-                    self?.hud.showProcessing(message: "Trying \(providerName)…")
-                }
-            }
+            chain = HedgedSTTProvider(entries: hedgedEntries)
         } else {
             // Default: sequential primary → fallback → Apple Speech safety net
             let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSpeech as STTProvider)]
@@ -200,11 +180,7 @@ public final class VoxSession: ObservableObject {
                     primary: accumulated.provider,
                     fallback: next.provider,
                     primaryName: accumulated.name
-                ) { [weak self] in
-                    Task { @MainActor in
-                        self?.hud.showProcessing(message: "Trying \(next.name)…")
-                    }
-                }
+                )
                 return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
             }.provider
         }

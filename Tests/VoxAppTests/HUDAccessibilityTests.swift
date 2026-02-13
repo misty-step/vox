@@ -17,9 +17,8 @@ struct HUDAccessibilityTests {
     @MainActor func stateProcessingAccessibility() {
         let state = HUDState()
         state.mode = .processing
-        state.processingMessage = "Retrying 1/2 (0.5s)"
 
-        #expect(state.accessibilityValue == "Processing, Retrying 1/2 (0.5s)")
+        #expect(state.accessibilityValue == "Processing")
     }
 
     @Test("Announcement policy emits transition announcements once per mode")
