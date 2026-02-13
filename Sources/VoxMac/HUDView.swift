@@ -144,10 +144,23 @@ extension EnvironmentValues {
 
 // MARK: - Icon Components
 
-/// Pulsing red dot for recording state. Gentle breathing baseline with audio level boost.
+/// Mutable container for frame-by-frame level smoothing, avoiding @State value-type limitations.
+private final class LevelSmoothing {
+    var value: Double = 0
+
+    /// Asymmetric EMA: fast attack (voice onset), slow release (natural decay).
+    func smooth(toward target: Double) -> Double {
+        let factor = target > value ? 0.3 : 0.15
+        value += (target - value) * factor
+        return value
+    }
+}
+
+/// Pulsing red dot for recording state. Gentle breathing baseline with smoothed audio level boost.
 private struct RecordingDot: View {
     let level: Float
     @Environment(\.reducedMotion) private var reducedMotion
+    @State private var smoothing = LevelSmoothing()
 
     var body: some View {
         if reducedMotion {
@@ -159,13 +172,13 @@ private struct RecordingDot: View {
                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
                 let breathPhase = elapsed.truncatingRemainder(dividingBy: 1.8) / 1.8
                 let breathT = sin(breathPhase * .pi)
-                // Breathing baseline: scale 0.85–1.1, opacity 0.5–0.7
-                let breathScale = 0.85 + 0.25 * breathT
-                let breathOpacity = 0.5 + 0.2 * breathT
-                // Audio level boost on top
-                let lvl = Double(level)
-                let scale = breathScale + lvl * 0.4
-                let opacity = min(1.0, breathOpacity + lvl * 0.3)
+                // Breathing baseline: scale 0.85–1.05, opacity 0.5–0.65
+                let breathScale = 0.85 + 0.20 * breathT
+                let breathOpacity = 0.5 + 0.15 * breathT
+                // Smoothed audio level boost — pow curve expands low signals, EMA removes jitter
+                let lvl = smoothing.smooth(toward: pow(Double(level), 0.65))
+                let scale = breathScale + lvl * 0.7
+                let opacity = min(1.0, breathOpacity + lvl * 0.45)
 
                 Circle()
                     .fill(Design.red)
