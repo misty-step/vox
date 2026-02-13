@@ -325,10 +325,28 @@ public struct HUDView: View {
                 .frame(width: 8, height: 8)
         case .recording:
             RecordingDot(level: state.average)
+                .background(
+                    Circle()
+                        .fill(Design.red.opacity(0.25))
+                        .frame(width: 20, height: 20)
+                        .blur(radius: 8)
+                )
         case .processing:
             ProcessingSpinner()
+                .background(
+                    Circle()
+                        .fill(Design.blue.opacity(0.20))
+                        .frame(width: 18, height: 18)
+                        .blur(radius: 7)
+                )
         case .success:
             CheckMark()
+                .background(
+                    Circle()
+                        .fill(Design.green.opacity(0.22))
+                        .frame(width: 20, height: 20)
+                        .blur(radius: 8)
+                )
         }
     }
 
