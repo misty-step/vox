@@ -106,8 +106,6 @@ enum HUDLayout {
 private enum Design {
     static let width = HUDLayout.expandedWidth
     static let height = HUDLayout.expandedHeight
-    static let cornerRadius: CGFloat = 12
-
     // Timing
     static let fadeOutDuration: Double = 0.18
     static let transitionDuration: Double = 0.18
@@ -296,7 +294,7 @@ public struct HUDView: View {
         .padding(.trailing, 12)
         .frame(width: Design.width, height: Design.height)
         .background(containerBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous))
+        .clipShape(Capsule())
         .overlay(containerBorder)
         .shadow(
             color: Design.shadowColor,
@@ -359,19 +357,19 @@ public struct HUDView: View {
     // MARK: - Container Styling
 
     private var containerBackground: some View {
-        RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+        Capsule()
             .fill(.ultraThinMaterial)
             .overlay(
-                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+                Capsule()
                     .fill(Color.black.opacity(0.36))
             )
     }
 
     private var containerBorder: some View {
-        RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+        Capsule()
             .stroke(Color.white.opacity(0.07), lineWidth: 1.0)
             .overlay(
-                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+                Capsule()
                     .inset(by: 0.5)
                     .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
             )
