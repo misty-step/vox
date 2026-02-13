@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/misty-step/vox/compare/v1.10.0...v1.11.0) (2026-02-13)
+
+
+### Features
+
+* make API readiness messaging state-aware (local vs cloud paths) ([#244](https://github.com/misty-step/vox/issues/244)) ([d4bf85f](https://github.com/misty-step/vox/commit/d4bf85ff1c98aadbee90dd1970ce83c89d723e3e)), closes [#186](https://github.com/misty-step/vox/issues/186)
+
 # [1.10.0](https://github.com/misty-step/vox/compare/v1.9.0...v1.10.0) (2026-02-13)
 
 
