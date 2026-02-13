@@ -381,6 +381,21 @@ public struct HUDView: View {
                 Capsule()
                     .fill(Color.black.opacity(0.36))
             )
+            .overlay(
+                // Top-edge specular highlight — simulates glass light source
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.12),
+                                Color.white.opacity(0.03),
+                                Color.clear,
+                            ],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            )
     }
 
     private var containerBorder: some View {
