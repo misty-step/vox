@@ -21,7 +21,7 @@ public final class HUDState: ObservableObject {
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
-    @Published public var processingMessage: String = "Transcribing"
+    @Published public var processingMessage: String = "Processing"
     @Published public var isVisible: Bool = false
 
     private var timer: Timer?
@@ -56,7 +56,7 @@ public final class HUDState: ObservableObject {
         RunLoop.main.add(timer!, forMode: .common)
     }
 
-    public func startProcessing(message: String = "Transcribing") {
+    public func startProcessing(message: String = "Processing") {
         mode = .processing
         processingMessage = message
         timer?.invalidate()
@@ -92,50 +92,41 @@ public final class HUDState: ObservableObject {
         recordingDuration = 0
         average = 0
         peak = 0
-        processingMessage = "Transcribing"
+        processingMessage = "Processing"
     }
 }
 
 // MARK: - Design System
 
 enum HUDLayout {
-    static let expandedWidth: CGFloat = 260
-    static let expandedHeight: CGFloat = 44
+    static let expandedWidth: CGFloat = 170
+    static let expandedHeight: CGFloat = 40
 }
 
 private enum Design {
-    // Dimensions — fixed for all states
     static let width = HUDLayout.expandedWidth
     static let height = HUDLayout.expandedHeight
-    static let cornerRadius: CGFloat = 10
-
-    // Typography
-    static let fontTimer = Font.system(size: 14, weight: .semibold, design: .monospaced)
-
-    // Colors
-    static let borderIdle = Color.white.opacity(0.14)
-    static let borderRecording = Color.white.opacity(0.3)
-    static let borderProcessing = Color.white.opacity(0.2)
-    static let borderSuccess = Color.green.opacity(0.45)
-    static let textPrimary = Color.white.opacity(0.92)
-    static let segmentActive = Color.white.opacity(0.9)
-    static let segmentInactive = Color.white.opacity(0.08)
-    static let segmentGreen = Color(red: 48.0 / 255, green: 209.0 / 255, blue: 88.0 / 255)
+    static let cornerRadius: CGFloat = 12
 
     // Timing
     static let fadeOutDuration: Double = 0.18
     static let transitionDuration: Double = 0.18
     static let successDisplayDuration = HUDTiming.successDisplayDuration
 
-    // KITT sweep
-    static let sweepCycleDuration: Double = 2.0
-    static let sweepStaggerDelay: Double = 0.06
-    static let segmentCount: Int = 20
+    // Colors
+    static let red = Color(red: 255.0 / 255, green: 69.0 / 255, blue: 58.0 / 255)
+    static let blue = Color(red: 10.0 / 255, green: 132.0 / 255, blue: 255.0 / 255)
+    static let green = Color(red: 48.0 / 255, green: 209.0 / 255, blue: 88.0 / 255)
 
     // Shadows
     static let shadowColor = Color.black.opacity(0.22)
     static let shadowRadius: CGFloat = 16
     static let shadowY: CGFloat = 3
+
+    // Typography
+    static let timerFont = Font.system(size: 12, weight: .medium, design: .monospaced)
+    static let labelFont = Font.system(size: 12, weight: .medium)
+    static let textSecondary = Color.white.opacity(0.55)
 }
 
 // MARK: - Accessibility
@@ -151,39 +142,105 @@ extension EnvironmentValues {
     }
 }
 
-// MARK: - KITT Sweep Interpolation
+// MARK: - Icon Components
 
-/// Maps a normalized phase (0–1) to segment opacity using the KITT keyframe curve.
-private func kittOpacity(phase: Double) -> Double {
-    let p = phase < 0 ? phase + 1.0 : (phase >= 1.0 ? phase - 1.0 : phase)
-    if p < 0.12 {
-        return 0.06 + (0.95 - 0.06) * (p / 0.12)
-    } else if p < 0.25 {
-        return 0.95 + (0.35 - 0.95) * ((p - 0.12) / 0.13)
-    } else if p < 0.45 {
-        return 0.35 + (0.08 - 0.35) * ((p - 0.25) / 0.20)
-    } else {
-        return 0.08 + (0.06 - 0.08) * min(1, (p - 0.45) / 0.55)
+/// Pulsing red dot for recording state.
+private struct RecordingDot: View {
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    var body: some View {
+        if reducedMotion {
+            Circle()
+                .fill(Design.red)
+                .frame(width: 8, height: 8)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let phase = elapsed.truncatingRemainder(dividingBy: 1.4)
+                let normalized = phase / 1.4
+                // sine-based breathing: scale 0.85–1.3, opacity 0.5–1.0
+                let t = sin(normalized * .pi)
+                let scale = 0.85 + 0.45 * t
+                let opacity = 0.5 + 0.5 * t
+
+                Circle()
+                    .fill(Design.red)
+                    .frame(width: 8, height: 8)
+                    .scaleEffect(scale)
+                    .opacity(opacity)
+            }
+        }
     }
 }
 
-/// Maps a normalized phase (0–1) to segment height using the KITT keyframe curve.
-private func kittHeight(phase: Double) -> CGFloat {
-    let p = phase < 0 ? phase + 1.0 : (phase >= 1.0 ? phase - 1.0 : phase)
-    if p < 0.12 {
-        return 3 + (14 - 3) * CGFloat(p / 0.12)
-    } else if p < 0.25 {
-        return 14 + (7 - 14) * CGFloat((p - 0.12) / 0.13)
-    } else if p < 0.45 {
-        return 7 + (4 - 7) * CGFloat((p - 0.25) / 0.20)
-    } else {
-        return 4 + (3 - 4) * CGFloat(min(1, (p - 0.45) / 0.55))
+/// Spinning blue arc for processing state.
+private struct ProcessingSpinner: View {
+    @Environment(\.reducedMotion) private var reducedMotion
+
+    private let radius: CGFloat = 4
+    private let strokeWidth: CGFloat = 1.5
+
+    var body: some View {
+        if reducedMotion {
+            Circle()
+                .stroke(Design.blue, lineWidth: strokeWidth)
+                .frame(width: radius * 2, height: radius * 2)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let rotation = (elapsed.truncatingRemainder(dividingBy: 0.8) / 0.8) * 360
+
+                Circle()
+                    .trim(from: 0, to: 0.28)
+                    .stroke(Design.blue, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round))
+                    .frame(width: radius * 2, height: radius * 2)
+                    .rotationEffect(.degrees(rotation))
+            }
+        }
     }
 }
 
-// MARK: - Components
+/// Animated green checkmark for done state.
+private struct CheckMark: View {
+    @Environment(\.reducedMotion) private var reducedMotion
+    @State private var progress: CGFloat = 0
 
-/// Timer display — monospaced digits, right-aligned in the capsule
+    var body: some View {
+        CheckShape()
+            .trim(from: 0, to: progress)
+            .stroke(Design.green, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            .frame(width: 12, height: 12)
+            .onAppear {
+                if reducedMotion {
+                    progress = 1
+                } else {
+                    withAnimation(.easeOut(duration: 0.3).delay(0.1)) {
+                        progress = 1
+                    }
+                }
+            }
+            .onDisappear {
+                progress = 0
+            }
+    }
+}
+
+/// Path for the checkmark — three-point polyline matching the prototype.
+private struct CheckShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Normalized from SVG viewBox 0 0 16 16, points: (4.5,8) (6.8,10.5) (11.5,5.5)
+        let w = rect.width
+        let h = rect.height
+        path.move(to: CGPoint(x: w * 0.28, y: h * 0.50))
+        path.addLine(to: CGPoint(x: w * 0.425, y: h * 0.656))
+        path.addLine(to: CGPoint(x: w * 0.72, y: h * 0.344))
+        return path
+    }
+}
+
+// MARK: - Timer Display
+
 private struct TimerDisplay: View {
     let duration: TimeInterval
 
@@ -195,148 +252,9 @@ private struct TimerDisplay: View {
 
     var body: some View {
         Text(formattedTime)
-            .font(Design.fontTimer)
-            .foregroundStyle(Design.textPrimary)
+            .font(Design.timerFont)
+            .foregroundStyle(Design.textSecondary)
             .monospacedDigit()
-    }
-}
-
-/// Level meter for recording — 20 segments respond to audio level
-private struct LevelMeter: View {
-    let level: Float
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<Design.segmentCount, id: \.self) { index in
-                LevelSegment(index: index, level: level)
-            }
-        }
-        .frame(height: 14)
-    }
-}
-
-private struct LevelSegment: View {
-    let index: Int
-    let level: Float
-
-    private var isActive: Bool {
-        let threshold = Float(index + 1) / Float(Design.segmentCount)
-        return level >= threshold
-    }
-
-    private var segmentHeight: CGFloat {
-        guard isActive else { return 3 }
-        let normalized = CGFloat(index) / CGFloat(Design.segmentCount)
-        let variation = 1.0 - abs(normalized - 0.4) * 0.8
-        return 10 + 4 * variation
-    }
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-            .fill(Color.white.opacity(isActive ? 0.9 : 0.08))
-            .frame(maxWidth: .infinity)
-            .frame(height: segmentHeight)
-            .animation(.easeOut(duration: 0.06), value: isActive)
-    }
-}
-
-/// KITT sweep animation for processing — L→R scanning beam, 2s cycle
-private struct KITTSweepMeter: View {
-    @Environment(\.reducedMotion) private var reducedMotion
-
-    var body: some View {
-        if reducedMotion {
-            staticProcessingMeter
-        } else {
-            animatedSweepMeter
-        }
-    }
-
-    private var staticProcessingMeter: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<Design.segmentCount, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(Color.white.opacity(0.3))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 6)
-            }
-        }
-        .frame(height: 14)
-    }
-
-    private var animatedSweepMeter: some View {
-        TimelineView(.animation) { timeline in
-            let elapsed = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(0..<Design.segmentCount, id: \.self) { index in
-                    let phase = sweepPhase(for: index, at: elapsed)
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(Color.white.opacity(kittOpacity(phase: phase)))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: kittHeight(phase: phase))
-                }
-            }
-            .frame(height: 14)
-        }
-    }
-
-    private func sweepPhase(for index: Int, at time: TimeInterval) -> Double {
-        let offset = Double(index) * Design.sweepStaggerDelay
-        let raw = (time - offset).truncatingRemainder(dividingBy: Design.sweepCycleDuration)
-        let normalized = raw / Design.sweepCycleDuration
-        return normalized < 0 ? normalized + 1.0 : normalized
-    }
-}
-
-/// Green cascade for success — segments fill L→R with staggered delay
-private struct GreenCascadeMeter: View {
-    @Environment(\.reducedMotion) private var reducedMotion
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<Design.segmentCount, id: \.self) { index in
-                GreenCascadeSegment(index: index, reducedMotion: reducedMotion)
-            }
-        }
-        .frame(height: 14)
-    }
-}
-
-private struct GreenCascadeSegment: View {
-    let index: Int
-    let reducedMotion: Bool
-
-    @State private var isFilled = false
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-            .fill(isFilled ? Design.segmentGreen.opacity(0.7) : Color.white.opacity(0.06))
-            .frame(maxWidth: .infinity)
-            .frame(height: isFilled ? 10 : 3)
-            .onAppear {
-                if reducedMotion {
-                    isFilled = true
-                } else {
-                    withAnimation(.easeOut(duration: 0.35).delay(Double(index) * 0.015)) {
-                        isFilled = true
-                    }
-                }
-            }
-    }
-}
-
-/// Idle meter — all segments dim
-private struct IdleMeter: View {
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<Design.segmentCount, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 3)
-            }
-        }
-        .frame(height: 14)
     }
 }
 
@@ -351,50 +269,73 @@ public struct HUDView: View {
     }
 
     public var body: some View {
-        content
-            .padding(.horizontal, 14)
-            .frame(width: Design.width, height: Design.height)
-            .background(containerBackground)
-            .clipShape(RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous))
-            .overlay(containerBorder)
-            .shadow(
-                color: Design.shadowColor,
-                radius: Design.shadowRadius,
-                x: 0,
-                y: Design.shadowY
-            )
-            .opacity(state.isVisible ? 1.0 : 0.0)
-            .scaleEffect(state.isVisible ? 1.0 : 0.97)
-            .animation(
-                reducedMotion ? nil : .easeOut(duration: Design.transitionDuration),
-                value: state.isVisible
-            )
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(state.accessibilityLabel))
-            .accessibilityValue(Text(state.accessibilityValue))
-            .accessibilityHidden(!state.isVisible)
+        HStack(spacing: 6) {
+            iconZone
+                .frame(width: 28, height: 28)
+            Spacer()
+            textZone
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(width: Design.width, height: Design.height)
+        .background(containerBackground)
+        .clipShape(RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous))
+        .overlay(containerBorder)
+        .shadow(
+            color: Design.shadowColor,
+            radius: Design.shadowRadius,
+            x: 0,
+            y: Design.shadowY
+        )
+        .opacity(state.isVisible ? 1.0 : 0.0)
+        .scaleEffect(state.isVisible ? 1.0 : 0.97)
+        .animation(
+            reducedMotion ? nil : .easeOut(duration: Design.transitionDuration),
+            value: state.isVisible
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(state.accessibilityLabel))
+        .accessibilityValue(Text(state.accessibilityValue))
+        .accessibilityHidden(!state.isVisible)
     }
 
-    // MARK: - Content Views
+    // MARK: - Icon Zone (left)
 
     @ViewBuilder
-    private var content: some View {
+    private var iconZone: some View {
         switch state.mode {
         case .idle:
-            IdleMeter()
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 8, height: 8)
         case .recording:
-            recordingContent
+            RecordingDot()
         case .processing:
-            KITTSweepMeter()
+            ProcessingSpinner()
         case .success:
-            GreenCascadeMeter()
+            CheckMark()
         }
     }
 
-    private var recordingContent: some View {
-        HStack(spacing: 8) {
-            LevelMeter(level: state.average)
+    // MARK: - Text Zone (right)
+
+    @ViewBuilder
+    private var textZone: some View {
+        switch state.mode {
+        case .idle:
+            Text("Ready")
+                .font(Design.labelFont)
+                .foregroundStyle(Color.white.opacity(0.3))
+        case .recording:
             TimerDisplay(duration: state.recordingDuration)
+        case .processing:
+            Text(state.processingMessage)
+                .font(Design.labelFont)
+                .foregroundStyle(Design.textSecondary)
+        case .success:
+            Text("Done")
+                .font(Design.labelFont)
+                .foregroundStyle(Design.green)
         }
     }
 
@@ -411,70 +352,50 @@ public struct HUDView: View {
 
     private var containerBorder: some View {
         RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
-            .stroke(borderColor, lineWidth: state.mode == .recording ? 1.4 : 1.0)
+            .stroke(Color.white.opacity(0.07), lineWidth: 1.0)
             .overlay(
                 RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
                     .inset(by: 0.5)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                    .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
             )
-    }
-
-    private var borderColor: Color {
-        switch state.mode {
-        case .idle:
-            return Design.borderIdle
-        case .recording:
-            return Design.borderRecording
-        case .processing:
-            return Design.borderProcessing
-        case .success:
-            return Design.borderSuccess
-        }
     }
 }
 
 // MARK: - Preview
 
 #Preview("Idle") {
-    let idleState = HUDState()
-    idleState.mode = .idle
-    idleState.isVisible = true
-    return HUDView(state: idleState)
+    let state = HUDState()
+    state.mode = .idle
+    state.isVisible = true
+    return HUDView(state: state)
         .padding(40)
-        .background(
-            LinearGradient(
-                colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.5)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(Color.gray.opacity(0.4))
 }
 
 #Preview("Recording") {
-    let recordingState = HUDState()
-    recordingState.mode = .recording
-    recordingState.average = 0.4
-    recordingState.recordingDuration = 83
-    recordingState.isVisible = true
-    return HUDView(state: recordingState)
+    let state = HUDState()
+    state.mode = .recording
+    state.recordingDuration = 83
+    state.isVisible = true
+    return HUDView(state: state)
         .padding(40)
         .background(Color.gray.opacity(0.4))
 }
 
-#Preview("Processing — KITT Sweep") {
-    let processingState = HUDState()
-    processingState.mode = .processing
-    processingState.isVisible = true
-    return HUDView(state: processingState)
+#Preview("Processing") {
+    let state = HUDState()
+    state.mode = .processing
+    state.isVisible = true
+    return HUDView(state: state)
         .padding(40)
         .background(Color.gray.opacity(0.4))
 }
 
-#Preview("Success — Green Cascade") {
-    let successState = HUDState()
-    successState.mode = .success
-    successState.isVisible = true
-    return HUDView(state: successState)
+#Preview("Done") {
+    let state = HUDState()
+    state.mode = .success
+    state.isVisible = true
+    return HUDView(state: state)
         .padding(40)
         .background(Color.gray.opacity(0.4))
 }
