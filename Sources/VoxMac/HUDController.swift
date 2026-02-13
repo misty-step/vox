@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
+import Combine
 import VoxCore
+
+/// Represents preset positions for the HUD
+public enum HUDPositionPreset: String, CaseIterable {
+    case topCenter = "topCenter"
+    case bottomCenter = "bottomCenter"
+    case custom = "custom"
+}
 
 @MainActor
 public final class HUDController: HUDDisplaying {
@@ -11,9 +19,17 @@ public final class HUDController: HUDDisplaying {
     private var scheduledHide: DispatchWorkItem?
     private var announcementPolicy = HUDAnnouncementPolicy()
     private var hasInitialPosition = false
+    private var cancellables = Set<AnyCancellable>()
 
     /// Extra space around the HUD content so the drop shadow isn't clipped by the panel edge.
     private static let shadowPadding: CGFloat = 24
+
+    private enum Constants {
+        static let positionKey = "HUDWindowPosition"
+        static let presetKey = "HUDPositionPreset"
+        static let defaultTopOffset: CGFloat = 80
+        static let defaultBottomOffset: CGFloat = 40
+    }
 
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -45,7 +61,83 @@ public final class HUDController: HUDDisplaying {
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         announcer = VoiceOverAnnouncer(element: panel)
-        hasInitialPosition = positionPanel()
+        setupPositionPersistence()
+        hasInitialPosition = restorePosition()
+    }
+
+    // MARK: - Position Management
+
+    private func setupPositionPersistence() {
+        NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: panel)
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.savePosition()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func savePosition() {
+        let frame = panel.frame
+        let positionData: [String: CGFloat] = [
+            "x": frame.origin.x,
+            "y": frame.origin.y,
+            "width": frame.size.width,
+            "height": frame.size.height
+        ]
+        UserDefaults.standard.set(positionData, forKey: Constants.positionKey)
+        UserDefaults.standard.set(HUDPositionPreset.custom.rawValue, forKey: Constants.presetKey)
+    }
+
+    @discardableResult
+    private func restorePosition() -> Bool {
+        if let presetRaw = UserDefaults.standard.string(forKey: Constants.presetKey),
+           let preset = HUDPositionPreset(rawValue: presetRaw),
+           preset != .custom {
+            return applyPreset(preset)
+        }
+
+        if let positionData = UserDefaults.standard.dictionary(forKey: Constants.positionKey) as? [String: CGFloat],
+           let x = positionData["x"],
+           let y = positionData["y"] {
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            return true
+        }
+
+        return applyPreset(.topCenter)
+    }
+
+    @discardableResult
+    public func applyPreset(_ preset: HUDPositionPreset) -> Bool {
+        guard let screen = NSScreen.main else { return false }
+        let size = panel.frame.size
+
+        switch preset {
+        case .topCenter:
+            let x = screen.visibleFrame.midX - size.width / 2
+            let y = screen.visibleFrame.maxY - size.height - Constants.defaultTopOffset
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+
+        case .bottomCenter:
+            let x = screen.visibleFrame.midX - size.width / 2
+            let y = screen.visibleFrame.minY + Constants.defaultBottomOffset
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+
+        case .custom:
+            return restorePosition()
+        }
+
+        if preset != .custom {
+            UserDefaults.standard.set(preset.rawValue, forKey: Constants.presetKey)
+        }
+        return true
+    }
+
+    public var currentPreset: HUDPositionPreset {
+        if let presetRaw = UserDefaults.standard.string(forKey: Constants.presetKey),
+           let preset = HUDPositionPreset(rawValue: presetRaw) {
+            return preset
+        }
+        return .custom
     }
 
     public func showRecording(average: Float, peak: Float) {
@@ -107,7 +199,7 @@ public final class HUDController: HUDDisplaying {
 
     private func ensureVisiblePosition() {
         if !hasInitialPosition {
-            hasInitialPosition = positionPanel()
+            hasInitialPosition = restorePosition()
             return
         }
 
@@ -116,18 +208,8 @@ public final class HUDController: HUDDisplaying {
             screen.visibleFrame.intersects(frame)
         }
         if !isVisibleOnAnyScreen {
-            _ = positionPanel()
+            _ = applyPreset(.topCenter)
         }
-    }
-
-    @discardableResult
-    private func positionPanel() -> Bool {
-        guard let screen = NSScreen.main else { return false }
-        let size = panel.frame.size
-        let x = screen.visibleFrame.midX - size.width / 2
-        let y = screen.visibleFrame.maxY - size.height - 80
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
-        return true
     }
 
     private func announceTransition(to mode: HUDMode) {
