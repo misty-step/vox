@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/misty-step/vox/compare/v1.8.0...v1.9.0) (2026-02-13)
+
+
+### Features
+
+* **onboarding:** setup checklist ([#239](https://github.com/misty-step/vox/issues/239)) ([4769817](https://github.com/misty-step/vox/commit/47698170a3a8be918aa0e0093dc1af7648b129fd)), closes [#182](https://github.com/misty-step/vox/issues/182)
+
 # [1.8.0](https://github.com/misty-step/vox/compare/v1.7.0...v1.8.0) (2026-02-12)
 
 
