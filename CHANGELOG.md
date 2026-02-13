@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/misty-step/vox/compare/v1.9.0...v1.10.0) (2026-02-13)
+
+
+### Features
+
+* **hud:** dual-fill state design with smoothed audio level ([#241](https://github.com/misty-step/vox/issues/241)) ([ce17159](https://github.com/misty-step/vox/commit/ce171596e3abf8a0dae13c74a8b78a47d12394a0)), closes [#210](https://github.com/misty-step/vox/issues/210) [#210](https://github.com/misty-step/vox/issues/210)
+
 # [1.9.0](https://github.com/misty-step/vox/compare/v1.8.0...v1.9.0) (2026-02-13)
 
 
