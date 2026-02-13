@@ -29,14 +29,14 @@ struct StatusBarMenuSnapshotTests {
 
         #expect(snapshot.statusTitle == "Status: Recording")
         #expect(snapshot.modeTitle == "Mode: Aggressive")
-        #expect(snapshot.cloudTitle == "Cloud STT ready; rewrite missing")
+        #expect(snapshot.cloudTitle == "Cloud STT ready; rewrite not configured")
         #expect(snapshot.cloudNeedsAction == true)
         #expect(snapshot.toggleTitle == "Stop Dictation")
         #expect(snapshot.toggleEnabled == true)
     }
 
-    @Test("Processing snapshot disables toggle and reports local-only STT")
-    func processingSnapshotDisablesToggle() {
+    @Test("Processing snapshot in Off mode with no cloud shows on-device status")
+    func processingSnapshotOffModeNoCloud() {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .processing(processingLevel: .off),
             hasCloudSTT: false,
@@ -45,10 +45,22 @@ struct StatusBarMenuSnapshotTests {
 
         #expect(snapshot.statusTitle == "Status: Processing")
         #expect(snapshot.modeTitle == "Mode: Off")
-        #expect(snapshot.cloudTitle == "Cloud services: Not configured")
-        #expect(snapshot.cloudNeedsAction == true)
+        #expect(snapshot.cloudTitle == "On-device transcription")
+        #expect(snapshot.cloudNeedsAction == false)
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == false)
+    }
+
+    @Test("Off mode with cloud STT shows cloud transcription ready")
+    func offModeWithCloudSTT() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .off),
+            hasCloudSTT: true,
+            hasRewrite: false
+        )
+
+        #expect(snapshot.cloudTitle == "Cloud transcription ready")
+        #expect(snapshot.cloudNeedsAction == false)
     }
 
     @Test("Rewrite-only setup message is explicit")
@@ -59,8 +71,8 @@ struct StatusBarMenuSnapshotTests {
             hasRewrite: true
         )
 
-        #expect(snapshot.cloudTitle == "Rewrite ready; transcription local")
-        #expect(snapshot.cloudNeedsAction == true)
+        #expect(snapshot.cloudTitle == "Rewrite ready; transcription on-device")
+        #expect(snapshot.cloudNeedsAction == false)
     }
 
     @Test("Enhance level label is preserved")
@@ -72,5 +84,29 @@ struct StatusBarMenuSnapshotTests {
         )
 
         #expect(snapshot.modeTitle == "Mode: Enhance")
+    }
+
+    @Test("Light mode with no cloud services shows limited mode message")
+    func lightModeNoCloudShowsLimited() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .light),
+            hasCloudSTT: false,
+            hasRewrite: false
+        )
+
+        #expect(snapshot.cloudTitle == "Cloud services not configured; limited to Off mode")
+        #expect(snapshot.cloudNeedsAction == true)
+    }
+
+    @Test("Aggressive mode with cloud STT but no rewrite shows missing rewrite")
+    func aggressiveModeMissingRewrite() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .aggressive),
+            hasCloudSTT: true,
+            hasRewrite: false
+        )
+
+        #expect(snapshot.cloudTitle == "Cloud STT ready; rewrite not configured")
+        #expect(snapshot.cloudNeedsAction == true)
     }
 }

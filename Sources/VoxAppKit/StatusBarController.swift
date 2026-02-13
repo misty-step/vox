@@ -54,26 +54,58 @@ struct StatusBarMenuSnapshot: Equatable {
             toggleEnabled = false
         }
 
-        let cloudTitle: String
-        switch (hasCloudSTT, hasRewrite) {
-        case (true, true):
-            cloudTitle = "Cloud services: Ready"
-        case (true, false):
-            cloudTitle = "Cloud STT ready; rewrite missing"
-        case (false, true):
-            cloudTitle = "Rewrite ready; transcription local"
-        case (false, false):
-            cloudTitle = "Cloud services: Not configured"
-        }
+        let cloudStatus = CloudStatus.forLevel(
+            state.processingLevel,
+            hasCloudSTT: hasCloudSTT,
+            hasRewrite: hasRewrite
+        )
 
         return StatusBarMenuSnapshot(
             statusTitle: statusTitle,
             modeTitle: "Mode: \(state.processingLevel.menuDisplayName)",
-            cloudTitle: cloudTitle,
-            cloudNeedsAction: !(hasCloudSTT && hasRewrite),
+            cloudTitle: cloudStatus.title,
+            cloudNeedsAction: cloudStatus.needsAction,
             toggleTitle: toggleTitle,
             toggleEnabled: toggleEnabled
         )
+    }
+}
+
+/// Models cloud service readiness based on processing level and provider configuration.
+/// Aligns status messaging with actual functional requirements.
+enum CloudStatus {
+    /// Returns the appropriate cloud status for the given configuration.
+    /// - Parameters:
+    ///   - level: Current processing level (determines rewrite requirements)
+    ///   - hasCloudSTT: Whether any cloud STT provider is configured
+    ///   - hasRewrite: Whether any rewrite provider is configured
+    /// - Returns: Tuple of (title: status message, needsAction: whether user action is suggested)
+    static func forLevel(
+        _ level: ProcessingLevel,
+        hasCloudSTT: Bool,
+        hasRewrite: Bool
+    ) -> (title: String, needsAction: Bool) {
+        switch level {
+        case .off:
+            // Off mode: only transcription matters, rewrite not used
+            if hasCloudSTT {
+                return ("Cloud transcription ready", false)
+            } else {
+                return ("On-device transcription", false)
+            }
+        case .light, .aggressive, .enhance:
+            // These modes require rewrite; show nuanced status
+            switch (hasCloudSTT, hasRewrite) {
+            case (true, true):
+                return ("Cloud services: Ready", false)
+            case (true, false):
+                return ("Cloud STT ready; rewrite not configured", true)
+            case (false, true):
+                return ("Rewrite ready; transcription on-device", false)
+            case (false, false):
+                return ("Cloud services not configured; limited to Off mode", true)
+            }
+        }
     }
 }
 
