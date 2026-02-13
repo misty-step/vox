@@ -21,7 +21,7 @@ public enum PermissionManager {
     }
 
     public static func requestMicrophoneAccess() async -> Bool {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        let status = microphoneAuthorizationStatus()
         if status == .authorized { return true }
         if status == .denied || status == .restricted { return false }
 
@@ -42,7 +42,11 @@ public enum PermissionManager {
     }
 
     public static func isMicrophoneAuthorized() -> Bool {
-        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        microphoneAuthorizationStatus() == .authorized
+    }
+
+    public static func microphoneAuthorizationStatus() -> AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .audio)
     }
 
     public static func isAccessibilityTrusted() -> Bool {

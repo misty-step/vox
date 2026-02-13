@@ -7,8 +7,10 @@ import VoxMac
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private var settingsWindowController: SettingsWindowController?
+    private var onboardingWindowController: OnboardingWindowController?
     private var session: VoxSession?
     private var hotkeyMonitor: HotkeyMonitor?
+    private let onboarding = OnboardingStore()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Clean up recovery audio older than 24 hours
@@ -30,12 +32,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         PermissionManager.promptForAccessibilityIfNeeded()
 
-        let session = VoxSession()
+        let session = VoxSession(sessionExtension: OnboardingSessionExtension(onboarding: onboarding))
         self.session = session
 
         settingsWindowController = SettingsWindowController()
         let statusBarController = StatusBarController(
             onToggle: { Task { await session.toggleRecording() } },
+            onSetupChecklist: { [weak self] in self?.showOnboardingChecklist() },
             onSettings: { [weak self] in self?.showSettings() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )
@@ -64,11 +67,35 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             presentHotkeyError(error)
         }
+
+        showOnboardingChecklistIfNeeded()
     }
 
     private func showSettings() {
         settingsWindowController?.showWindow(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func showOnboardingChecklist() {
+        if onboardingWindowController == nil {
+            onboardingWindowController = OnboardingWindowController(
+                onboarding: onboarding,
+                onOpenSettings: { [weak self] in self?.showSettings() }
+            )
+        }
+        onboardingWindowController?.showWindow(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func showOnboardingChecklistIfNeeded() {
+        guard onboarding.hasShownChecklist == false else { return }
+
+        let needsAccessibility = !PermissionManager.isAccessibilityTrusted()
+        let needsMicrophone = PermissionManager.microphoneAuthorizationStatus() != .authorized
+        if needsAccessibility || needsMicrophone {
+            showOnboardingChecklist()
+        }
+        onboarding.markChecklistShown()
     }
 
     private func cleanupOldRecoveryFiles() {
