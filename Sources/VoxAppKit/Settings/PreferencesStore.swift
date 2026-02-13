@@ -51,6 +51,37 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         set { setAPIKey(newValue, for: .geminiAPIKey) }
     }
 
+    public var voxCloudToken: String {
+        get { token(env: "VOX_CLOUD_TOKEN", keychain: .voxCloudToken) }
+        set { setToken(newValue, for: .voxCloudToken) }
+    }
+
+    /// Whether Vox Cloud mode is enabled (token is set and valid)
+    @Published public var voxCloudEnabled: Bool = false
+
+    private func token(env: String, keychain: KeychainHelper.Key) -> String {
+        if let rawEnvKey = ProcessInfo.processInfo.environment[env] {
+            let envKey = rawEnvKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !envKey.isEmpty {
+                return envKey
+            }
+        }
+        return (KeychainHelper.load(keychain) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func setToken(_ value: String, for key: KeychainHelper.Key) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            KeychainHelper.delete(key)
+            voxCloudEnabled = false
+        } else {
+            KeychainHelper.save(trimmed, for: key)
+            // Will be set to true after successful connection test
+        }
+        objectWillChange.send()
+    }
+
     private func apiKey(env: String, keychain: KeychainHelper.Key) -> String {
         if let rawEnvKey = ProcessInfo.processInfo.environment[env] {
             let envKey = rawEnvKey.trimmingCharacters(in: .whitespacesAndNewlines)
