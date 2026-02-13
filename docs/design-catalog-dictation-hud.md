@@ -1,11 +1,13 @@
 # Dictation HUD Design Catalog
 ## macOS Menu Bar App - Floating Recording Interface
 
+> **Superseded**: This catalog was the initial design exploration. The HUD was redesigned in #210 — see [design-exploration-hud-states.md](design-exploration-hud-states.md) for the final Dual Fill design (170×40, icon+text, smoothed audio level dot).
+
 ---
 
 ## Overview
 
-**Current State:** Basic black rounded rectangle with green waveform bars, truncated "Recor..." text.
+**Current State:** Dual Fill capsule — pulsing red dot (recording), blue spinner (processing), green checkmark (done). 170×40px fixed size, `.ultraThinMaterial` background.
 
 **Design Challenge:** Elevate a functional utility into a memorable, delightful interface that feels at home on macOS while establishing brand identity.
 

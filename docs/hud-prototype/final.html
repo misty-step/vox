@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vox HUD — Final Design</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12/dist/gsap.min.js"></script>
+<style>
+  :root {
+    --hud-bg: rgba(0,0,0,0.82);
+    --hud-r: 12px;
+    --green: #30d158;
+    --red: #ff453a;
+    --blue: #0a84ff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans); background: #1a1a1a; color: #eee;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .stage {
+    display: flex; flex-direction: column; align-items: center; gap: 48px;
+  }
+
+  .hud {
+    width: 170px; height: 40px;
+    border-radius: var(--hud-r); background: var(--hud-bg);
+    border: 1px solid rgba(255,255,255,0.07);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    display: flex; align-items: center;
+    padding: 0 12px 0 10px;
+    justify-content: space-between; gap: 6px;
+  }
+
+  .icon-zone {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; position: relative;
+  }
+  .icon-zone svg { overflow: visible; position: absolute; }
+
+  .rec-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--red); position: absolute;
+  }
+
+  .text-zone { display: flex; align-items: center; }
+  .timer {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: 12px; font-weight: 500; letter-spacing: 0.5px;
+    color: rgba(255,255,255,0.55);
+  }
+  .label {
+    font-family: var(--sans); font-size: 12px; font-weight: 500;
+    color: rgba(255,255,255,0.55); letter-spacing: 0.2px;
+  }
+
+  .meta {
+    display: flex; align-items: center; gap: 16px;
+    font-family: var(--mono); font-size: 10px;
+    color: rgba(255,255,255,0.2); letter-spacing: 0.5px;
+  }
+  .meta-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0s !important; transition-duration: 0s !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="hud" id="hud">
+    <div class="icon-zone">
+      <div class="rec-dot" id="dot"></div>
+      <svg width="16" height="16" viewBox="0 0 16 16" id="spinner-svg" style="opacity:0">
+        <circle id="spin-circle" cx="8" cy="8" r="4" fill="none" stroke="#0a84ff" stroke-width="1.5"/>
+      </svg>
+      <svg width="16" height="16" viewBox="0 0 16 16" id="check-svg" style="opacity:0">
+        <polyline id="check-mark" points="4.5,8 6.8,10.5 11.5,5.5" fill="none" stroke="#30d158" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="12" stroke-dashoffset="12"/>
+      </svg>
+    </div>
+    <div class="text-zone">
+      <span class="timer" id="timer">00:00</span>
+      <span class="label" id="label" style="display:none"></span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <span id="state-label">RECORDING</span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const CYCLE = [
+    { state: 'recording', dur: 4000 },
+    { state: 'processing', dur: 3000 },
+    { state: 'done', dur: 2000 },
+  ];
+
+  const dot = document.getElementById('dot');
+  const spinSvg = document.getElementById('spinner-svg');
+  const spinCircle = document.getElementById('spin-circle');
+  const checkSvg = document.getElementById('check-svg');
+  const checkMark = document.getElementById('check-mark');
+  const timerEl = document.getElementById('timer');
+  const labelEl = document.getElementById('label');
+  const stateLabel = document.getElementById('state-label');
+
+  const BASE_R = 4;
+  const CHECK_LEN = 12;
+  const CIRC = 2 * Math.PI * BASE_R;
+
+  let tl = null, ti = null, sec = 0;
+
+  function fmt(s) {
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function killAll() {
+    if (tl) tl.kill();
+    clearInterval(ti);
+    gsap.killTweensOf(dot);
+    gsap.killTweensOf(spinCircle);
+    gsap.killTweensOf(checkMark);
+  }
+
+  function setState(state) {
+    killAll();
+
+    // Reset all icon elements
+    gsap.set(dot, { scale: 1, opacity: 0 });
+    gsap.set(spinSvg, { opacity: 0 });
+    gsap.set(spinCircle, { rotation: 0, strokeDasharray: 'none', strokeDashoffset: 0, attr: { r: BASE_R } });
+    gsap.set(checkSvg, { opacity: 0 });
+    gsap.set(checkMark, { strokeDashoffset: CHECK_LEN, opacity: 1 });
+
+    if (state === 'recording') {
+      stateLabel.textContent = 'RECORDING';
+
+      // Show dot, hide others
+      gsap.set(dot, { opacity: 1 });
+
+      // Timer
+      timerEl.style.display = ''; labelEl.style.display = 'none';
+      sec = 0; timerEl.textContent = '00:00';
+      ti = setInterval(() => { sec++; timerEl.textContent = fmt(sec); }, 1000);
+
+      // Dot breathes
+      tl = gsap.timeline({ repeat: -1 });
+      tl.to(dot, { scale: 1.3, opacity: 1, duration: 0.7, ease: 'sine.inOut' })
+        .to(dot, { scale: 0.85, opacity: 0.5, duration: 0.7, ease: 'sine.inOut' });
+
+    } else if (state === 'processing') {
+      stateLabel.textContent = 'PROCESSING';
+
+      // Show spinner
+      gsap.set(spinSvg, { opacity: 1 });
+      gsap.set(spinCircle, {
+        strokeDasharray: CIRC * 0.28 + ' ' + CIRC * 0.72,
+        transformOrigin: '50% 50%',
+      });
+
+      // Label
+      timerEl.style.display = 'none'; labelEl.style.display = '';
+      labelEl.textContent = 'Processing';
+      labelEl.style.color = 'rgba(255,255,255,0.55)';
+      gsap.fromTo(labelEl, { opacity: 0 }, { opacity: 1, duration: 0.25 });
+
+      // Dot fades out, spinner fades in
+      gsap.fromTo(spinSvg, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+
+      // Spin
+      tl = gsap.timeline({ repeat: -1 });
+      tl.to(spinCircle, { rotation: 360, strokeDashoffset: -CIRC, duration: 0.8, ease: 'none' });
+
+    } else {
+      stateLabel.textContent = 'DONE';
+
+      // Show check
+      gsap.set(checkSvg, { opacity: 1 });
+
+      // Label
+      timerEl.style.display = 'none'; labelEl.style.display = '';
+      labelEl.textContent = 'Done';
+      labelEl.style.color = '#30d158';
+      gsap.fromTo(labelEl, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+
+      // Draw check
+      gsap.to(checkMark, { strokeDashoffset: 0, duration: 0.3, ease: 'power2.out', delay: 0.1 });
+    }
+  }
+
+  // Cycle
+  let si = 0;
+  function advance() {
+    const { state, dur } = CYCLE[si];
+    setState(state);
+    si = (si + 1) % CYCLE.length;
+    setTimeout(advance, dur);
+  }
+  advance();
+})();
+</script>
+</body>
+</html>
