@@ -192,7 +192,7 @@ private struct RecordingDot: View {
 private struct ProcessingSpinner: View {
     @Environment(\.reducedMotion) private var reducedMotion
 
-    private let radius: CGFloat = 4
+    private let radius: CGFloat = 5
     private let strokeWidth: CGFloat = 1.5
 
     var body: some View {
@@ -224,7 +224,7 @@ private struct CheckMark: View {
         CheckShape()
             .trim(from: 0, to: progress)
             .stroke(Design.green, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-            .frame(width: 12, height: 12)
+            .frame(width: 14, height: 14)
             .onAppear {
                 if reducedMotion {
                     progress = 1
@@ -367,12 +367,8 @@ public struct HUDView: View {
 
     private var containerBorder: some View {
         Capsule()
-            .stroke(Color.white.opacity(0.07), lineWidth: 1.0)
-            .overlay(
-                Capsule()
-                    .inset(by: 0.5)
-                    .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
-            )
+            .inset(by: 0.5)
+            .stroke(Color.white.opacity(0.10), lineWidth: 1.0)
     }
 }
 
