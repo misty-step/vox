@@ -99,8 +99,8 @@ public final class HUDState: ObservableObject {
 // MARK: - Design System
 
 enum HUDLayout {
-    static let expandedWidth: CGFloat = 170
-    static let expandedHeight: CGFloat = 40
+    static let expandedWidth: CGFloat = 160
+    static let expandedHeight: CGFloat = 36
 }
 
 private enum Design {
@@ -122,8 +122,8 @@ private enum Design {
     static let shadowY: CGFloat = 3
 
     // Typography
-    static let timerFont = Font.system(size: 12, weight: .medium, design: .monospaced)
-    static let labelFont = Font.system(size: 12, weight: .medium)
+    static let timerFont = Font.system(size: 11, weight: .medium, design: .monospaced)
+    static let labelFont = Font.system(size: 11, weight: .medium)
     static let textSecondary = Color.white.opacity(0.55)
 }
 
@@ -286,12 +286,12 @@ public struct HUDView: View {
     public var body: some View {
         HStack(spacing: 6) {
             iconZone
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
             Spacer()
             textZone
         }
         .padding(.leading, 10)
-        .padding(.trailing, 12)
+        .padding(.trailing, 11)
         .frame(width: Design.width, height: Design.height)
         .background(containerBackground)
         .clipShape(Capsule())
