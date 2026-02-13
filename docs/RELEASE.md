@@ -1,6 +1,40 @@
-# Release Guide (macOS, Signed + Notarized)
+# Release Guide
 
-This repository ships a release script that builds a distributable `Vox.app`, signs it, notarizes it, staples the ticket, and verifies Gatekeeper.
+Vox has two release paths:
+1. **Landfall (Automated)** — Versioning, changelog, and GitHub releases via CI
+2. **macOS Signing (Manual/CI)** — Signed + notarized app bundle distribution
+
+---
+
+## Landfall Automated Releases
+
+Vox uses [Landfall](https://github.com/misty-step/landfall) — Misty Step's GitHub Action for automated versioning, changelog generation, and release notes.
+
+### How It Works
+
+1. **Conventional Commits:** Use `feat:`, `fix:`, `refactor:`, `docs:` prefixes in commit messages
+2. **Automatic Versioning:** Landfall analyzes commits and determines semver bump (major/minor/patch)
+3. **Changelog Generation:** Updates `CHANGELOG.md` with categorized entries
+4. **GitHub Release:** Creates release with auto-generated notes
+
+### Triggers
+
+- **Automatic:** On every successful CI run on `master` branch (after PR merge)
+- **Manual:** `workflow_dispatch` in GitHub Actions UI
+
+### Workflow
+
+- **File:** `.github/workflows/release.yml`
+- **Action:** `misty-step/landfall@v1`
+- **Required secrets:**
+  - `GH_RELEASE_TOKEN` — GitHub token with release permissions
+  - `MOONSHOT_API_KEY` — LLM API key for release note generation
+
+---
+
+## macOS Signed + Notarized Distribution
+
+For distributing a Gatekeeper-compliant `Vox.app` that users can run without security warnings.
 
 ## Prerequisites
 

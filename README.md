@@ -83,7 +83,9 @@ export VOX_NOTARY_PROFILE="vox-notary"
 ./scripts/release-macos.sh
 ```
 
-See `docs/RELEASE.md` for full setup (certificate, notary credentials, CI secrets).
+**Automated Releases:** Vox uses [Landfall](https://github.com/misty-step/landfall) for automated versioning and releases. When PRs merge to `master` with conventional commits (`feat:`, `fix:`, etc.), Landfall automatically bumps the version, updates the changelog, and creates GitHub releases.
+
+See `docs/RELEASE.md` for full setup (certificate, notary credentials, CI secrets) and `CONTRIBUTING.md` for release workflow details.
 
 ### Configuration
 

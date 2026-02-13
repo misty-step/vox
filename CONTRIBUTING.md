@@ -41,7 +41,25 @@ cp .env.example .env.local  # Add your keys
 
 ## Release (Maintainers)
 
-Build signed + notarized distribution artifacts:
+Vox uses [Landfall](https://github.com/misty-step/landfall) — Misty Step's automated release pipeline — for versioning, changelog generation, and release notes.
+
+### Automated Releases (CI)
+
+The release workflow triggers automatically when CI passes on the `master` branch:
+
+1. Merge PRs to `master` with conventional commit messages (`feat:`, `fix:`, etc.)
+2. Landfall analyzes commits since the last tag
+3. Determines version bump (major/minor/patch) from commit types
+4. Generates changelog entries and release notes
+5. Creates GitHub release with automatically generated notes
+
+**Workflow file:** `.github/workflows/release.yml`
+
+**Manual trigger:** Maintainers can also trigger releases via `workflow_dispatch` in the Actions tab.
+
+### Local Release (Signing + Notarization)
+
+For signed + notarized `Vox.app` distribution artifacts (macOS Gatekeeper compliant):
 
 ```bash
 export VOX_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
@@ -49,7 +67,11 @@ export VOX_NOTARY_PROFILE="vox-notary"
 ./scripts/release-macos.sh
 ```
 
-Full release setup and CI secrets are documented in `docs/RELEASE.md`.
+Outputs:
+- `dist/Vox.app` — signed, notarized app bundle
+- `dist/Vox-macos.zip` — stapled zip for distribution
+
+Full release setup, certificate configuration, and CI secrets are documented in `docs/RELEASE.md`.
 
 ## Project Structure
 
