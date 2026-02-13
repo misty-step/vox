@@ -12,16 +12,21 @@ public final class HUDController: HUDDisplaying {
     private var announcementPolicy = HUDAnnouncementPolicy()
     private var hasInitialPosition = false
 
+    /// Extra space around the HUD content so the drop shadow isn't clipped by the panel edge.
+    private static let shadowPadding: CGFloat = 24
+
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let pad = Self.shadowPadding
         let content = HUDView(state: state)
             .environment(\.reducedMotion, reducedMotion)
+            .padding(pad)
         let hosting = NSHostingView(rootView: content)
         hosting.frame = NSRect(
             x: 0,
             y: 0,
-            width: HUDLayout.expandedWidth,
-            height: HUDLayout.expandedHeight
+            width: HUDLayout.expandedWidth + pad * 2,
+            height: HUDLayout.expandedHeight + pad * 2
         )
 
         panel = NSPanel(
@@ -32,7 +37,7 @@ public final class HUDController: HUDDisplaying {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = hosting

@@ -144,8 +144,9 @@ extension EnvironmentValues {
 
 // MARK: - Icon Components
 
-/// Pulsing red dot for recording state.
+/// Pulsing red dot for recording state. Gentle breathing baseline with audio level boost.
 private struct RecordingDot: View {
+    let level: Float
     @Environment(\.reducedMotion) private var reducedMotion
 
     var body: some View {
@@ -156,12 +157,15 @@ private struct RecordingDot: View {
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
-                let phase = elapsed.truncatingRemainder(dividingBy: 1.4)
-                let normalized = phase / 1.4
-                // sine-based breathing: scale 0.85–1.3, opacity 0.5–1.0
-                let t = sin(normalized * .pi)
-                let scale = 0.85 + 0.45 * t
-                let opacity = 0.5 + 0.5 * t
+                let breathPhase = elapsed.truncatingRemainder(dividingBy: 1.8) / 1.8
+                let breathT = sin(breathPhase * .pi)
+                // Breathing baseline: scale 0.85–1.1, opacity 0.5–0.7
+                let breathScale = 0.85 + 0.25 * breathT
+                let breathOpacity = 0.5 + 0.2 * breathT
+                // Audio level boost on top
+                let lvl = Double(level)
+                let scale = breathScale + lvl * 0.4
+                let opacity = min(1.0, breathOpacity + lvl * 0.3)
 
                 Circle()
                     .fill(Design.red)
@@ -309,7 +313,7 @@ public struct HUDView: View {
                 .fill(Color.white.opacity(0.12))
                 .frame(width: 8, height: 8)
         case .recording:
-            RecordingDot()
+            RecordingDot(level: state.average)
         case .processing:
             ProcessingSpinner()
         case .success:
