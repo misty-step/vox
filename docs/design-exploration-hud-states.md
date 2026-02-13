@@ -53,7 +53,7 @@ Strip the recording state to its essence: you're recording. The timer tells you 
 
 ### State Map
 
-```
+```text
 RECORDING:  ● 01:23
             ↑   ↑
          Red dot Timer only. No meter. No label.
@@ -95,7 +95,7 @@ Invert the current hierarchy: the meter becomes the dominant visual element span
 
 ### State Map
 
-```
+```text
 RECORDING:  ● [▓▓▓▓▓▓▓▓▓░░░░░░░] 01:23
             ↑  ←──── 16 segments ────→   ↑
          Small    Hero meter, full width   Timer
@@ -137,7 +137,7 @@ The HUD is always the same capsule. The interior changes; the container never do
 
 ### State Map
 
-```
+```text
 IDLE:       [·] Ready                     (gray, compact)
 
 RECORDING:  [● 01:23 ▓▓▓▓░░░░]           (white border, expanded)
@@ -180,7 +180,7 @@ Replace iconography with plain language. The HUD becomes a floating status bar t
 
 ### State Map
 
-```
+```text
 IDLE:       Ready
 
 RECORDING:  Recording · 01:23
@@ -220,7 +220,7 @@ Recording needs audio feedback (is the mic working?). Processing doesn't. Done n
 
 ### State Map
 
-```
+```text
 RECORDING:  ● 01:23 [▓▓▓▓░░░░]           Full info: dot + timer + meter
             (Current layout, but 6 segments instead of 8, tighter spacing)
 
@@ -268,48 +268,73 @@ After 8 seconds in processing, one — and only one — status update: "Still wo
 
 ---
 
-## Selected: Pure KITT
+## Selected: Dual Fill
 
-After three rounds of visual prototyping (HTML/CSS), **Pure KITT** was selected.
+After six rounds of visual prototyping (HTML/CSS), **Dual Fill** was selected — icon left, text right, both zones always populated across all states.
 
-### Design
+### Design Journey
 
-260×44px fixed for all states. 20 segments. No text, no icons, no dots. Every state is communicated exclusively through the meter. The meter IS the HUD.
+1. **Round 1–3**: Five initial concepts (Red Dot, Meter-First Hero, Unified Capsule, Status Line, Phased Density) explored. Three rounds narrowed to bold sci-fi vs ultra-subdued. Pure KITT (segments-only, no text/icons) was initially selected.
+2. **Round 4**: Pure KITT rejected by user — "too blocky", processing sweep too slow. Back to drawing board with 12 new concepts across 3 AI tools.
+3. **Round 5–6**: Three genetic algorithm rounds (12→8→6 concepts) converged on Dual Fill: consistent icon+text layout at 170×40.
+4. **Audio feedback**: Three more genetic rounds (6→6→6) for recording-state audio level visualization. Converged on hybrid breathing dot with smoothed EMA level response.
 
-| State | Visual | Duration |
-|-------|--------|----------|
-| Idle | 20 segments at 8% opacity, 3px | Hidden |
-| Recording | Segments respond to audio level + timer right-aligned | User-controlled |
-| Processing | KITT sweep (L→R scanning beam, 2s cycle, staggered 0.06s/segment) | Until done |
-| Success | Green cascade fills all 20 segments L→R (staggered 0.015s/segment) | 1.2s hold |
+### Final Design
+
+170×40px fixed for all states. Icon zone (28×28) left, text zone right. `HStack(spacing: 6)`.
+
+| State | Icon | Text | Duration |
+|-------|------|------|----------|
+| Idle | Dim gray dot (8px) | "Ready" (white 0.3) | Hidden |
+| Recording | Pulsing red dot with smoothed audio level response | MM:SS timer (monospaced) | User-controlled |
+| Processing | Blue spinning arc (4px radius, 0.8s cycle) | "Processing" (white 0.55) | Until done |
+| Success | Animated green checkmark (draw-on 0.3s) | "Done" (green) | 1.2s hold |
+
+### Recording Dot: Audio Level Feedback
+
+The red dot uses a hybrid breathing + level system with asymmetric EMA smoothing:
+- **Breathing baseline**: scale 0.85–1.05, opacity 0.5–0.65 (1.8s sine cycle)
+- **Level boost**: `pow(level, 0.65)` expands low-level signals, then +0.7 scale / +0.45 opacity
+- **Smoothing**: `LevelSmoothing` class with fast attack (0.3) / slow release (0.15) EMA — rises quickly on voice onset, decays naturally on pause
+
+### Container
+
+- Background: `.ultraThinMaterial` + black overlay (0.36 opacity)
+- Border: double-layer white stroke (0.07 outer, 0.05 inner)
+- Shadow: black 0.22, radius 16, y-offset 3 (rendered within 24px padding to avoid panel clipping)
+- Corner radius: 12px continuous
 
 ### What Changed (from prior implementation)
 
 | Before | After |
 |--------|-------|
-| 8-segment meter | 20-segment full-width meter |
-| Red pulsing dot | No dot — meter IS the recording indicator |
-| Spinner + "Transcribing" text | KITT sweep animation (no text, no spinner) |
-| Green checkmark + "Done" text | Green cascade (no text, no icons) |
+| 8-segment level meter | Pulsing red dot with smoothed audio level |
+| Spinner + variable text | Blue spinner arc + "Processing" (always) |
 | "Retrying 2/3 (0.5s)" | Provider names never surface |
 | "Trying Deepgram…" | Provider names never surface |
+| Green checkmark + "Done" text | Animated draw-on checkmark + "Done" |
 | 0.5s success display | 1.2s success display |
-| 236×48, varies by state | 260×44 fixed for all states |
+| 236×48, varies by state | 170×40 fixed for all states |
 | VoiceOver: "Processing, Retrying 1/2" | VoiceOver: "Processing" (always) |
 
 ### Reduced Motion
 
-- Recording: instant segment updates (no transition animation)
-- Processing: all segments at 30% opacity, 6px height (static, no sweep)
-- Success: all segments instantly green (no cascade stagger)
+- Recording: static red dot (no breathing, no level animation)
+- Processing: static blue circle outline (no rotation)
+- Success: checkmark appears instantly (no draw-on animation)
+- Fade transitions: disabled (instant show/hide)
 
 ### Files Changed
 
-- `Sources/VoxMac/HUDView.swift` — Full rewrite with Pure KITT components
-- `Sources/VoxAppKit/VoxSession.swift` — Removed provider-leaking HUD messages
+- `Sources/VoxMac/HUDView.swift` — Full rewrite: RecordingDot, ProcessingSpinner, CheckMark, LevelSmoothing
+- `Sources/VoxMac/HUDController.swift` — Shadow padding fix, panel sizing to 170×40
 - `Sources/VoxMac/HUDAccessibility.swift` — Processing always says "Processing"
 - `Tests/VoxAppTests/HUDAccessibilityTests.swift` — Updated for new copy
 
-### Rejected (Round 1–3)
+### Rejected Designs
 
-All five initial concepts (Red Dot, Meter-First Hero, Unified Capsule, Status Line, Phased Density) were prototyped as HTML/CSS. Three rounds of iteration narrowed to two poles: bold sci-fi vs ultra-subdued. Six Round 3 designs (Pure KITT, Neon Scanner, Razor, Ghost, Terminal, Beam) were evaluated. Pure KITT selected for its committed aesthetic and zero-text design language.
+**Round 1–3 (initial exploration):** Red Dot, Meter-First Hero, Unified Capsule, Status Line, Phased Density → Pure KITT selected then rejected.
+
+**Round 4–6 (Dual Fill convergence):** Capsule Glow, Morph Line, Timer Hero, Text Forward, Compact Icon Timer, Wide Breathing Room → Timer King, Badge, Text Only, Bottom Rail, Color Field → Dual Fill winner (G3).
+
+**Audio feedback rounds:** Responsive Dot, Ring Pulse, Mini Bars, Dot+Arc, Dot+Waveform, Hybrid Breathing → Dot Sweet Spot, Dot Scale Only, Bars Compact, Bars Visible Idle → Hybrid Balanced selected (breathing + level boost + asymmetric EMA smoothing).
