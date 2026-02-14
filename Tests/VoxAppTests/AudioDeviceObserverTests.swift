@@ -2,6 +2,7 @@ import XCTest
 @testable import VoxMac
 import Foundation
 
+@MainActor
 final class AudioDeviceObserverTests: XCTestCase {
     var observer: AudioDeviceObserver!
 
@@ -31,12 +32,11 @@ final class AudioDeviceObserverTests: XCTestCase {
         XCTAssertTrue(observer.selectedDeviceUnavailable, "Non-existent device should be marked as unavailable")
     }
 
-    func testValidateSelectedDeviceWithAvailableDevice() {
+    func testValidateSelectedDeviceWithAvailableDevice() throws {
         // Get the first available device
         let availableDevices = AudioDeviceManager.inputDevices()
         guard let firstDevice = availableDevices.first else {
-            XCTSkip("No audio input devices available for testing")
-            return
+            throw XCTSkip("No audio input devices available for testing")
         }
 
         observer.setSelectedDeviceUID(firstDevice.id)
@@ -76,7 +76,7 @@ final class AudioDeviceManagerTests: XCTestCase {
     }
 
     func testDefaultInputDeviceUID() {
-        let uid = AudioDeviceManager.defaultInputDeviceUID()
+        _ = AudioDeviceManager.defaultInputDeviceUID()
         // May be nil if no default device, but should not crash
         XCTAssertTrue(true, "defaultInputDeviceUID completed without crash")
     }
