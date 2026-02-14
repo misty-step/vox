@@ -70,10 +70,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         switch registrationResult {
         case .success(let monitor):
             hotkeyMonitor = monitor
-            statusBarController?.setHotkeyAvailable(true)
+            self.statusBarController?.setHotkeyAvailable(true)
         case .failure(let error):
             hotkeyMonitor = nil
-            statusBarController?.setHotkeyAvailable(false)
+            self.statusBarController?.setHotkeyAvailable(false)
             presentHotkeyError(error, canRetry: true)
         }
 
