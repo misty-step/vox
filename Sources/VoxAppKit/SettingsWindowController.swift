@@ -3,8 +3,11 @@ import SwiftUI
 
 @MainActor
 public final class SettingsWindowController: NSWindowController {
-    public init() {
-        let view = SettingsView()
+    private var retryHotkeyCallback: (() -> Void)?
+
+    public init(hotkeyAvailable: Bool = true, onRetryHotkey: (() -> Void)? = nil) {
+        self.retryHotkeyCallback = onRetryHotkey
+        let view = SettingsView(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey ?? {})
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Vox Settings"
@@ -12,6 +15,16 @@ public final class SettingsWindowController: NSWindowController {
         window.setContentSize(NSSize(width: 600, height: 480))
         window.center()
         super.init(window: window)
+    }
+
+    func updateHotkeyAvailability(_ available: Bool, onRetry: (() -> Void)? = nil) {
+        self.retryHotkeyCallback = onRetry
+        if let hostingController = window?.contentViewController as? NSHostingController<SettingsView> {
+            hostingController.rootView = SettingsView(
+                hotkeyAvailable: available,
+                onRetryHotkey: onRetry ?? {}
+            )
+        }
     }
 
     @available(*, unavailable)
