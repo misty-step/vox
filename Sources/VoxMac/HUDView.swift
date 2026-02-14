@@ -406,4 +406,50 @@ public struct HUDView: View {
 }
 
 // MARK: - Preview
-// Note: #Preview macros removed due to PreviewsMacros plugin unavailability in this build environment.
+
+#Preview("Idle") {
+    let state = HUDState()
+    state.mode = .idle
+    state.isVisible = true
+    return HUDView(state: state)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}
+
+#Preview("Recording") {
+    let state = HUDState()
+    state.mode = .recording
+    state.recordingDuration = 83
+    state.isVisible = true
+    return HUDView(state: state)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}
+
+#Preview("Processing") {
+    let state = HUDState()
+    state.mode = .processing
+    state.isVisible = true
+    return HUDView(state: state)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}
+
+#Preview("Done") {
+    let state = HUDState()
+    state.mode = .success
+    state.isVisible = true
+    return HUDView(state: state)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}
+
+#Preview("Reduced Motion") {
+    let state = HUDState()
+    state.mode = .processing
+    state.isVisible = true
+    return HUDView(state: state)
+        .environment(\.reducedMotion, true)
+        .padding(40)
+        .background(Color.gray.opacity(0.4))
+}

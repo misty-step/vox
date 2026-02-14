@@ -4,7 +4,6 @@ import VoxMac
 struct BasicsSection: View {
     @ObservedObject private var prefs = PreferencesStore.shared
     @ObservedObject private var deviceObserver = AudioDeviceObserver.shared
-    @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
         GroupBox("Basics") {
@@ -17,7 +16,7 @@ struct BasicsSection: View {
                 LabeledContent("Microphone") {
                     Picker("", selection: $prefs.selectedInputDeviceUID) {
                         Text("System Default").tag(nil as String?)
-                        ForEach(devices) { device in
+                        ForEach(deviceObserver.devices) { device in
                             Text(device.name).tag(device.id as String?)
                         }
                     }
@@ -45,15 +44,11 @@ struct BasicsSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            devices = AudioDeviceManager.inputDevices()
             deviceObserver.setSelectedDeviceUID(prefs.selectedInputDeviceUID)
             deviceObserver.startListening()
         }
         .onDisappear {
             deviceObserver.stopListening()
-        }
-        .onReceive(deviceObserver.$devices) { newDevices in
-            devices = newDevices
         }
         .onChange(of: prefs.selectedInputDeviceUID) { _, newUID in
             deviceObserver.setSelectedDeviceUID(newUID)

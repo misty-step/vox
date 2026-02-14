@@ -16,8 +16,9 @@ public final class AudioDeviceObserver: ObservableObject {
     @Published public private(set) var selectedDeviceUnavailable: Bool = false
 
     private var propertyListener: AudioObjectPropertyListenerProc?
-    private var isListening = false
+    private var listenerCount = 0
     private var selectedDeviceUID: String?
+    private var debouncedRefreshTask: Task<Void, Never>?
 
     private init() {
         refreshDevices()
@@ -35,8 +36,10 @@ public final class AudioDeviceObserver: ObservableObject {
     }
 
     /// Start listening for CoreAudio device change notifications.
+    /// Uses reference counting to support multiple consumers.
     public func startListening() {
-        guard !isListening else { return }
+        listenerCount += 1
+        guard listenerCount == 1 else { return }  // Already listening for first caller
 
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -61,17 +64,20 @@ public final class AudioDeviceObserver: ObservableObject {
             nil
         )
 
-        if status == noErr {
-            isListening = true
-        } else {
+        if status != noErr {
             print("[AudioDeviceObserver] Failed to add property listener: \(status)")
             propertyListener = nil
+            listenerCount = 0
         }
     }
 
-    /// Stop listening for device changes.
+    /// Stop listening for device changes. Uses reference counting.
     public func stopListening() {
-        guard isListening, let callback = propertyListener else { return }
+        guard listenerCount > 0 else { return }
+        listenerCount -= 1
+        guard listenerCount == 0 else { return }  // Still have other consumers
+
+        guard let callback = propertyListener else { return }
 
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -86,7 +92,6 @@ public final class AudioDeviceObserver: ObservableObject {
             nil
         )
 
-        isListening = false
         propertyListener = nil
     }
 
@@ -106,7 +111,14 @@ public final class AudioDeviceObserver: ObservableObject {
     }
 
     private func handleDeviceChange() {
-        refreshDevices()
+        // Cancel any existing debounced task to debounce rapid notifications
+        debouncedRefreshTask?.cancel()
+        
+        debouncedRefreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)  // 250ms debounce
+            guard !Task.isCancelled else { return }
+            refreshDevices()
+        }
     }
 }
 
