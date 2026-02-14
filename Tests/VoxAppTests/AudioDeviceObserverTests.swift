@@ -17,7 +17,7 @@ final class AudioDeviceObserverTests: XCTestCase {
         super.tearDown()
     }
 
-    func testInitialDevicesLoaded() {
+    func testInitialDevicesLoaded() throws {
         // Skip in CI environments or machines without audio input devices
         guard !observer.devices.isEmpty else {
             throw XCTSkip("No audio input devices available")
