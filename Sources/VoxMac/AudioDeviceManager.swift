@@ -7,6 +7,121 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
     public let deviceID: AudioDeviceID // runtime-only, not persisted
 }
 
+/// Observable object that publishes device list changes and validates selected device availability.
+@MainActor
+public final class AudioDeviceObserver: ObservableObject {
+    public static let shared = AudioDeviceObserver()
+
+    @Published public private(set) var devices: [AudioInputDevice] = []
+    @Published public private(set) var selectedDeviceUnavailable: Bool = false
+
+    private var propertyListener: AudioObjectPropertyListenerProc?
+    private var listenerCount = 0
+    private var selectedDeviceUID: String?
+    private var debouncedRefreshTask: Task<Void, Never>?
+
+    private init() {
+        refreshDevices()
+    }
+
+    deinit {
+        // Cannot call MainActor-isolated method from deinit.
+        // Relying on explicit stopListening() calls from views.
+    }
+
+    /// Set the currently selected device UID to validate against.
+    public func setSelectedDeviceUID(_ uid: String?) {
+        selectedDeviceUID = uid
+        validateSelectedDevice()
+    }
+
+    /// Start listening for CoreAudio device change notifications.
+    /// Uses reference counting to support multiple consumers.
+    public func startListening() {
+        listenerCount += 1
+        guard listenerCount == 1 else { return }  // Already listening for first caller
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        // Create a stable callback that doesn't capture self
+        let callback: AudioObjectPropertyListenerProc = { _, _, _, _ in
+            Task { @MainActor in
+                AudioDeviceObserver.shared.handleDeviceChange()
+            }
+            return noErr
+        }
+
+        propertyListener = callback
+
+        let status = AudioObjectAddPropertyListener(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            callback,
+            nil
+        )
+
+        if status != noErr {
+            print("[AudioDeviceObserver] Failed to add property listener: \(status)")
+            propertyListener = nil
+            listenerCount = 0
+        }
+    }
+
+    /// Stop listening for device changes. Uses reference counting.
+    public func stopListening() {
+        guard listenerCount > 0 else { return }
+        listenerCount -= 1
+        guard listenerCount == 0 else { return }  // Still have other consumers
+
+        guard let callback = propertyListener else { return }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        AudioObjectRemovePropertyListener(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            callback,
+            nil
+        )
+
+        propertyListener = nil
+    }
+
+    /// Refresh the device list and validate selected device availability.
+    public func refreshDevices() {
+        devices = AudioDeviceManager.inputDevices()
+        validateSelectedDevice()
+    }
+
+    /// Check if the currently selected device is still available.
+    public func validateSelectedDevice() {
+        if let uid = selectedDeviceUID {
+            selectedDeviceUnavailable = !devices.contains(where: { $0.id == uid })
+        } else {
+            selectedDeviceUnavailable = false
+        }
+    }
+
+    private func handleDeviceChange() {
+        // Cancel any existing debounced task to debounce rapid notifications
+        debouncedRefreshTask?.cancel()
+        
+        debouncedRefreshTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)  // 250ms debounce
+            guard !Task.isCancelled else { return }
+            refreshDevices()
+        }
+    }
+}
+
 public enum AudioDeviceManager {
 
     /// All audio devices with at least one input stream.
