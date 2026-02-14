@@ -99,15 +99,13 @@ public final class HUDState: ObservableObject {
 // MARK: - Design System
 
 enum HUDLayout {
-    static let expandedWidth: CGFloat = 170
-    static let expandedHeight: CGFloat = 40
+    static let expandedWidth: CGFloat = 160
+    static let expandedHeight: CGFloat = 36
 }
 
 private enum Design {
     static let width = HUDLayout.expandedWidth
     static let height = HUDLayout.expandedHeight
-    static let cornerRadius: CGFloat = 12
-
     // Timing
     static let fadeOutDuration: Double = 0.18
     static let transitionDuration: Double = 0.18
@@ -124,8 +122,8 @@ private enum Design {
     static let shadowY: CGFloat = 3
 
     // Typography
-    static let timerFont = Font.system(size: 12, weight: .medium, design: .monospaced)
-    static let labelFont = Font.system(size: 12, weight: .medium)
+    static let timerFont = Font.system(size: 11, weight: .medium, design: .monospaced)
+    static let labelFont = Font.system(size: 11, weight: .medium)
     static let textSecondary = Color.white.opacity(0.55)
 }
 
@@ -194,7 +192,7 @@ private struct RecordingDot: View {
 private struct ProcessingSpinner: View {
     @Environment(\.reducedMotion) private var reducedMotion
 
-    private let radius: CGFloat = 4
+    private let radius: CGFloat = 5
     private let strokeWidth: CGFloat = 1.5
 
     var body: some View {
@@ -226,7 +224,7 @@ private struct CheckMark: View {
         CheckShape()
             .trim(from: 0, to: progress)
             .stroke(Design.green, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-            .frame(width: 12, height: 12)
+            .frame(width: 14, height: 14)
             .onAppear {
                 if reducedMotion {
                     progress = 1
@@ -288,15 +286,15 @@ public struct HUDView: View {
     public var body: some View {
         HStack(spacing: 6) {
             iconZone
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
             Spacer()
             textZone
         }
         .padding(.leading, 10)
-        .padding(.trailing, 12)
+        .padding(.trailing, 11)
         .frame(width: Design.width, height: Design.height)
         .background(containerBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous))
+        .clipShape(Capsule())
         .overlay(containerBorder)
         .shadow(
             color: Design.shadowColor,
@@ -327,10 +325,28 @@ public struct HUDView: View {
                 .frame(width: 8, height: 8)
         case .recording:
             RecordingDot(level: state.average)
+                .background(
+                    Circle()
+                        .fill(Design.red.opacity(0.25))
+                        .frame(width: 20, height: 20)
+                        .blur(radius: 8)
+                )
         case .processing:
             ProcessingSpinner()
+                .background(
+                    Circle()
+                        .fill(Design.blue.opacity(0.20))
+                        .frame(width: 18, height: 18)
+                        .blur(radius: 7)
+                )
         case .success:
             CheckMark()
+                .background(
+                    Circle()
+                        .fill(Design.green.opacity(0.22))
+                        .frame(width: 20, height: 20)
+                        .blur(radius: 8)
+                )
         }
     }
 
@@ -359,22 +375,33 @@ public struct HUDView: View {
     // MARK: - Container Styling
 
     private var containerBackground: some View {
-        RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+        Capsule()
             .fill(.ultraThinMaterial)
             .overlay(
-                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
+                Capsule()
                     .fill(Color.black.opacity(0.36))
+            )
+            .overlay(
+                // Top-edge specular highlight — simulates glass light source
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.12),
+                                Color.white.opacity(0.03),
+                                Color.clear,
+                            ],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
             )
     }
 
     private var containerBorder: some View {
-        RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.07), lineWidth: 1.0)
-            .overlay(
-                RoundedRectangle(cornerRadius: Design.cornerRadius, style: .continuous)
-                    .inset(by: 0.5)
-                    .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
-            )
+        Capsule()
+            .inset(by: 0.5)
+            .stroke(Color.white.opacity(0.10), lineWidth: 1.0)
     }
 }
 
