@@ -3,6 +3,7 @@ import VoxMac
 
 struct BasicsSection: View {
     @ObservedObject private var prefs = PreferencesStore.shared
+    @ObservedObject private var deviceObserver = AudioDeviceObserver.shared
     @State private var devices: [AudioInputDevice] = []
 
     var body: some View {
@@ -23,14 +24,39 @@ struct BasicsSection: View {
                     .labelsHidden()
                 }
 
-                Text("Falls back to system default if the selected device is unavailable.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if deviceObserver.selectedDeviceUnavailable {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                        Text("Your selected microphone is unavailable. Using system default.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    Text("Falls back to system default if the selected device is unavailable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { devices = AudioDeviceManager.inputDevices() }
+        .onAppear {
+            devices = AudioDeviceManager.inputDevices()
+            deviceObserver.setSelectedDeviceUID(prefs.selectedInputDeviceUID)
+            deviceObserver.startListening()
+        }
+        .onDisappear {
+            deviceObserver.stopListening()
+        }
+        .onReceive(deviceObserver.$devices) { newDevices in
+            devices = newDevices
+        }
+        .onChange(of: prefs.selectedInputDeviceUID) { _, newUID in
+            deviceObserver.setSelectedDeviceUID(newUID)
+        }
     }
 }
