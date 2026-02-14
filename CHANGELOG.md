@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/misty-step/vox/compare/v1.11.0...v1.12.0) (2026-02-14)
+
+
+### Features
+
+* **hud:** liquid glass aesthetic refinements ([#246](https://github.com/misty-step/vox/issues/246)) ([2a57628](https://github.com/misty-step/vox/commit/2a57628e09de3e5775d343de44e140930e03ac46))
+
 # [1.11.0](https://github.com/misty-step/vox/compare/v1.10.0...v1.11.0) (2026-02-13)
 
 
