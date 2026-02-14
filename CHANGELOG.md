@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/misty-step/vox/compare/v1.12.0...v1.13.0) (2026-02-14)
+
+
+### Features
+
+* Draggable HUD with Position Persistence and Audio-Reactive Visualization ([#245](https://github.com/misty-step/vox/issues/245)) ([1b7c736](https://github.com/misty-step/vox/commit/1b7c73682d3cbe1d2910f0c43c8d6892a924462b))
+
 # [1.12.0](https://github.com/misty-step/vox/compare/v1.11.0...v1.12.0) (2026-02-14)
 
 
