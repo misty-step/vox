@@ -17,6 +17,19 @@ public enum HotkeyRegistrationResult {
     case success(HotkeyMonitor)
     case failure(HotkeyError)
 
+    /// Convenience property for creating a success result without a real monitor (for testing).
+    /// Two successes are considered equal regardless of the monitor instance.
+    public static var success: HotkeyRegistrationResult {
+        // Create a dummy monitor that will never be used - equality ignores the monitor instance
+        let monitor = HotkeyMonitor._dummyForTesting
+        return .success(monitor)
+    }
+
+    /// Convenience property for creating a failure result (for testing).
+    public static func failure(_ error: HotkeyError) -> HotkeyRegistrationResult {
+        return .failure(error)
+    }
+
     /// Returns true if the registration succeeded.
     public var isSuccess: Bool {
         switch self {
@@ -39,6 +52,16 @@ public enum HotkeyRegistrationResult {
         case .success: return nil
         case .failure(let error): return error
         }
+    }
+}
+
+// MARK: - Testing Support
+extension HotkeyMonitor {
+    /// Creates a dummy monitor for testing purposes only.
+    /// - Warning: This monitor is not fully functional and should only be used in tests.
+    fileprivate static var _dummyForTesting: HotkeyMonitor {
+        // Use the private initializer directly since we're in the same file
+        return HotkeyMonitor(hotkeyId: UInt32.random(in: 1...UInt32.max))
     }
 }
 
@@ -102,7 +125,7 @@ public final class HotkeyMonitor {
         guard status == noErr else { throw HotkeyError.registrationFailed(status) }
     }
 
-    private init(hotkeyId: UInt32) {
+    fileprivate init(hotkeyId: UInt32) {
         self.hotkeyId = hotkeyId
     }
 
