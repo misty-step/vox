@@ -61,8 +61,8 @@ public final class HUDController: HUDDisplaying {
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         announcer = VoiceOverAnnouncer(element: panel)
-        setupPositionPersistence()
         hasInitialPosition = restorePosition()
+        setupPositionPersistence()
     }
 
     // MARK: - Position Management
@@ -123,6 +123,8 @@ public final class HUDController: HUDDisplaying {
             panel.setFrameOrigin(NSPoint(x: x, y: y))
 
         case .custom:
+            // Safe: restorePosition() guards `preset != .custom` before calling
+            // applyPreset, so this cannot recurse.
             return restorePosition()
         }
 
