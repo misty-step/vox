@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 import VoxCore
 
 @MainActor
@@ -11,9 +12,12 @@ public final class HUDController: HUDDisplaying {
     private var scheduledHide: DispatchWorkItem?
     private var announcementPolicy = HUDAnnouncementPolicy()
     private var hasInitialPosition = false
+    private var cancellables = Set<AnyCancellable>()
 
     /// Extra space around the HUD content so the drop shadow isn't clipped by the panel edge.
     private static let shadowPadding: CGFloat = 24
+    private static let positionKey = "HUDWindowPosition"
+    private static let defaultTopOffset: CGFloat = 80
 
     public init() {
         reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -45,8 +49,55 @@ public final class HUDController: HUDDisplaying {
         panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         announcer = VoiceOverAnnouncer(element: panel)
-        hasInitialPosition = positionPanel()
+        hasInitialPosition = restorePosition()
+        setupPositionPersistence()
     }
+
+    // MARK: - Position Persistence
+
+    private func setupPositionPersistence() {
+        NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: panel)
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.savePosition()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+            .sink { [weak self] _ in
+                self?.savePosition()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func savePosition() {
+        let origin = panel.frame.origin
+        let positionData: [String: CGFloat] = ["x": origin.x, "y": origin.y]
+        UserDefaults.standard.set(positionData, forKey: Self.positionKey)
+    }
+
+    @discardableResult
+    private func restorePosition() -> Bool {
+        if let data = UserDefaults.standard.dictionary(forKey: Self.positionKey) as? [String: CGFloat],
+           let x = data["x"],
+           let y = data["y"] {
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            return true
+        }
+        return positionTopCenter()
+    }
+
+    @discardableResult
+    private func positionTopCenter() -> Bool {
+        guard let screen = NSScreen.main else { return false }
+        let size = panel.frame.size
+        let x = screen.visibleFrame.midX - size.width / 2
+        let y = screen.visibleFrame.maxY - size.height - Self.defaultTopOffset
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        return true
+    }
+
+    // MARK: - HUDDisplaying
 
     public func showRecording(average: Float, peak: Float) {
         state.startRecording()
@@ -89,6 +140,8 @@ public final class HUDController: HUDDisplaying {
         animatedHide()
     }
 
+    // MARK: - Private
+
     private func animatedHide() {
         guard state.isVisible else { return }
         state.dismiss(reducedMotion: reducedMotion) { [weak self] in
@@ -107,7 +160,7 @@ public final class HUDController: HUDDisplaying {
 
     private func ensureVisiblePosition() {
         if !hasInitialPosition {
-            hasInitialPosition = positionPanel()
+            hasInitialPosition = restorePosition()
             return
         }
 
@@ -116,18 +169,8 @@ public final class HUDController: HUDDisplaying {
             screen.visibleFrame.intersects(frame)
         }
         if !isVisibleOnAnyScreen {
-            _ = positionPanel()
+            _ = positionTopCenter()
         }
-    }
-
-    @discardableResult
-    private func positionPanel() -> Bool {
-        guard let screen = NSScreen.main else { return false }
-        let size = panel.frame.size
-        let x = screen.visibleFrame.midX - size.width / 2
-        let y = screen.visibleFrame.maxY - size.height - 80
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
-        return true
     }
 
     private func announceTransition(to mode: HUDMode) {
