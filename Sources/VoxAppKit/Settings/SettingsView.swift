@@ -3,15 +3,23 @@ import SwiftUI
 public struct SettingsView: View {
     private let productInfo: ProductInfo
     @State private var showingCloudKeys = false
+    private let hotkeyAvailable: Bool
+    private let onRetryHotkey: () -> Void
 
-    public init(productInfo: ProductInfo = .current()) {
+    public init(
+        productInfo: ProductInfo = .current(),
+        hotkeyAvailable: Bool = true,
+        onRetryHotkey: @escaping () -> Void = {}
+    ) {
         self.productInfo = productInfo
+        self.hotkeyAvailable = hotkeyAvailable
+        self.onRetryHotkey = onRetryHotkey
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Press Option+Space to dictate")
+                Text(hotkeyAvailable ? "Press Option+Space to dictate" : "Press menu bar icon to dictate")
                     .font(.title3.weight(.semibold))
                 Text("Pick a microphone. Add cloud keys only if you want faster transcription and rewriting.")
                     .font(.subheadline)
@@ -27,7 +35,7 @@ public struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    BasicsSection()
+                    BasicsSection(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey)
                     CloudProvidersSection(onManageKeys: { showingCloudKeys = true })
                 }
                 .padding(16)

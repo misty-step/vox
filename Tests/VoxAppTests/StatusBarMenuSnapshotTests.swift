@@ -8,7 +8,8 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .light),
             hasCloudSTT: true,
-            hasRewrite: true
+            hasRewrite: true,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.statusTitle == "Status: Ready")
@@ -17,6 +18,8 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.cloudNeedsAction == false)
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == true)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Recording snapshot keeps stop action and flags rewrite setup")
@@ -24,7 +27,8 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .recording(processingLevel: .aggressive),
             hasCloudSTT: true,
-            hasRewrite: false
+            hasRewrite: false,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.statusTitle == "Status: Recording")
@@ -33,6 +37,8 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.cloudNeedsAction == true)
         #expect(snapshot.toggleTitle == "Stop Dictation")
         #expect(snapshot.toggleEnabled == true)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Processing snapshot in Off mode with no cloud shows on-device status")
@@ -40,7 +46,8 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .processing(processingLevel: .off),
             hasCloudSTT: false,
-            hasRewrite: false
+            hasRewrite: false,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.statusTitle == "Status: Processing")
@@ -49,6 +56,8 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.cloudNeedsAction == false)
         #expect(snapshot.toggleTitle == "Start Dictation")
         #expect(snapshot.toggleEnabled == false)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Off mode with cloud STT shows cloud transcription ready")
@@ -56,11 +65,14 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .off),
             hasCloudSTT: true,
-            hasRewrite: false
+            hasRewrite: false,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.cloudTitle == "Cloud transcription ready")
         #expect(snapshot.cloudNeedsAction == false)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Rewrite-only setup message is explicit")
@@ -68,11 +80,14 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .light),
             hasCloudSTT: false,
-            hasRewrite: true
+            hasRewrite: true,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.cloudTitle == "Rewrite ready; transcription on-device")
         #expect(snapshot.cloudNeedsAction == false)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Enhance level label is preserved")
@@ -80,10 +95,13 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .enhance),
             hasCloudSTT: true,
-            hasRewrite: true
+            hasRewrite: true,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.modeTitle == "Mode: Enhance")
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Light mode with no cloud services shows limited mode message")
@@ -91,11 +109,14 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .light),
             hasCloudSTT: false,
-            hasRewrite: false
+            hasRewrite: false,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.cloudTitle == "Cloud services not configured; limited to Off mode")
         #expect(snapshot.cloudNeedsAction == true)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
     }
 
     @Test("Aggressive mode with cloud STT but no rewrite shows missing rewrite")
@@ -103,10 +124,26 @@ struct StatusBarMenuSnapshotTests {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .aggressive),
             hasCloudSTT: true,
-            hasRewrite: false
+            hasRewrite: false,
+            hotkeyAvailable: true
         )
 
         #expect(snapshot.cloudTitle == "Cloud STT ready; rewrite not configured")
         #expect(snapshot.cloudNeedsAction == true)
+        #expect(snapshot.hotkeyTitle == "Hotkey: ⌥Space ready")
+        #expect(snapshot.hotkeyNeedsAction == false)
+    }
+
+    @Test("Unavailable hotkey shows fallback message")
+    func unavailableHotkeyShowsFallback() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .light),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: false
+        )
+
+        #expect(snapshot.hotkeyTitle == "Hotkey: unavailable (use menu)")
+        #expect(snapshot.hotkeyNeedsAction == true)
     }
 }

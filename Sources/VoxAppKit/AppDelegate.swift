@@ -35,7 +35,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let session = VoxSession(sessionExtension: OnboardingSessionExtension(onboarding: onboarding))
         self.session = session
 
-        settingsWindowController = SettingsWindowController()
+        settingsWindowController = SettingsWindowController(
+            hotkeyAvailable: hotkeyMonitor != nil,
+            onRetryHotkey: { [weak self] in self?.retryHotkeyRegistration() }
+        )
         let statusBarController = StatusBarController(
             onToggle: { Task { await session.toggleRecording() } },
             onSetupChecklist: { [weak self] in self?.showOnboardingChecklist() },
@@ -58,14 +61,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarController?.updateState(statusState)
         }
 
-        do {
-            hotkeyMonitor = try HotkeyMonitor(
-                keyCode: UInt32(kVK_Space),
-                modifiers: UInt32(optionKey),
-                handler: { Task { await session.toggleRecording() } }
-            )
-        } catch {
-            presentHotkeyError(error)
+        let registrationResult = HotkeyMonitor.register(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(optionKey),
+            handler: { Task { await session.toggleRecording() } }
+        )
+
+        switch registrationResult {
+        case .success(let monitor):
+            hotkeyMonitor = monitor
+            statusBarController?.setHotkeyAvailable(true)
+        case .failure(let error):
+            hotkeyMonitor = nil
+            statusBarController?.setHotkeyAvailable(false)
+            presentHotkeyError(error, canRetry: true)
         }
 
         showOnboardingChecklistIfNeeded()
@@ -113,11 +122,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func presentHotkeyError(_ error: Error) {
+    private func presentHotkeyError(_ error: Error, canRetry: Bool = false) {
         let alert = NSAlert()
-        alert.messageText = "Hotkey unavailable"
-        alert.informativeText = "Option+Space could not be registered. \(error.localizedDescription)"
+        alert.messageText = "Hotkey Unavailable"
+        alert.informativeText = "Option+Space could not be registered because another app is already using this shortcut.\n\nYou can still start dictation by clicking \"Start Dictation\" in the Vox menu bar menu."
         alert.alertStyle = .warning
-        alert.runModal()
+
+        if canRetry {
+            alert.addButton(withTitle: "Retry")
+        }
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "OK")
+
+        let response = alert.runModal()
+
+        if canRetry, response == .alertFirstButtonReturn {
+            // Retry registration
+            retryHotkeyRegistration()
+        } else if (canRetry && response == .alertSecondButtonReturn) || (!canRetry && response == .alertFirstButtonReturn) {
+            // Open Settings
+            showSettings()
+        }
+    }
+
+    private func retryHotkeyRegistration() {
+        guard let session = session else { return }
+
+        let registrationResult = HotkeyMonitor.register(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(optionKey),
+            handler: { Task { await session.toggleRecording() } }
+        )
+
+        switch registrationResult {
+        case .success(let monitor):
+            hotkeyMonitor = monitor
+            statusBarController?.setHotkeyAvailable(true)
+            settingsWindowController?.updateHotkeyAvailability(true, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
+        case .failure(let error):
+            hotkeyMonitor = nil
+            statusBarController?.setHotkeyAvailable(false)
+            settingsWindowController?.updateHotkeyAvailability(false, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
+            presentHotkeyError(error, canRetry: true)
+        }
     }
 }

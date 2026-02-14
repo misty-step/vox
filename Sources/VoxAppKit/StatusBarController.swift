@@ -33,8 +33,10 @@ struct StatusBarMenuSnapshot: Equatable {
     let cloudNeedsAction: Bool
     let toggleTitle: String
     let toggleEnabled: Bool
+    let hotkeyTitle: String
+    let hotkeyNeedsAction: Bool
 
-    static func make(state: StatusBarState, hasCloudSTT: Bool, hasRewrite: Bool) -> StatusBarMenuSnapshot {
+    static func make(state: StatusBarState, hasCloudSTT: Bool, hasRewrite: Bool, hotkeyAvailable: Bool) -> StatusBarMenuSnapshot {
         let statusTitle: String
         let toggleTitle: String
         let toggleEnabled: Bool
@@ -60,14 +62,29 @@ struct StatusBarMenuSnapshot: Equatable {
             hasRewrite: hasRewrite
         )
 
+        let hotkeyStatus = HotkeyStatus.forAvailability(hotkeyAvailable)
+
         return StatusBarMenuSnapshot(
             statusTitle: statusTitle,
             modeTitle: "Mode: \(state.processingLevel.menuDisplayName)",
             cloudTitle: cloudStatus.title,
             cloudNeedsAction: cloudStatus.needsAction,
             toggleTitle: toggleTitle,
-            toggleEnabled: toggleEnabled
+            toggleEnabled: toggleEnabled,
+            hotkeyTitle: hotkeyStatus.title,
+            hotkeyNeedsAction: hotkeyStatus.needsAction
         )
+    }
+}
+
+/// Models hotkey availability status for user feedback.
+enum HotkeyStatus {
+    static func forAvailability(_ available: Bool) -> (title: String, needsAction: Bool) {
+        if available {
+            return ("Hotkey: ⌥Space ready", false)
+        } else {
+            return ("Hotkey: unavailable (use menu)", true)
+        }
     }
 }
 
@@ -134,6 +151,7 @@ public final class StatusBarController: NSObject {
     private let prefs = PreferencesStore.shared
 
     private var prefsObserver: AnyCancellable?
+    private var hotkeyAvailable: Bool = true
 
     private var currentState: StatusBarState = .idle(processingLevel: .off)
 
@@ -160,6 +178,12 @@ public final class StatusBarController: NSObject {
 
     public func updateProcessingLevel(_ level: ProcessingLevel) {
         applyState(currentState.updatingProcessingLevel(level))
+    }
+
+    public func setHotkeyAvailable(_ available: Bool) {
+        guard hotkeyAvailable != available else { return }
+        hotkeyAvailable = available
+        rebuildMenu()
     }
 
     private func applyState(_ state: StatusBarState) {
@@ -193,7 +217,8 @@ public final class StatusBarController: NSObject {
         let snapshot = StatusBarMenuSnapshot.make(
             state: currentState,
             hasCloudSTT: cloudReadiness.hasCloudSTT,
-            hasRewrite: cloudReadiness.hasRewrite
+            hasRewrite: cloudReadiness.hasRewrite,
+            hotkeyAvailable: hotkeyAvailable
         )
 
         let menu = NSMenu()
@@ -209,6 +234,15 @@ public final class StatusBarController: NSObject {
         cloudItem.target = snapshot.cloudNeedsAction ? self : nil
         cloudItem.isEnabled = snapshot.cloudNeedsAction
         menu.addItem(cloudItem)
+
+        let hotkeyItem = NSMenuItem(
+            title: snapshot.hotkeyTitle,
+            action: snapshot.hotkeyNeedsAction ? #selector(openSettings) : nil,
+            keyEquivalent: ""
+        )
+        hotkeyItem.target = snapshot.hotkeyNeedsAction ? self : nil
+        hotkeyItem.isEnabled = snapshot.hotkeyNeedsAction
+        menu.addItem(hotkeyItem)
         menu.addItem(.separator())
 
         let toggleItem = NSMenuItem(title: snapshot.toggleTitle, action: #selector(toggleRecording), keyEquivalent: " ")
@@ -285,7 +319,11 @@ public final class StatusBarController: NSObject {
 
         switch state {
         case .idle(let level):
-            button.toolTip = "Vox – Ready (\(level.menuDisplayName), ⌥Space to record)"
+            if hotkeyAvailable {
+                button.toolTip = "Vox – Ready (\(level.menuDisplayName), ⌥Space to record)"
+            } else {
+                button.toolTip = "Vox – Ready (\(level.menuDisplayName), click menu to record)"
+            }
         case .recording:
             button.toolTip = "Vox – Recording..."
         case .processing:
