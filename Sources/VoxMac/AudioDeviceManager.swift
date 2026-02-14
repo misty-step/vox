@@ -7,6 +7,109 @@ public struct AudioInputDevice: Identifiable, Hashable, Sendable {
     public let deviceID: AudioDeviceID // runtime-only, not persisted
 }
 
+/// Observable object that publishes device list changes and validates selected device availability.
+@MainActor
+public final class AudioDeviceObserver: ObservableObject {
+    public static let shared = AudioDeviceObserver()
+
+    @Published public private(set) var devices: [AudioInputDevice] = []
+    @Published public private(set) var selectedDeviceUnavailable: Bool = false
+
+    private var propertyListener: AudioObjectPropertyListenerProc?
+    private var isListening = false
+    private var selectedDeviceUID: String?
+
+    private init() {
+        refreshDevices()
+    }
+
+    deinit {
+        // Cannot call MainActor-isolated method from deinit.
+        // Relying on explicit stopListening() calls from views.
+    }
+
+    /// Set the currently selected device UID to validate against.
+    public func setSelectedDeviceUID(_ uid: String?) {
+        selectedDeviceUID = uid
+        validateSelectedDevice()
+    }
+
+    /// Start listening for CoreAudio device change notifications.
+    public func startListening() {
+        guard !isListening else { return }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        // Create a stable callback that doesn't capture self
+        let callback: AudioObjectPropertyListenerProc = { _, _, _, _ in
+            Task { @MainActor in
+                AudioDeviceObserver.shared.handleDeviceChange()
+            }
+            return noErr
+        }
+
+        propertyListener = callback
+
+        let status = AudioObjectAddPropertyListener(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            callback,
+            nil
+        )
+
+        if status == noErr {
+            isListening = true
+        } else {
+            print("[AudioDeviceObserver] Failed to add property listener: \(status)")
+            propertyListener = nil
+        }
+    }
+
+    /// Stop listening for device changes.
+    public func stopListening() {
+        guard isListening, let callback = propertyListener else { return }
+
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        AudioObjectRemovePropertyListener(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            callback,
+            nil
+        )
+
+        isListening = false
+        propertyListener = nil
+    }
+
+    /// Refresh the device list and validate selected device availability.
+    public func refreshDevices() {
+        devices = AudioDeviceManager.inputDevices()
+        validateSelectedDevice()
+    }
+
+    /// Check if the currently selected device is still available.
+    public func validateSelectedDevice() {
+        if let uid = selectedDeviceUID {
+            selectedDeviceUnavailable = !devices.contains(where: { $0.id == uid })
+        } else {
+            selectedDeviceUnavailable = false
+        }
+    }
+
+    private func handleDeviceChange() {
+        refreshDevices()
+    }
+}
+
 public enum AudioDeviceManager {
 
     /// All audio devices with at least one input stream.
