@@ -1,13 +1,26 @@
 import AppKit
 import SwiftUI
 
+/// Observable state store for hotkey availability.
+/// Used to update the Settings view without recreating the entire view hierarchy.
+@MainActor
+public final class HotkeyStateStore: ObservableObject {
+    @Published public var isAvailable: Bool
+    @Published public var onRetryHotkey: (() -> Void)?
+
+    public init(isAvailable: Bool = true, onRetryHotkey: (() -> Void)? = nil) {
+        self.isAvailable = isAvailable
+        self.onRetryHotkey = onRetryHotkey
+    }
+}
+
 @MainActor
 public final class SettingsWindowController: NSWindowController {
-    private var retryHotkeyCallback: (() -> Void)?
+    private let hotkeyStateStore: HotkeyStateStore
 
     public init(hotkeyAvailable: Bool = true, onRetryHotkey: (() -> Void)? = nil) {
-        self.retryHotkeyCallback = onRetryHotkey
-        let view = SettingsView(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey ?? {})
+        self.hotkeyStateStore = HotkeyStateStore(isAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey)
+        let view = SettingsView(hotkeyStateStore: hotkeyStateStore)
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Vox Settings"
@@ -18,13 +31,8 @@ public final class SettingsWindowController: NSWindowController {
     }
 
     func updateHotkeyAvailability(_ available: Bool, onRetry: (() -> Void)? = nil) {
-        self.retryHotkeyCallback = onRetry
-        if let hostingController = window?.contentViewController as? NSHostingController<SettingsView> {
-            hostingController.rootView = SettingsView(
-                hotkeyAvailable: available,
-                onRetryHotkey: onRetry ?? {}
-            )
-        }
+        hotkeyStateStore.isAvailable = available
+        hotkeyStateStore.onRetryHotkey = onRetry
     }
 
     @available(*, unavailable)

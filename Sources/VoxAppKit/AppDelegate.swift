@@ -12,6 +12,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyMonitor: HotkeyMonitor?
     private let onboarding = OnboardingStore()
 
+    /// Registers the hotkey and updates all UI components accordingly.
+    /// This is the single source of truth for hotkey registration state.
+    private func registerHotkey() {
+        guard let session = session else { return }
+
+        let registrationResult = HotkeyMonitor.register(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(optionKey),
+            handler: { Task { await session.toggleRecording() } }
+        )
+
+        switch registrationResult {
+        case .success(let monitor):
+            hotkeyMonitor = monitor
+            statusBarController?.setHotkeyAvailable(true)
+            settingsWindowController?.updateHotkeyAvailability(true, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
+        case .failure(let error):
+            hotkeyMonitor = nil
+            statusBarController?.setHotkeyAvailable(false)
+            settingsWindowController?.updateHotkeyAvailability(false, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
+            presentHotkeyError(error, canRetry: true)
+        }
+    }
+
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Clean up recovery audio older than 24 hours
         cleanupOldRecoveryFiles()
@@ -61,21 +85,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarController?.updateState(statusState)
         }
 
-        let registrationResult = HotkeyMonitor.register(
-            keyCode: UInt32(kVK_Space),
-            modifiers: UInt32(optionKey),
-            handler: { Task { await session.toggleRecording() } }
-        )
-
-        switch registrationResult {
-        case .success(let monitor):
-            hotkeyMonitor = monitor
-            self.statusBarController?.setHotkeyAvailable(true)
-        case .failure(let error):
-            hotkeyMonitor = nil
-            self.statusBarController?.setHotkeyAvailable(false)
-            presentHotkeyError(error, canRetry: true)
-        }
+        registerHotkey()
 
         showOnboardingChecklistIfNeeded()
     }
@@ -122,6 +132,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private enum HotkeyAlertButton: Int {
+        case retry = 1000
+        case openSettings = 1001
+        case ok = 1002
+    }
+
     private func presentHotkeyError(_ error: Error, canRetry: Bool = false) {
         let alert = NSAlert()
         alert.messageText = "Hotkey Unavailable"
@@ -136,12 +152,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let response = alert.runModal()
 
-        if canRetry, response == .alertFirstButtonReturn {
-            // Retry registration
-            retryHotkeyRegistration()
-        } else if (canRetry && response == .alertSecondButtonReturn) || (!canRetry && response == .alertFirstButtonReturn) {
-            // Open Settings
-            showSettings()
+        // Use explicit button tag matching instead of fragile index calculations
+        switch response {
+        case .alertFirstButtonReturn:
+            if canRetry {
+                // Retry button was clicked
+                DispatchQueue.main.async { [weak self] in
+                    self?.retryHotkeyRegistration()
+                }
+            } else {
+                // First button without retry is "Open Settings"
+                showSettings()
+            }
+        case .alertSecondButtonReturn:
+            if canRetry {
+                // Second button with retry is "Open Settings"
+                showSettings()
+            } else {
+                // Second button without retry is "OK" - do nothing
+                break
+            }
+        case .alertThirdButtonReturn:
+            // Third button is always "OK" - do nothing
+            break
+        default:
+            break
         }
     }
 

@@ -19,7 +19,8 @@ public enum HotkeyRegistrationResult {
 
     /// Convenience property for creating a success result without a real monitor (for testing).
     /// Two successes are considered equal regardless of the monitor instance.
-    public static var success: HotkeyRegistrationResult {
+    /// - Warning: Internal - not for production use.
+    static var successResult: HotkeyRegistrationResult {
         // Create a dummy monitor that will never be used - equality ignores the monitor instance
         let monitor = HotkeyMonitor._dummyForTesting
         return .success(monitor)
@@ -110,21 +111,8 @@ public final class HotkeyMonitor {
         return .success(monitor)
     }
 
-    public init(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) throws {
-        HotkeyMonitor.installHandlerIfNeeded()
-
-        let id = UInt32.random(in: 1...UInt32.max)
-        hotkeyId = id
-        HotkeyMonitor.callbacks[id] = handler
-
-        var hotKeyRef: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x564C4858), id: id) // "VLHX"
-        let status = RegisterEventHotKey(
-            keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &hotKeyRef
-        )
-        guard status == noErr else { throw HotkeyError.registrationFailed(status) }
-    }
-
+    /// Private initializer for creating monitors with a pre-assigned hotkey ID.
+    /// Used internally and for testing support.
     fileprivate init(hotkeyId: UInt32) {
         self.hotkeyId = hotkeyId
     }

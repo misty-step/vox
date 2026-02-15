@@ -4,8 +4,7 @@ import VoxMac
 struct BasicsSection: View {
     @ObservedObject private var prefs = PreferencesStore.shared
     @State private var devices: [AudioInputDevice] = []
-    var hotkeyAvailable: Bool = true
-    var onRetryHotkey: () -> Void = {}
+    @ObservedObject var hotkeyStateStore: HotkeyStateStore
 
     var body: some View {
         GroupBox("Basics") {
@@ -15,7 +14,7 @@ struct BasicsSection: View {
                         Text("Option + Space")
                             .font(.system(.body, design: .monospaced))
 
-                        if !hotkeyAvailable {
+                        if !hotkeyStateStore.isAvailable {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
                                 .help("Hotkey unavailable")
@@ -23,7 +22,7 @@ struct BasicsSection: View {
                     }
                 }
 
-                if !hotkeyAvailable {
+                if !hotkeyStateStore.isAvailable {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Hotkey unavailable")
                             .font(.subheadline.weight(.medium))
@@ -35,7 +34,7 @@ struct BasicsSection: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         Button("Retry Hotkey Registration") {
-                            onRetryHotkey()
+                            hotkeyStateStore.onRetryHotkey?()
                         }
                         .controlSize(.small)
                     }

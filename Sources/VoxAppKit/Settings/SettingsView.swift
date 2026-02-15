@@ -3,23 +3,30 @@ import SwiftUI
 public struct SettingsView: View {
     private let productInfo: ProductInfo
     @State private var showingCloudKeys = false
-    private let hotkeyAvailable: Bool
-    private let onRetryHotkey: () -> Void
+    @ObservedObject private var hotkeyStateStore: HotkeyStateStore
 
+    public init(
+        productInfo: ProductInfo = .current(),
+        hotkeyStateStore: HotkeyStateStore
+    ) {
+        self.productInfo = productInfo
+        self.hotkeyStateStore = hotkeyStateStore
+    }
+
+    /// Legacy initializer for backward compatibility.
     public init(
         productInfo: ProductInfo = .current(),
         hotkeyAvailable: Bool = true,
         onRetryHotkey: @escaping () -> Void = {}
     ) {
         self.productInfo = productInfo
-        self.hotkeyAvailable = hotkeyAvailable
-        self.onRetryHotkey = onRetryHotkey
+        self._hotkeyStateStore = ObservedObject(wrappedValue: HotkeyStateStore(isAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey))
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(hotkeyAvailable ? "Press Option+Space to dictate" : "Press menu bar icon to dictate")
+                Text(hotkeyStateStore.isAvailable ? "Press Option+Space to dictate" : "Press menu bar icon to dictate")
                     .font(.title3.weight(.semibold))
                 Text("Pick a microphone. Add cloud keys only if you want faster transcription and rewriting.")
                     .font(.subheadline)
@@ -35,7 +42,7 @@ public struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    BasicsSection(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey)
+                    BasicsSection(hotkeyStateStore: hotkeyStateStore)
                     CloudProvidersSection(onManageKeys: { showingCloudKeys = true })
                 }
                 .padding(16)
