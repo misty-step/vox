@@ -25,8 +25,8 @@ public enum HotkeyRegistrationResult {
         return .success(monitor)
     }
 
-    /// Convenience property for creating a failure result (for testing).
-    public static func failure(_ error: HotkeyError) -> HotkeyRegistrationResult {
+    /// Convenience factory method for creating a failure result (for testing).
+    public static func failureResult(_ error: HotkeyError) -> HotkeyRegistrationResult {
         return .failure(error)
     }
 

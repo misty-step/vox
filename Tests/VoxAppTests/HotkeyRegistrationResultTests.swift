@@ -13,7 +13,7 @@ final class HotkeyRegistrationResultTests: XCTestCase {
 
     func testFailureIsNotSuccess() {
         let error = HotkeyError.registrationFailed(-1)
-        let result = HotkeyRegistrationResult.failure(error)
+        let result = HotkeyRegistrationResult.failureResult(error)
 
         XCTAssertFalse(result.isSuccess)
         XCTAssertNil(result.monitor)
@@ -25,9 +25,9 @@ final class HotkeyRegistrationResultTests: XCTestCase {
         let error2 = HotkeyError.registrationFailed(-1)
         let error3 = HotkeyError.registrationFailed(-2)
 
-        let result1 = HotkeyRegistrationResult.failure(error1)
-        let result2 = HotkeyRegistrationResult.failure(error2)
-        let result3 = HotkeyRegistrationResult.failure(error3)
+        let result1 = HotkeyRegistrationResult.failureResult(error1)
+        let result2 = HotkeyRegistrationResult.failureResult(error2)
+        let result3 = HotkeyRegistrationResult.failureResult(error3)
 
         XCTAssertEqual(result1, result2)
         XCTAssertNotEqual(result1, result3)

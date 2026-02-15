@@ -128,6 +128,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.informativeText = "Option+Space could not be registered because another app is already using this shortcut.\n\nYou can still start dictation by clicking \"Start Dictation\" in the Vox menu bar menu."
         alert.alertStyle = .warning
 
+        // Define button indices explicitly based on configuration
+        let retryButtonIndex = canRetry ? 0 : -1  // First button if retry available, otherwise disabled
+        let settingsButtonIndex = canRetry ? 1 : 0  // Second button if retry, otherwise first
+        let okButtonIndex = canRetry ? 2 : 1  // Third button if retry, otherwise second
+
         if canRetry {
             alert.addButton(withTitle: "Retry")
         }
@@ -136,13 +141,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let response = alert.runModal()
 
-        if canRetry, response == .alertFirstButtonReturn {
-            // Retry registration
+        if canRetry && response == .alertFirstButtonReturn {
+            // Retry registration (first button is Retry when canRetry is true)
             retryHotkeyRegistration()
-        } else if (canRetry && response == .alertSecondButtonReturn) || (!canRetry && response == .alertFirstButtonReturn) {
-            // Open Settings
+        } else if response.rawValue == settingsButtonIndex {
+            // Open Settings (second button if retry available, first otherwise)
             showSettings()
         }
+        // OK button does nothing - just dismisses
     }
 
     private func retryHotkeyRegistration() {
