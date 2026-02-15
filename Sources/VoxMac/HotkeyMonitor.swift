@@ -61,7 +61,8 @@ extension HotkeyMonitor {
     /// - Warning: This monitor is not fully functional and should only be used in tests.
     fileprivate static var _dummyForTesting: HotkeyMonitor {
         // Use the private initializer directly since we're in the same file
-        return HotkeyMonitor(hotkeyId: UInt32.random(in: 1...UInt32.max))
+        // Dummy monitor has no real hotKeyRef (nil) since it's not registered with Carbon
+        return HotkeyMonitor(hotkeyId: UInt32.random(in: 1...UInt32.max), hotKeyRef: nil)
     }
 }
 
@@ -83,6 +84,7 @@ public final class HotkeyMonitor {
     private static var callbacks: [UInt32: () -> Void] = [:]
     private static var handlerRef: EventHandlerRef?
     private let hotkeyId: UInt32
+    private let hotKeyRef: EventHotKeyRef?
 
     /// Attempts to register a hotkey and returns a result instead of throwing.
     /// - Returns: A `HotkeyRegistrationResult` indicating success or failure.
@@ -106,7 +108,7 @@ public final class HotkeyMonitor {
             return .failure(.registrationFailed(status))
         }
 
-        let monitor = HotkeyMonitor(hotkeyId: id)
+        let monitor = HotkeyMonitor(hotkeyId: id, hotKeyRef: hotKeyRef)
         return .success(monitor)
     }
 
@@ -123,13 +125,20 @@ public final class HotkeyMonitor {
             keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &hotKeyRef
         )
         guard status == noErr else { throw HotkeyError.registrationFailed(status) }
+        self.hotKeyRef = hotKeyRef
     }
 
-    fileprivate init(hotkeyId: UInt32) {
+    fileprivate init(hotkeyId: UInt32, hotKeyRef: EventHotKeyRef?) {
         self.hotkeyId = hotkeyId
+        self.hotKeyRef = hotKeyRef
     }
 
-    deinit { HotkeyMonitor.callbacks.removeValue(forKey: hotkeyId) }
+    deinit {
+        HotkeyMonitor.callbacks.removeValue(forKey: hotkeyId)
+        if let hotKeyRef = hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+    }
 
     private static func installHandlerIfNeeded() {
         guard handlerRef == nil else { return }
