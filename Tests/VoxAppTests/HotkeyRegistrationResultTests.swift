@@ -6,7 +6,7 @@ final class HotkeyRegistrationResultTests: XCTestCase {
     func testSuccessIsSuccess() {
         // We can't easily create a HotkeyMonitor without registering,
         // so we test the result enum behavior indirectly
-        let result = HotkeyRegistrationResult.success
+        let result = HotkeyRegistrationResult.successResult
         XCTAssertTrue(result.isSuccess)
         XCTAssertNotNil(result.monitor)
     }

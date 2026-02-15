@@ -17,9 +17,9 @@ public enum HotkeyRegistrationResult {
     case success(HotkeyMonitor)
     case failure(HotkeyError)
 
-    /// Convenience property for creating a success result without a real monitor (for testing).
+    /// Convenience factory property for creating a success result without a real monitor (for testing).
     /// Two successes are considered equal regardless of the monitor instance.
-    public static var success: HotkeyRegistrationResult {
+    public static var successResult: HotkeyRegistrationResult {
         // Create a dummy monitor that will never be used - equality ignores the monitor instance
         let monitor = HotkeyMonitor._dummyForTesting
         return .success(monitor)
