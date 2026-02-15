@@ -129,9 +129,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
 
         // Define button indices explicitly based on configuration
-        let retryButtonIndex = canRetry ? 0 : -1  // First button if retry available, otherwise disabled
-        let settingsButtonIndex = canRetry ? 1 : 0  // Second button if retry, otherwise first
-        let okButtonIndex = canRetry ? 2 : 1  // Third button if retry, otherwise second
+        // retryButtonIndex: first button if retry available, otherwise disabled
+        // settingsButtonIndex: second button if retry available, otherwise first  
+        // okButtonIndex: third button if retry available, otherwise second
 
         if canRetry {
             alert.addButton(withTitle: "Retry")
@@ -141,14 +141,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let response = alert.runModal()
 
+        // Handle button presses based on explicit button indices
         if canRetry && response == .alertFirstButtonReturn {
             // Retry registration (first button is Retry when canRetry is true)
             retryHotkeyRegistration()
-        } else if response.rawValue == settingsButtonIndex {
-            // Open Settings (second button if retry available, first otherwise)
+        } else if response == .alertFirstButtonReturn || (canRetry && response == .alertSecondButtonReturn) {
+            // Open Settings - either first button (when no retry) or second button (when retry available)
             showSettings()
         }
-        // OK button does nothing - just dismisses
+        // Third button (OK when retry available) does nothing - just dismisses
     }
 
     private func retryHotkeyRegistration() {
