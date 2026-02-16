@@ -51,8 +51,8 @@ public enum RewriteQualityGate {
         let ratio = Double(trimmedCandidate.count) / Double(max(trimmedRaw.count, 1))
         var ratioAcceptable = ratio >= minRatio && (maxRatio == nil || ratio <= maxRatio!)
 
-        // Distance checks for light/aggressive only — enhance intentionally transforms
-        let skipDistanceChecks = (level == .enhance || level == .off)
+        // Distance checks not used for Raw (no rewrite).
+        let skipDistanceChecks = (level == .raw)
         var levSim: Double?
         var overlap: Double?
         var levThresh: Double?
@@ -158,34 +158,32 @@ public enum RewriteQualityGate {
 
     private static func minimumRatio(for level: ProcessingLevel) -> Double {
         switch level {
-        case .off: return 0
-        case .light: return 0.6
-        case .aggressive: return 0.3
-        case .enhance: return 0.2
+        case .raw: return 0
+        case .clean: return 0.6
+        case .polish: return 0.3
         }
     }
 
     private static func maximumRatio(for level: ProcessingLevel) -> Double? {
         switch level {
-        case .light: return 3.0
-        case .enhance: return 15.0
-        case .off, .aggressive: return nil
+        case .clean: return 3.0
+        case .raw, .polish: return nil
         }
     }
 
     private static func levenshteinThreshold(for level: ProcessingLevel) -> Double {
         switch level {
-        case .light: return 0.3
-        case .aggressive: return 0.2
-        case .off, .enhance: return 0
+        case .clean: return 0.3
+        case .polish: return 0.2
+        case .raw: return 0
         }
     }
 
     private static func contentOverlapThreshold(for level: ProcessingLevel) -> Double {
         switch level {
-        case .light: return 0.4
-        case .aggressive: return 0.3
-        case .off, .enhance: return 0
+        case .clean: return 0.4
+        case .polish: return 0.3
+        case .raw: return 0
         }
     }
 }

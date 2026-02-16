@@ -88,48 +88,42 @@ public final class VoxSession: ObservableObject {
         let geminiKey = prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var entries: [FallbackRewriteProvider.Entry] = []
+        let gemini: GeminiClient? = geminiKey.isEmpty ? nil : GeminiClient(apiKey: geminiKey)
 
-        // Fastest: Gemini direct API (no proxy overhead)
-        if !geminiKey.isEmpty {
-            entries.append(.init(
-                provider: GeminiClient(apiKey: geminiKey),
-                model: "gemini-2.5-flash-lite",
-                label: "Gemini direct"
-            ))
-        }
+        // OpenRouter supports non-Google polish models (e.g. "x-ai/grok-4.1-fast") and also acts as a
+        // resilient fallback when direct Gemini is unavailable.
+        let openRouter: OpenRouterClient? = openRouterKey.isEmpty ? nil : OpenRouterClient(
+            apiKey: openRouterKey,
+            fallbackModels: [
+                // Keep the chain cheap and fast; polish defaults can still be premium via primary model id.
+                "google/gemini-2.5-flash",
+                "google/gemini-2.0-flash-001",
+            ]
+        )
 
-        // Fallback: OpenRouter with internal model fallback chain
-        // Model selection per bakeoff (docs/performance/rewrite-model-bakeoff-2026-02-09-expanded.md):
-        //   gemini-2.5-flash-lite: 100% quality, p95 0.711s (primary)
-        //   gemini-2.5-flash:      100% quality, p95 0.896s (fallback 1)
-        //   gemini-2.0-flash-001:  100% quality, p95 0.928s (fallback 2)
-        if !openRouterKey.isEmpty {
-            let openRouter = OpenRouterClient(
-                apiKey: openRouterKey,
-                fallbackModels: [
-                    "google/gemini-2.5-flash",
-                    "google/gemini-2.0-flash-001",
-                ]
-            )
-            entries.append(.init(
-                provider: openRouter,
-                model: "google/gemini-2.5-flash-lite",
-                label: "OpenRouter"
-            ))
-        }
-
-        guard let first = entries.first else {
+        guard gemini != nil || openRouter != nil else {
             // No keys — return a bare OpenRouter client (will fail on auth)
             print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
             return OpenRouterClient(apiKey: openRouterKey)
         }
 
-        if entries.count == 1 {
-            return first.provider
+        if let gemini, let openRouter {
+            return ModelRoutedRewriteProvider(
+                gemini: gemini,
+                openRouter: openRouter,
+                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
+            )
         }
 
-        return FallbackRewriteProvider(entries: entries)
+        if let gemini {
+            return ModelRoutedRewriteProvider(
+                gemini: gemini,
+                openRouter: openRouter,
+                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
+            )
+        }
+
+        return openRouter!
     }
 
     private func makeSTTProvider() -> STTProvider {

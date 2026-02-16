@@ -10,8 +10,8 @@ Targets for short clips (< 30s recording):
 |-------|-----|-----|
 | **Total** (stage sum: encode + stt + rewrite + paste) | ≤ 1.2s | ≤ 2.5s |
 | Paste | — | ≤ 80ms |
-| Rewrite (light) | — | ≤ 900ms |
-| Rewrite (aggressive) | — | ≤ 1.5s |
+| Rewrite (clean) | — | ≤ 900ms |
+| Rewrite (polish) | — | ≤ 1.5s |
 
 These are end-to-end targets including real provider latency. The benchmark harness uses mock providers with configurable delays to measure pipeline framework overhead separately.
 

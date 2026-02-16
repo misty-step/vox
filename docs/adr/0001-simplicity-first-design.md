@@ -12,9 +12,9 @@ Every setting is a question the user must answer. Every option is a decision the
 
 An audit of the current codebase (Feb 2026) found the configuration surface is already minimal:
 
-- **4 API keys** (credentials, not preferences)
+- **5 API keys** (credentials, not preferences)
 - **1 microphone picker** (defaults to system device)
-- **1 processing level** (Off / Light / Aggressive / Enhance)
+- **1 processing level** (Raw / Clean / Polish)
 
 No advanced tabs, no threshold tuning, no model selection, no retry configuration. This is good. The question is how to keep it this way as the project grows.
 

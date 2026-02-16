@@ -1,7 +1,7 @@
 description: "Vox Rewrite Quality Evaluation"
 
 prompts:
-  - file://prompts/light.json
+  - file://prompts/clean.json
 
 providers:
   - id: openrouter:google/gemini-2.5-flash-lite
@@ -61,4 +61,4 @@ tests: file://datasets/smoke.yaml
 
 evaluateOptions:
   maxConcurrency: 3
-  cache: true
+  cache: false

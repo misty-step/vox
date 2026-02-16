@@ -19,13 +19,11 @@ public enum BrandIdentity {
 
     public static func menuIconStrokeWidth(for level: ProcessingLevel) -> Double {
         switch level {
-        case .off:
+        case .raw:
             return 1.6
-        case .light:
-            return 2.0
-        case .aggressive:
-            return 2.4
-        case .enhance:
+        case .clean:
+            return 2.2
+        case .polish:
             return 2.8
         }
     }

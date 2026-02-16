@@ -90,8 +90,8 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 5) If streaming STT is available (ElevenLabs preferred; Deepgram fallback) and not disabled (`VOX_DISABLE_STREAMING_STT`), `VoxSession` forwards PCM chunks to a `StreamingSTTSession`
 6) On stop, `VoxSession` attempts streaming `finish()` with bounded timeout (scaled by streamed audio duration, capped)
 7) If streaming is unavailable, setup fails, or finalize fails/times out, fallback to batch STT router (default sequential; opt-in `VOX_STT_ROUTING=hedged`)
-8) Transcript → rewrite (Gemini, fallback OpenRouter) when `ProcessingLevel` = light/aggressive/enhance
-9) `RewriteQualityGate` validates output length ratio
+8) Transcript → rewrite (Gemini, fallback OpenRouter) when `ProcessingLevel` = clean/polish
+9) `RewriteQualityGate` scores rewrite similarity (benchmarks/debug)
 10) Result → `ClipboardPaster` → text insertion
 
 Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioInspector` and fails fast with `VoxError.emptyCapture` when decoded frame count is zero.
@@ -250,15 +250,14 @@ ratio = candidate.count / max(raw.count, 1)
 ```
 
 Minimum ratios:
-- `off`: 0 (rewrite skipped)
-- `light`: 0.6
-- `aggressive`: 0.3
-- `enhance`: 0.2
+- `raw`: 0 (rewrite skipped)
+- `clean`: 0.6
+- `polish`: 0.3
 
 Maximum ratios:
-- `enhance`: 15.0 (other levels uncapped)
+- `clean`: 3.0 (other levels uncapped)
 
-If below min (or above max when defined), pipeline falls back to raw transcript.
+Benchmarks treat below min (or above max when defined) as a reject signal; the runtime pipeline does not block on this score (it only falls back on rewrite errors/empty output).
 
 ## macOS Permissions
 

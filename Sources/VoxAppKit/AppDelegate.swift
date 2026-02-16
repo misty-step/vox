@@ -28,7 +28,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             hasOpenRouter ? "OpenRouter" : nil,
         ].compactMap { $0 }.joined(separator: " → ")
         print("[Vox] Rewrite: \(rewriteChain.isEmpty ? "–" : rewriteChain)")
-        print("[Vox] Processing level: \(prefs.processingLevel.rawValue)")
+        print("[Vox] Initial processing level: \(prefs.processingLevel.rawValue)")
 
         PermissionManager.promptForAccessibilityIfNeeded()
 

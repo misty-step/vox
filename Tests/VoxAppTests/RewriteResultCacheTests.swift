@@ -9,8 +9,8 @@ struct RewriteResultCacheTests {
     func value_storeAndLoad() async {
         let cache = RewriteResultCache(maxEntries: 4, ttlSeconds: 60, maxCharacterCount: 1_024)
 
-        await cache.store("Hello, world!", for: "hello world", level: .light, model: "model-a")
-        let value = await cache.value(for: "hello world", level: .light, model: "model-a")
+        await cache.store("Hello, world!", for: "hello world", level: .clean, model: "model-a")
+        let value = await cache.value(for: "hello world", level: .clean, model: "model-a")
 
         #expect(value == "Hello, world!")
     }
@@ -19,10 +19,10 @@ struct RewriteResultCacheTests {
     func value_expiredAfterTTL() async throws {
         let cache = RewriteResultCache(maxEntries: 4, ttlSeconds: 0.01, maxCharacterCount: 1_024)
 
-        await cache.store("cached", for: "source", level: .light, model: "model-a")
+        await cache.store("cached", for: "source", level: .clean, model: "model-a")
         try await Task.sleep(nanoseconds: 30_000_000)
 
-        let value = await cache.value(for: "source", level: .light, model: "model-a")
+        let value = await cache.value(for: "source", level: .clean, model: "model-a")
         #expect(value == nil)
     }
 
@@ -30,15 +30,15 @@ struct RewriteResultCacheTests {
     func value_evictsOldestWhenAtCapacity() async throws {
         let cache = RewriteResultCache(maxEntries: 2, ttlSeconds: 60, maxCharacterCount: 1_024)
 
-        await cache.store("one", for: "one", level: .light, model: "model-a")
+        await cache.store("one", for: "one", level: .clean, model: "model-a")
         try await Task.sleep(nanoseconds: 1_000_000)
-        await cache.store("two", for: "two", level: .light, model: "model-a")
+        await cache.store("two", for: "two", level: .clean, model: "model-a")
         try await Task.sleep(nanoseconds: 1_000_000)
-        await cache.store("three", for: "three", level: .light, model: "model-a")
+        await cache.store("three", for: "three", level: .clean, model: "model-a")
 
-        let one = await cache.value(for: "one", level: .light, model: "model-a")
-        let two = await cache.value(for: "two", level: .light, model: "model-a")
-        let three = await cache.value(for: "three", level: .light, model: "model-a")
+        let one = await cache.value(for: "one", level: .clean, model: "model-a")
+        let two = await cache.value(for: "two", level: .clean, model: "model-a")
+        let three = await cache.value(for: "three", level: .clean, model: "model-a")
 
         #expect(one == nil)
         #expect(two == "two")
@@ -49,11 +49,11 @@ struct RewriteResultCacheTests {
     func value_isolatedByLevelAndModel() async {
         let cache = RewriteResultCache(maxEntries: 4, ttlSeconds: 60, maxCharacterCount: 1_024)
 
-        await cache.store("cached", for: "same", level: .light, model: "model-a")
+        await cache.store("cached", for: "same", level: .clean, model: "model-a")
 
-        let exact = await cache.value(for: "same", level: .light, model: "model-a")
-        let wrongLevel = await cache.value(for: "same", level: .aggressive, model: "model-a")
-        let wrongModel = await cache.value(for: "same", level: .light, model: "model-b")
+        let exact = await cache.value(for: "same", level: .clean, model: "model-a")
+        let wrongLevel = await cache.value(for: "same", level: .polish, model: "model-a")
+        let wrongModel = await cache.value(for: "same", level: .clean, model: "model-b")
 
         #expect(exact == "cached")
         #expect(wrongLevel == nil)
@@ -65,8 +65,8 @@ struct RewriteResultCacheTests {
         let cache = RewriteResultCache(maxEntries: 4, ttlSeconds: 60, maxCharacterCount: 1_024)
         let oversized = String(repeating: "x", count: 1_100)
 
-        await cache.store(oversized, for: oversized, level: .light, model: "model-a")
-        let value = await cache.value(for: oversized, level: .light, model: "model-a")
+        await cache.store(oversized, for: oversized, level: .clean, model: "model-a")
+        let value = await cache.value(for: oversized, level: .clean, model: "model-a")
 
         #expect(value == nil)
     }
