@@ -21,6 +21,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
 - **BYOK** (Bring Your Own Keys) for complete control over costs
 - **Secure storage** via macOS Keychain
+- **Exportable diagnostics bundle**: share safe runtime context/logs (no transcript content) for support
 
 ## Quick Start
 

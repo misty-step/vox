@@ -209,11 +209,23 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     }
 
     public func process(transcript rawTranscript: String) async throws -> String {
+        var timing = PipelineTiming()
+        defer {
+            timingHandler?(timing)
+        }
+
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
         let level = await MainActor.run { prefs.processingLevel }
         logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
+
+        timing.rewriteTime = processed.rewriteTime
+        timing.pasteTime = processed.pasteTime
+
+        #if DEBUG
+        print(timing.summary())
+        #endif
         return processed.text
     }
 

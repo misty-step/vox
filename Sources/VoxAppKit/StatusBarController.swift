@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import UniformTypeIdentifiers
 import VoxCore
 
 public enum StatusBarState: Equatable {
@@ -277,6 +278,10 @@ public final class StatusBarController: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let exportItem = NSMenuItem(title: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "")
+        exportItem.target = self
+        menu.addItem(exportItem)
+
         menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Quit Vox", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
@@ -342,5 +347,61 @@ public final class StatusBarController: NSObject {
     @objc private func toggleRecording() { onToggle() }
     @objc private func openSetupChecklist() { onSetupChecklist() }
     @objc private func openSettings() { onSettings() }
+    @objc private func exportDiagnostics() {
+        let product = ProductInfo.current()
+        let ts = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType.zip]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Vox-Diagnostics-\(product.version)-\(product.build)-\(ts).zip"
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            return
+        }
+
+        let destinationURL: URL
+        if selectedURL.pathExtension.lowercased() == "zip" {
+            destinationURL = selectedURL
+        } else {
+            destinationURL = selectedURL.appendingPathExtension("zip")
+        }
+
+        let context = DiagnosticsContext.current()
+        Task {
+            await DiagnosticsStore.shared.record(
+                name: "diagnostics_export_started",
+                fields: ["zip_name": .string(destinationURL.lastPathComponent)]
+            )
+            do {
+                try await DiagnosticsStore.shared.exportZip(to: destinationURL, context: context)
+                await DiagnosticsStore.shared.record(
+                    name: "diagnostics_export_succeeded",
+                    fields: ["zip_name": .string(destinationURL.lastPathComponent)]
+                )
+                await MainActor.run {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(destinationURL.path, forType: .string)
+                    NSWorkspace.shared.activateFileViewerSelecting([destinationURL])
+                }
+            } catch {
+                await DiagnosticsStore.shared.record(
+                    name: "diagnostics_export_failed",
+                    fields: [
+                        "zip_name": .string(destinationURL.lastPathComponent),
+                        "error_code": .string(DiagnosticsStore.errorCode(for: error)),
+                        "error_type": .string(String(describing: type(of: error))),
+                    ]
+                )
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Export Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
+    }
     @objc private func quitApp() { onQuit() }
 }

@@ -74,13 +74,35 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makePipeline() -> DictationProcessing {
-        return DictationPipeline(
+        makePipeline(dictationID: UUID().uuidString)
+    }
+
+    private func makePipeline(dictationID: String) -> DictationProcessing {
+        DictationPipeline(
             stt: makeSTTProvider(),
             rewriter: makeRewriteProvider(),
             paster: ClipboardPaster(),
             prefs: prefs,
+            rewriteCache: .shared,
             enableRewriteCache: true,
-            enableOpus: hasCloudProviders
+            enableOpus: hasCloudProviders,
+            timingHandler: { timing in
+                Task {
+                    await DiagnosticsStore.shared.record(
+                        name: "pipeline_timing",
+                        sessionID: dictationID,
+                        fields: [
+                            "total_ms": .int(Int(timing.totalTime * 1000)),
+                            "encode_ms": .int(Int(timing.encodeTime * 1000)),
+                            "stt_ms": .int(Int(timing.sttTime * 1000)),
+                            "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
+                            "paste_ms": .int(Int(timing.pasteTime * 1000)),
+                            "original_bytes": .int(timing.originalSizeBytes),
+                            "encoded_bytes": .int(timing.encodedSizeBytes),
+                        ]
+                    )
+                }
+            }
         )
     }
 
@@ -372,6 +394,17 @@ public final class VoxSession: ObservableObject {
             recordingDuration = 0
         }
 
+        let dictationID = UUID().uuidString
+        await DiagnosticsStore.shared.record(
+            name: "processing_started",
+            sessionID: dictationID,
+            fields: [
+                "processing_level": .string(prefs.processingLevel.rawValue),
+                "recording_s": .double(recordingDuration),
+                "had_streaming_bridge": .bool(activeStreamingBridge != nil),
+            ]
+        )
+
         let url: URL
         do {
             url = try recorder.stop()
@@ -386,6 +419,14 @@ public final class VoxSession: ObservableObject {
                 await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             }
             presentError(error.localizedDescription)
+            await DiagnosticsStore.shared.record(
+                name: "recording_stop_failed",
+                sessionID: dictationID,
+                fields: [
+                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
+                    "error_type": .string(String(describing: type(of: error))),
+                ]
+            )
             state = .idle
             hud.hide()
             return
@@ -395,6 +436,14 @@ public final class VoxSession: ObservableObject {
             await streamingBridge?.cancel()
             await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)
+            await DiagnosticsStore.shared.record(
+                name: "recording_stop_failed",
+                sessionID: dictationID,
+                fields: [
+                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
+                    "error_type": .string(String(describing: type(of: error))),
+                ]
+            )
             state = .idle
             hud.hide()
             return
@@ -410,14 +459,15 @@ public final class VoxSession: ObservableObject {
 
         var succeeded = false
         do {
-            let active = pipeline ?? makePipeline()
+            let active = pipeline ?? makePipeline(dictationID: dictationID)
             let output: String
             if let streamingBridge {
                 output = try await processWithStreamingFallback(
                     bridge: streamingBridge,
                     batchPipeline: active,
                     audioURL: url,
-                    recordingDurationSeconds: recordingDuration
+                    recordingDurationSeconds: recordingDuration,
+                    dictationID: dictationID
                 )
             } else {
                 output = try await active.process(audioURL: url)
@@ -430,18 +480,39 @@ public final class VoxSession: ObservableObject {
                 )
             )
             succeeded = true
+            await DiagnosticsStore.shared.record(
+                name: "processing_succeeded",
+                sessionID: dictationID,
+                fields: [
+                    "processing_level": .string(prefs.processingLevel.rawValue),
+                    "output_chars": .int(output.count),
+                ]
+            )
         } catch is CancellationError {
             print("[Vox] Processing cancelled")
             await sessionExtension.didFailDictation(reason: "processing_cancelled")
             SecureFileDeleter.delete(at: url)
+            await DiagnosticsStore.shared.record(name: "processing_cancelled", sessionID: dictationID)
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
-            if let saved = preserveAudio(at: url) {
+            let preservedURL = preserveAudio(at: url)
+            let preserved = preservedURL != nil
+            if let saved = preservedURL {
                 presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
             } else {
                 presentError(error.localizedDescription)
             }
+            await DiagnosticsStore.shared.record(
+                name: "processing_failed",
+                sessionID: dictationID,
+                fields: [
+                    "processing_level": .string(prefs.processingLevel.rawValue),
+                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
+                    "error_type": .string(String(describing: type(of: error))),
+                    "audio_preserved": .bool(preserved),
+                ]
+            )
         }
 
         if succeeded {
@@ -458,7 +529,8 @@ public final class VoxSession: ObservableObject {
         bridge: StreamingAudioBridge,
         batchPipeline: DictationProcessing,
         audioURL: URL,
-        recordingDurationSeconds: TimeInterval
+        recordingDurationSeconds: TimeInterval,
+        dictationID: String
     ) async throws -> String {
         let finalizeStart = CFAbsoluteTimeGetCurrent()
         func logFinalize(outcome: String, reason: String, transcriptChars: Int? = nil) {
@@ -468,6 +540,22 @@ public final class VoxSession: ObservableObject {
                 print("[Vox] Streaming finalize outcome=\(outcome) waited_ms=\(waitedMs) recording_s=\(durationStr) reason=\(reason) transcript_chars=\(transcriptChars)")
             } else {
                 print("[Vox] Streaming finalize outcome=\(outcome) waited_ms=\(waitedMs) recording_s=\(durationStr) reason=\(reason)")
+            }
+            Task {
+                var fields: [String: DiagnosticsValue] = [
+                    "outcome": .string(outcome),
+                    "reason": .string(reason),
+                    "waited_ms": .int(waitedMs),
+                    "recording_s": .double(recordingDurationSeconds),
+                ]
+                if let transcriptChars {
+                    fields["transcript_chars"] = .int(transcriptChars)
+                }
+                await DiagnosticsStore.shared.record(
+                    name: "streaming_finalize",
+                    sessionID: dictationID,
+                    fields: fields
+                )
             }
         }
         func reasonCode(for error: Error) -> String {
