@@ -124,12 +124,11 @@ actor DiagnosticsStore {
     private let currentFileName = "diagnostics-current.jsonl"
 
     init(
-        fileManager: FileManager? = nil,
         directoryURL: URL? = nil,
         maxFileBytes: Int = 512 * 1024,
         maxRotatedFiles: Int = 4
     ) {
-        let fm = fileManager ?? .default
+        let fm = FileManager.default
         self.fm = fm
         if let directoryURL {
             self.directoryURL = directoryURL
