@@ -56,6 +56,9 @@ struct DiagnosticsContext: Codable, Sendable, Equatable {
         let openRouter: Bool
     }
 
+    @MainActor
+    private static let exportFormatter = ISO8601DateFormatter()
+
     let exportedAt: String
     let appVersion: String
     let appBuild: String
@@ -91,7 +94,7 @@ struct DiagnosticsContext: Codable, Sendable, Equatable {
         let maxConcurrent = Int(flag("VOX_MAX_CONCURRENT_STT")) ?? 8
 
         return DiagnosticsContext(
-            exportedAt: ISO8601DateFormatter().string(from: Date()),
+            exportedAt: exportFormatter.string(from: Date()),
             appVersion: productInfo.version,
             appBuild: productInfo.build,
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -120,6 +123,10 @@ actor DiagnosticsStore {
     private let maxRotatedFiles: Int
     private let maxFileBytes: Int
     private let encoder: JSONEncoder
+    private let isoFormatter: ISO8601DateFormatter
+    private var hasCreatedDirectory: Bool = false
+    private var currentFileHandle: FileHandle?
+    private var currentFileHandleURL: URL?
 
     private let currentFileName = "diagnostics-current.jsonl"
 
@@ -140,23 +147,24 @@ actor DiagnosticsStore {
         self.maxFileBytes = max(1, maxFileBytes)
         self.encoder = JSONEncoder()
         self.encoder.outputFormatting = [.withoutEscapingSlashes]
+        self.isoFormatter = ISO8601DateFormatter()
     }
 
     func record(name: String, sessionID: String? = nil, fields: [String: DiagnosticsValue] = [:]) {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = isoFormatter.string(from: Date())
         record(DiagnosticsEvent(timestamp: timestamp, name: name, sessionID: sessionID, fields: fields))
     }
 
     func record(_ event: DiagnosticsEvent) {
         guard let directoryURL else { return }
         do {
-            try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try ensureDirectoryExists(directoryURL)
             try rotateIfNeeded(in: directoryURL)
             let fileURL = directoryURL.appendingPathComponent(currentFileName)
             try append(event, to: fileURL)
         } catch {
             #if DEBUG
-            print("[Diagnostics] Record failed: \(error)")
+            print("[Vox] Diagnostics record failed: \(error)")
             #endif
         }
     }
@@ -166,6 +174,8 @@ actor DiagnosticsStore {
             throw VoxError.internalError("Diagnostics directory unavailable")
         }
 
+        closeCurrentHandle()
+
         let tmpRoot = fm.temporaryDirectory.appendingPathComponent("vox-diagnostics-\(UUID().uuidString)")
         let bundleDir = tmpRoot.appendingPathComponent("VoxDiagnostics", isDirectory: true)
         try fm.createDirectory(at: bundleDir, withIntermediateDirectories: true)
@@ -174,7 +184,7 @@ actor DiagnosticsStore {
         let contextURL = bundleDir.appendingPathComponent("context.json")
         try encoder.encode(context).write(to: contextURL, options: [.atomic])
 
-        let logFiles = try latestLogFiles(in: directoryURL)
+        let logFiles = (try? latestLogFiles(in: directoryURL)) ?? []
         for file in logFiles {
             let dest = bundleDir.appendingPathComponent(file.lastPathComponent)
             try? fm.removeItem(at: dest)
@@ -186,15 +196,45 @@ actor DiagnosticsStore {
 
     // MARK: - Files
 
-    private func append(_ event: DiagnosticsEvent, to fileURL: URL) throws {
+    private func ensureDirectoryExists(_ directoryURL: URL) throws {
+        if hasCreatedDirectory, fm.fileExists(atPath: directoryURL.path) {
+            return
+        }
+        try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        hasCreatedDirectory = true
+    }
+
+    private func closeCurrentHandle() {
+        if let handle = currentFileHandle {
+            try? handle.close()
+        }
+        currentFileHandle = nil
+        currentFileHandleURL = nil
+    }
+
+    private func writableHandle(for fileURL: URL) throws -> FileHandle {
+        if currentFileHandleURL != fileURL {
+            closeCurrentHandle()
+        }
+
+        if let handle = currentFileHandle {
+            return handle
+        }
+
         if !fm.fileExists(atPath: fileURL.path) {
             fm.createFile(atPath: fileURL.path, contents: nil)
         }
-        let data = try encoder.encode(event) + Data([0x0A])
         let handle = try FileHandle(forWritingTo: fileURL)
         try handle.seekToEnd()
+        currentFileHandle = handle
+        currentFileHandleURL = fileURL
+        return handle
+    }
+
+    private func append(_ event: DiagnosticsEvent, to fileURL: URL) throws {
+        let data = try encoder.encode(event) + Data([0x0A])
+        let handle = try writableHandle(for: fileURL)
         try handle.write(contentsOf: data)
-        try handle.close()
     }
 
     private func rotateIfNeeded(in directoryURL: URL) throws {
@@ -203,7 +243,9 @@ actor DiagnosticsStore {
         let size = attrs?[.size] as? Int ?? 0
         guard size >= maxFileBytes, fm.fileExists(atPath: fileURL.path) else { return }
 
-        let ts = ISO8601DateFormatter().string(from: Date())
+        closeCurrentHandle()
+
+        let ts = isoFormatter.string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
         let rotated = directoryURL.appendingPathComponent("diagnostics-\(ts)-\(UUID().uuidString.prefix(8)).jsonl")
         try fm.moveItem(at: fileURL, to: rotated)
@@ -232,6 +274,7 @@ actor DiagnosticsStore {
     }
 
     private func rotatedLogFiles(in directoryURL: URL) throws -> [URL] {
+        guard fm.fileExists(atPath: directoryURL.path) else { return [] }
         let urls = try fm.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: [.creationDateKey])
         let rotated = urls.filter { url in
             url.pathExtension.lowercased() == "jsonl"

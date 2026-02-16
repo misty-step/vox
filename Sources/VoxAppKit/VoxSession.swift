@@ -395,15 +395,19 @@ public final class VoxSession: ObservableObject {
         }
 
         let dictationID = UUID().uuidString
-        await DiagnosticsStore.shared.record(
-            name: "processing_started",
-            sessionID: dictationID,
-            fields: [
-                "processing_level": .string(prefs.processingLevel.rawValue),
-                "recording_s": .double(recordingDuration),
-                "had_streaming_bridge": .bool(activeStreamingBridge != nil),
-            ]
-        )
+        let processingLevelAtStop = prefs.processingLevel.rawValue
+        let hadStreamingBridgeAtStop = activeStreamingBridge != nil
+        Task {
+            await DiagnosticsStore.shared.record(
+                name: "processing_started",
+                sessionID: dictationID,
+                fields: [
+                    "processing_level": .string(processingLevelAtStop),
+                    "recording_s": .double(recordingDuration),
+                    "had_streaming_bridge": .bool(hadStreamingBridgeAtStop),
+                ]
+            )
+        }
 
         let url: URL
         do {
@@ -419,14 +423,18 @@ public final class VoxSession: ObservableObject {
                 await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             }
             presentError(error.localizedDescription)
-            await DiagnosticsStore.shared.record(
-                name: "recording_stop_failed",
-                sessionID: dictationID,
-                fields: [
-                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
-                    "error_type": .string(String(describing: type(of: error))),
-                ]
-            )
+            let errorCode = DiagnosticsStore.errorCode(for: error)
+            let errorType = String(describing: type(of: error))
+            Task {
+                await DiagnosticsStore.shared.record(
+                    name: "recording_stop_failed",
+                    sessionID: dictationID,
+                    fields: [
+                        "error_code": .string(errorCode),
+                        "error_type": .string(errorType),
+                    ]
+                )
+            }
             state = .idle
             hud.hide()
             return
@@ -436,14 +444,18 @@ public final class VoxSession: ObservableObject {
             await streamingBridge?.cancel()
             await sessionExtension.didFailDictation(reason: "recording_stop_failed")
             presentError(error.localizedDescription)
-            await DiagnosticsStore.shared.record(
-                name: "recording_stop_failed",
-                sessionID: dictationID,
-                fields: [
-                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
-                    "error_type": .string(String(describing: type(of: error))),
-                ]
-            )
+            let errorCode = DiagnosticsStore.errorCode(for: error)
+            let errorType = String(describing: type(of: error))
+            Task {
+                await DiagnosticsStore.shared.record(
+                    name: "recording_stop_failed",
+                    sessionID: dictationID,
+                    fields: [
+                        "error_code": .string(errorCode),
+                        "error_type": .string(errorType),
+                    ]
+                )
+            }
             state = .idle
             hud.hide()
             return
@@ -480,19 +492,25 @@ public final class VoxSession: ObservableObject {
                 )
             )
             succeeded = true
-            await DiagnosticsStore.shared.record(
-                name: "processing_succeeded",
-                sessionID: dictationID,
-                fields: [
-                    "processing_level": .string(prefs.processingLevel.rawValue),
-                    "output_chars": .int(output.count),
-                ]
-            )
+            let processingLevelOnSuccess = prefs.processingLevel.rawValue
+            let outputChars = output.count
+            Task {
+                await DiagnosticsStore.shared.record(
+                    name: "processing_succeeded",
+                    sessionID: dictationID,
+                    fields: [
+                        "processing_level": .string(processingLevelOnSuccess),
+                        "output_chars": .int(outputChars),
+                    ]
+                )
+            }
         } catch is CancellationError {
             print("[Vox] Processing cancelled")
             await sessionExtension.didFailDictation(reason: "processing_cancelled")
             SecureFileDeleter.delete(at: url)
-            await DiagnosticsStore.shared.record(name: "processing_cancelled", sessionID: dictationID)
+            Task {
+                await DiagnosticsStore.shared.record(name: "processing_cancelled", sessionID: dictationID)
+            }
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
@@ -503,16 +521,21 @@ public final class VoxSession: ObservableObject {
             } else {
                 presentError(error.localizedDescription)
             }
-            await DiagnosticsStore.shared.record(
-                name: "processing_failed",
-                sessionID: dictationID,
-                fields: [
-                    "processing_level": .string(prefs.processingLevel.rawValue),
-                    "error_code": .string(DiagnosticsStore.errorCode(for: error)),
-                    "error_type": .string(String(describing: type(of: error))),
-                    "audio_preserved": .bool(preserved),
-                ]
-            )
+            let processingLevelOnError = prefs.processingLevel.rawValue
+            let errorCode = DiagnosticsStore.errorCode(for: error)
+            let errorType = String(describing: type(of: error))
+            Task {
+                await DiagnosticsStore.shared.record(
+                    name: "processing_failed",
+                    sessionID: dictationID,
+                    fields: [
+                        "processing_level": .string(processingLevelOnError),
+                        "error_code": .string(errorCode),
+                        "error_type": .string(errorType),
+                        "audio_preserved": .bool(preserved),
+                    ]
+                )
+            }
         }
 
         if succeeded {
