@@ -51,7 +51,7 @@ struct CloudKeysSheet: View {
 
                     GroupBox("Rewrite") {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Used for Light/Aggressive/Enhance processing levels.")
+                            Text("Used for Clean/Polish processing levels.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)

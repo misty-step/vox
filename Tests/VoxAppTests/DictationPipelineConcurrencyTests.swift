@@ -90,7 +90,7 @@ struct DictationPipelineConcurrencyTests {
     @Test("process reads preferences on main thread")
     func process_readsPreferencesOnMainThread() async throws {
         let prefs = await MainActor.run {
-            AccessTrackingPreferences(level: .light)
+            AccessTrackingPreferences(level: .clean)
         }
         let pipeline = await MainActor.run {
             DictationPipeline(

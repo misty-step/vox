@@ -9,9 +9,8 @@ final class BrandIdentityTests: XCTestCase {
     }
 
     func test_menuIconStrokeWidth_scalesByProcessingLevel() {
-        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .off), 1.6, accuracy: 0.000_1)
-        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .light), 2.0, accuracy: 0.000_1)
-        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .aggressive), 2.4, accuracy: 0.000_1)
-        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .enhance), 2.8, accuracy: 0.000_1)
+        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .raw), 1.6, accuracy: 0.000_1)
+        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .clean), 2.2, accuracy: 0.000_1)
+        XCTAssertEqual(BrandIdentity.menuIconStrokeWidth(for: .polish), 2.8, accuracy: 0.000_1)
     }
 }

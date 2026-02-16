@@ -155,7 +155,7 @@ final class MockSessionExtension: SessionExtension {
 
 @MainActor
 final class MockPreferencesStore: PreferencesReading {
-    let processingLevel: ProcessingLevel = .light
+    let processingLevel: ProcessingLevel = .clean
     let selectedInputDeviceUID: String? = nil
     let elevenLabsAPIKey: String = ""
     let openRouterAPIKey: String = ""
@@ -391,7 +391,7 @@ struct VoxSessionDITests {
         #expect(errors.isEmpty)
 
         if let event = sessionExtension.completionEvents.first {
-            #expect(event.processingLevel == .light)
+            #expect(event.processingLevel == .clean)
             #expect(event.outputCharacterCount == pipeline.result.count)
             #expect(event.recordingDuration >= 0)
         }

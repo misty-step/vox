@@ -13,7 +13,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Press Option+Space** to start/stop recording
 - **STT resilience**: sequential fallback (ElevenLabs → Deepgram → Whisper → Apple Speech); opt-in hedged routing via `VOX_STT_ROUTING=hedged`
 - **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
-- **Four processing levels**: Off (raw transcript), Light (cleanup), Aggressive (full rewrite), Enhance (structured prompt upgrade)
+- **Three processing levels**: Raw (verbatim transcript), Clean (tidy up), Polish (full rewrite)
 - **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
@@ -146,17 +146,11 @@ Sources/
   VoxApp/        # Executable entry point (just main.swift)
 ```
 
-### Supported Models
+### Rewrite Models
 
-Default model: `google/gemini-2.5-flash-lite`
+Default rewrite model (Clean/Polish): `gemini-2.5-flash-lite` (Gemini direct) / `google/gemini-2.5-flash-lite` (OpenRouter)
 
-Available via OpenRouter:
-- google/gemini-2.5-flash-lite
-- xiaomi/mimo-v2-flash
-- deepseek/deepseek-v3.2
-- google/gemini-2.5-flash
-- moonshotai/kimi-k2.5
-- google/gemini-3-flash-preview
+See `docs/MODEL_EVALUATION.md` and `evals/polish-bakeoff.yaml` for bakeoff candidates and selection notes.
 
 ## Product Standards
 

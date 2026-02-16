@@ -8,31 +8,31 @@ import VoxCore
 struct StatusBarIconRendererTests {
     @Test("Idle state descriptor uses open V")
     func idleDescriptor() {
-        let descriptor = StatusBarIconDescriptor.make(for: .idle(processingLevel: .off))
+        let descriptor = StatusBarIconDescriptor.make(for: .idle(processingLevel: .raw))
 
         #expect(descriptor.monogramStyle == .openV)
-        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .off))) < 0.000_1)
+        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .raw))) < 0.000_1)
     }
 
     @Test("Recording state descriptor uses outlined triangle")
     func recordingDescriptor() {
-        let descriptor = StatusBarIconDescriptor.make(for: .recording(processingLevel: .light))
+        let descriptor = StatusBarIconDescriptor.make(for: .recording(processingLevel: .clean))
 
         #expect(descriptor.monogramStyle == .outlinedTriangle)
-        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .light))) < 0.000_1)
+        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .clean))) < 0.000_1)
     }
 
     @Test("Processing state descriptor uses solid triangle")
     func processingDescriptor() {
-        let descriptor = StatusBarIconDescriptor.make(for: .processing(processingLevel: .enhance))
+        let descriptor = StatusBarIconDescriptor.make(for: .processing(processingLevel: .polish))
 
         #expect(descriptor.monogramStyle == .filledTriangle)
-        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .enhance))) < 0.000_1)
+        #expect(abs(descriptor.strokeWidth - CGFloat(BrandIdentity.menuIconStrokeWidth(for: .polish))) < 0.000_1)
     }
 
     @Test("Renderer returns template icon at brand size")
     func iconMetadata() {
-        let icon = StatusBarIconRenderer.makeIcon(for: .idle(processingLevel: .off))
+        let icon = StatusBarIconRenderer.makeIcon(for: .idle(processingLevel: .raw))
 
         #expect(icon.isTemplate == true)
         #expect(abs(icon.size.width - BrandIdentity.menuIconSize) < 0.000_1)

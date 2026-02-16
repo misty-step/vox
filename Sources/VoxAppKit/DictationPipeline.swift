@@ -215,7 +215,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     ) async throws -> (text: String, rewriteTime: TimeInterval, pasteTime: TimeInterval) {
         var output = transcript
         var rewriteTime: TimeInterval = 0
-        if level != .off {
+        if level != .raw {
             let rewriteStart = CFAbsoluteTimeGetCurrent()
             let model = level.defaultModel
             do {
@@ -352,25 +352,21 @@ private func validatedTimeoutNanoseconds(seconds: TimeInterval, context: Timeout
 }
 
 struct RewriteStageTimeouts: Sendable {
-    let lightSeconds: TimeInterval
-    let aggressiveSeconds: TimeInterval
-    let enhanceSeconds: TimeInterval
+    let cleanSeconds: TimeInterval
+    let polishSeconds: TimeInterval
 
     static let `default` = RewriteStageTimeouts(
-        lightSeconds: 15,
-        aggressiveSeconds: 20,
-        enhanceSeconds: 30
+        cleanSeconds: 15,
+        polishSeconds: 30
     )
 
     func seconds(for level: ProcessingLevel) -> TimeInterval? {
         switch level {
-        case .light:
-            return lightSeconds
-        case .aggressive:
-            return aggressiveSeconds
-        case .enhance:
-            return enhanceSeconds
-        case .off:
+        case .clean:
+            return cleanSeconds
+        case .polish:
+            return polishSeconds
+        case .raw:
             return nil
         }
     }

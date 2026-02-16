@@ -6,12 +6,10 @@ import Foundation
 public final class FallbackRewriteProvider: RewriteProvider, @unchecked Sendable {
     public struct Entry: Sendable {
         public let provider: any RewriteProvider
-        public let model: String
         public let label: String
 
-        public init(provider: any RewriteProvider, model: String, label: String) {
+        public init(provider: any RewriteProvider, label: String) {
             self.provider = provider
-            self.model = model
             self.label = label
         }
     }
@@ -32,7 +30,7 @@ public final class FallbackRewriteProvider: RewriteProvider, @unchecked Sendable
                 return try await entry.provider.rewrite(
                     transcript: transcript,
                     systemPrompt: systemPrompt,
-                    model: entry.model
+                    model: model
                 )
             } catch is CancellationError {
                 throw CancellationError()

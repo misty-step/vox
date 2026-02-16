@@ -122,7 +122,7 @@ final class MockTextPaster: TextPaster, @unchecked Sendable {
 
 @MainActor
 final class MockPreferences: PreferencesReading, @unchecked Sendable {
-    var processingLevel: ProcessingLevel = .light
+    var processingLevel: ProcessingLevel = .clean
     var selectedInputDeviceUID: String? = nil
     var elevenLabsAPIKey: String = ""
     var openRouterAPIKey: String = ""
@@ -188,7 +188,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -214,7 +214,7 @@ struct DictationPipelineTests {
         rewriter.results = [.success("Hello, world!")]
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -244,7 +244,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -253,7 +253,7 @@ struct DictationPipelineTests {
             prefs: prefs,
             rewriteCache: makeRewriteCache(),
             enableOpus: false,
-            rewriteStageTimeouts: RewriteStageTimeouts(lightSeconds: 0.05, aggressiveSeconds: 0.05, enhanceSeconds: 0.05)
+            rewriteStageTimeouts: RewriteStageTimeouts(cleanSeconds: 0.05, polishSeconds: 0.05)
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -271,7 +271,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
         let convertedURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("converted-\(UUID().uuidString)")
             .appendingPathExtension("ogg")
@@ -308,7 +308,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let converter = MockAudioConverter(
             outputURL: FileManager.default.temporaryDirectory
@@ -344,7 +344,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let convertedURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("converted-\(UUID().uuidString).ogg")
@@ -381,7 +381,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
         let convertedURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("converted-empty-\(UUID().uuidString)")
             .appendingPathExtension("ogg")
@@ -409,8 +409,8 @@ struct DictationPipelineTests {
         #expect(!FileManager.default.fileExists(atPath: convertedURL.path))
     }
 
-    @Test("Process with light processing - rewrite succeeds")
-    func process_lightRewriteSucceeds() async throws {
+    @Test("Process with clean processing - rewrite succeeds")
+    func process_cleanRewriteSucceeds() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
@@ -419,7 +419,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -547,7 +547,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -575,7 +575,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -602,7 +602,7 @@ struct DictationPipelineTests {
         let paster = MockTextPaster()
         paster.shouldThrow = true
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -633,7 +633,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -665,7 +665,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -703,7 +703,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -736,7 +736,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -769,7 +769,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -802,7 +802,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -835,7 +835,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -868,7 +868,7 @@ struct DictationPipelineTests {
         let rewriter = MockRewriteProvider()
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .off
+        prefs.processingLevel = .raw
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -904,7 +904,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -944,7 +944,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -969,7 +969,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -994,7 +994,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -1027,7 +1027,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        prefs.processingLevel = .light
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -1040,7 +1040,7 @@ struct DictationPipelineTests {
         )
 
         let first = try await pipeline.process(audioURL: audioURL)
-        prefs.processingLevel = .aggressive
+        prefs.processingLevel = .polish
         let second = try await pipeline.process(audioURL: audioURL)
 
         #expect(first == "The cache phrase two is ready.")
@@ -1050,9 +1050,10 @@ struct DictationPipelineTests {
 
     @Test("Rewrite cache skips long transcripts")
     func process_rewriteCache_longTranscript_skipsCache() async throws {
-        let transcript = String(repeating: "a", count: 1_100)
-        let rewrittenOne = String(repeating: "b", count: 1_100)
-        let rewrittenTwo = String(repeating: "c", count: 1_100)
+        // Keep output text derived from the transcript so future quality gates won't break this test.
+        let transcript = String(repeating: "alpha ", count: 300).trimmingCharacters(in: .whitespacesAndNewlines)
+        let rewrittenOne = transcript + "\n\nDone."
+        let rewrittenTwo = transcript + "\n\nFinished."
 
         let stt = MockSTTProvider()
         stt.results = [.success(transcript), .success(transcript)]
@@ -1062,8 +1063,7 @@ struct DictationPipelineTests {
 
         let paster = MockTextPaster()
         let prefs = MockPreferences()
-        // Use enhance mode: distance checks are skipped so synthetic strings pass quality gate
-        prefs.processingLevel = .enhance
+        prefs.processingLevel = .clean
 
         let pipeline = DictationPipeline(
             stt: stt,
@@ -1086,9 +1086,8 @@ struct DictationPipelineTests {
     @Test("Model is passed correctly for each processing level")
     func process_processingLevel_passesCorrectModel() async throws {
         let testCases: [(ProcessingLevel, String)] = [
-            (.light, ProcessingLevel.light.defaultModel),
-            (.aggressive, ProcessingLevel.aggressive.defaultModel),
-            (.enhance, ProcessingLevel.enhance.defaultModel),
+            (.clean, ProcessingLevel.clean.defaultModel),
+            (.polish, ProcessingLevel.polish.defaultModel),
         ]
 
         for (level, expectedModel) in testCases {

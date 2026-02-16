@@ -1,7 +1,7 @@
 description: "Vox Rewrite Quality Evaluation"
 
 prompts:
-  - file://prompts/light.json
+  - file://prompts/clean.json
 
 providers:
   - id: openrouter:google/gemini-2.5-flash-lite

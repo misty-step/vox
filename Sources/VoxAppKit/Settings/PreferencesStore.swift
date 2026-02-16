@@ -22,7 +22,11 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     }
 
     private init() {
-        processingLevel = ProcessingLevel(rawValue: defaults.string(forKey: "processingLevel") ?? "light") ?? .light
+        let stored = defaults.string(forKey: "processingLevel") ?? "clean"
+        processingLevel = ProcessingLevel(rawValue: stored) ?? .clean
+        if processingLevel.rawValue != stored {
+            defaults.set(processingLevel.rawValue, forKey: "processingLevel")
+        }
         selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
     }
 

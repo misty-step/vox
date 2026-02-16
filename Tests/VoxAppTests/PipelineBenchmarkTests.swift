@@ -140,7 +140,7 @@ struct PipelineBenchmarkTests {
     private func collectTimings(
         sttDelay: TimeInterval,
         rewriteDelay: TimeInterval,
-        processingLevel: ProcessingLevel = .light,
+        processingLevel: ProcessingLevel = .clean,
         enableOpus: Bool = false
     ) async throws -> [PipelineTiming] {
         let stt = BenchmarkSTTProvider(delay: sttDelay)

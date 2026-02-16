@@ -3,54 +3,70 @@
 Last updated: February 2026
 
 ## Use Case Requirements
-- Text rewriting/cleanup of voice transcripts
-- **Priority: Low latency** (sub-second responses ideal)
-- Simple task (no deep reasoning needed)
-- Cost-effective for frequent use
+- Voice transcript rewriting
+- `Clean`: **Priority: low latency** (sub-second ideal), low variance, cost-effective
+- `Polish`: **Priority: quality** (can be slower/more expensive), but must preserve intent and avoid hallucination
 
 ## Model Comparison
 
 | Model | Input $/M | Output $/M | Context | Latency | Reasoning | Notes |
 |-------|-----------|------------|---------|---------|-----------|-------|
 | Gemini 2.5 Flash Lite | $0.10 | $0.40 | 1M | Best in bakeoff | Off | **Best overall speed+stability** |
-| Gemini 2.0 Flash | $0.10 | $0.40 | 1M | Best p95 on Enhance | Off | Strong Enhance choice |
-| Gemini 2.0 Flash Lite | $0.075 | $0.30 | 1M | Good | Off | Can over-expand on Light (quality-gate rejects) |
+| Gemini 2.0 Flash | $0.10 | $0.40 | 1M | Good | Off | Solid fallback |
+| Gemini 2.0 Flash Lite | $0.075 | $0.30 | 1M | Good | Off | Can over-expand on Clean (quality-gate flags; benchmarks reject) |
 | OpenAI GPT-4.1 Nano | $0.10 | $0.40 | ~1M | Slower than Gemini Flash Lite | Off | Solid fallback |
 | OpenAI GPT-4o-mini | $0.15 | $0.60 | 128K | Slower | Off | Solid fallback |
-| Anthropic Claude Haiku 4.5 | $1.00 | $5.00 | 200K | Unstable tails on Light | Off | Tends to over-expand Light in bakeoff |
-| Mistral Ministral 3 8B | $0.15 | $0.15 | 256K | Medium | Off | Over-expands Light sometimes |
-| Mistral Ministral 3 3B | $0.10 | $0.10 | 128K | Fast | Off | Over-expands Light often |
-| Llama 3.1 8B Instruct | $0.02 | $0.05 | 16K | Unstable tails | Off | Not consistent enough for Light |
+| Anthropic Claude Haiku 4.5 | $1.00 | $5.00 | 200K | Unstable tails on Clean | Off | Tends to over-expand Clean in bakeoff |
+| Mistral Ministral 3 8B | $0.15 | $0.15 | 256K | Medium | Off | Over-expands Clean sometimes |
+| Mistral Ministral 3 3B | $0.10 | $0.10 | 128K | Fast | Off | Over-expands Clean often |
+| Llama 3.1 8B Instruct | $0.02 | $0.05 | 16K | Unstable tails | Off | Not consistent enough for Clean |
 | NVIDIA Nemotron Nano 9B V2 | $0.04 | $0.16 | 128K | Unstable tails | On by default | Disable reasoning; still unstable for our use case |
 | MiMo-V2-Flash | $0.09 | $0.29 | 256K | Unstable tails | Off | Cheap, but long tail risk |
 | Gemini 3 Flash Preview | $0.50 | $3.00 | 1M | Variable | Min "minimal" | **Cannot disable reasoning**, avoid |
 
 ## Recommendation
 
-**Primary: `google/gemini-2.5-flash-lite` (all rewrite modes)**
+**Primary (Clean): `gemini-2.5-flash-lite` (Gemini direct)**
 - Fastest production model (392 tok/s, 0.29s time-to-first-token)
 - Thinking disabled by default (no wasted reasoning tokens)
 - 1M context window
 - Very affordable
 
-Decision: we intentionally use **one** default model across light/aggressive/enhance to keep behavior predictable and rollback trivial (`ProcessingLevel.defaultRewriteModel`).
-Expanded bakeoff had `google/gemini-2.0-flash-001` slightly faster on Enhance p95, but not enough to justify per-mode model complexity.
+**Primary (Polish): `x-ai/grok-4.1-fast` (OpenRouter)**
+- Best polish pass-rate in Promptfoo bakeoff (10/10 on `evals/datasets/polish.yaml`)
+- Very low cost relative to premium models
+- Good latency despite higher-quality rewrites
+
+Implementation note: rewriting is model-routed via `ModelRoutedRewriteProvider`:
+- Gemini models go to Gemini direct when configured
+- Non-Google models (with provider prefix) go to OpenRouter
+- If OpenRouter is unavailable, polish falls back to Gemini so UX still works
 
 **Fallback options (if Gemini has issues):**
 1. `openai/gpt-4.1-nano`
 2. `openai/gpt-4o-mini`
-3. `mistralai/ministral-8b-2512` (expect slower + Light over-expansion risk)
+3. `mistralai/ministral-8b-2512` (expect slower + Clean over-expansion risk)
 
 ## Bakeoff (2026-02-09)
 
 See `docs/performance/rewrite-model-bakeoff-2026-02-09.md` for measured p50/p95 latency, cost, and `RewriteQualityGate` pass-rate across candidate models.
 
-Outcome: `ProcessingLevel` defaults now use `google/gemini-2.5-flash-lite` for light/aggressive/enhance.
+Outcome:
+- `clean` default: `gemini-2.5-flash-lite`
+- `polish` default: `x-ai/grok-4.1-fast`
 
 Expanded bakeoff: `docs/performance/rewrite-model-bakeoff-2026-02-09-expanded.md`
-- Light: `google/gemini-2.5-flash-lite`
-- Aggressive: `google/gemini-2.5-flash-lite`
-- Enhance: `google/gemini-2.0-flash-001` (fastest p95 in this run; we still standardize on Flash Lite for simplicity)
+- Legacy naming: `Light` → `Clean`, `Aggressive` → `Polish`, `Enhance` → removed (legacy `enhance` maps to `clean`).
+
+## Polish Bakeoff (Promptfoo)
+
+Polish is allowed to trade speed for quality. Use `evals/polish-bakeoff.yaml` and:
+
+```bash
+./evals/scripts/eval-polish-smoke.sh
+./evals/scripts/eval-polish.sh
+./evals/scripts/format-polish-report.js < evals/output/polish-bakeoff-results.json > evals/output/polish-bakeoff-report.md
+```
 
 ## Reasoning Control
 
@@ -88,6 +104,7 @@ nvidia/nemotron-nano-9b-v2
 xiaomi/mimo-v2-flash
 google/gemini-2.5-flash
 google/gemini-3-flash-preview
+x-ai/grok-4.1-fast
 ```
 
 ## Sources
