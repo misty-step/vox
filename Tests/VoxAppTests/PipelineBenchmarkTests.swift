@@ -162,14 +162,14 @@ struct PipelineBenchmarkTests {
             convertCAFToOpus: { url in url },  // no-op for benchmark
             timingHandler: { timing in
                 collector.append(timing)
-            }
+            },
+            audioFrameValidator: { _ in }  // benchmark harness bypasses capture validation explicitly
         )
 
-        // Use .wav extension to bypass CapturedAudioInspector validation (only validates .caf).
         // Mocks ignore file contents, so this URL does not need an actual fixture on disk.
         let audioURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("benchmark-\(UUID().uuidString)")
-            .appendingPathExtension("wav")
+            .appendingPathExtension("caf")
 
         for _ in 0..<Self.iterations {
             _ = try await pipeline.process(audioURL: audioURL)

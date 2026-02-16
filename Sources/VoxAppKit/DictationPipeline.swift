@@ -53,6 +53,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     private let opusBypassThreshold: Int
     private let enableRewriteCache: Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
+    // Internal seam for tests/benchmarks; default path uses CapturedAudioInspector.
+    private let audioFrameValidator: @Sendable (URL) throws -> Void
     // Invoked once per process call. On failures it receives partial stage timings.
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
 
@@ -103,7 +105,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
         rewriteStageTimeouts: RewriteStageTimeouts = .default,
-        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
+        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
+        audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { url in
+            try CapturedAudioInspector.ensureHasAudioFrames(at: url)
+        }
     ) {
         self.stt = stt
         self.rewriter = rewriter
@@ -117,6 +122,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         self.pipelineTimeout = pipelineTimeout
         self.rewriteStageTimeouts = rewriteStageTimeouts
         self.timingHandler = timingHandler
+        self.audioFrameValidator = audioFrameValidator
     }
 
     public func process(audioURL: URL) async throws -> String {
@@ -128,7 +134,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         // Capture original size BEFORE encoding
         let originalAttributes = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
         timing.originalSizeBytes = originalAttributes?[.size] as? Int ?? 0
-        try CapturedAudioInspector.ensureHasAudioFrames(at: audioURL)
+        try audioFrameValidator(audioURL)
 
         // Encode to Opus if enabled
         let uploadURL: URL

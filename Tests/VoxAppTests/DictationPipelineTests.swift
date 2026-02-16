@@ -155,6 +155,30 @@ final class MockAudioConverter: @unchecked Sendable {
     }
 }
 
+final class AudioFrameValidatorSpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _callCount = 0
+    var callCount: Int { lock.withLock { _callCount } }
+    private var _lastURL: URL?
+    var lastURL: URL? { lock.withLock { _lastURL } }
+    private var _error: Error?
+    var error: Error? {
+        get { lock.withLock { _error } }
+        set { lock.withLock { _error = newValue } }
+    }
+
+    func validate(_ url: URL) throws {
+        let currentError = lock.withLock {
+            _callCount += 1
+            _lastURL = url
+            return _error
+        }
+        if let currentError {
+            throw currentError
+        }
+    }
+}
+
 // MARK: - Tests
 
 @Suite("DictationPipeline")
@@ -207,6 +231,78 @@ struct DictationPipelineTests {
         #expect(stt.callCount == 1)
         #expect(rewriter.callCount == 0)
         #expect(paster.callCount == 1)
+    }
+
+    @Test("Injected audio validator seam is invoked before STT")
+    func process_injectedAudioValidator_invokedBeforeSTT() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .raw
+        let validator = AudioFrameValidatorSpy()
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableOpus: false,
+            audioFrameValidator: { url in
+                try validator.validate(url)
+            }
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(validator.callCount == 1)
+        #expect(validator.lastURL == audioURL)
+        #expect(stt.callCount == 1)
+        #expect(rewriter.callCount == 0)
+        #expect(paster.callCount == 1)
+    }
+
+    @Test("Injected audio validator seam error fails before STT")
+    func process_injectedAudioValidatorError_failsFast() async {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .raw
+        let validator = AudioFrameValidatorSpy()
+        validator.error = VoxError.emptyCapture
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableOpus: false,
+            audioFrameValidator: { url in
+                try validator.validate(url)
+            }
+        )
+
+        do {
+            _ = try await pipeline.process(audioURL: audioURL)
+            Issue.record("Expected error to be thrown")
+        } catch let error as VoxError {
+            #expect(error == .emptyCapture)
+        } catch {
+            Issue.record("Expected VoxError.emptyCapture, got \(error)")
+        }
+
+        #expect(validator.callCount == 1)
+        #expect(stt.callCount == 0)
+        #expect(rewriter.callCount == 0)
+        #expect(paster.callCount == 0)
     }
 
     @Test("Process precomputed transcript keeps rewrite and paste semantics")
