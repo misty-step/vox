@@ -8,7 +8,14 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     private let defaults = UserDefaults.standard
 
     @Published public var processingLevel: ProcessingLevel {
-        didSet { defaults.set(processingLevel.rawValue, forKey: "processingLevel") }
+        didSet {
+            defaults.set(processingLevel.rawValue, forKey: "processingLevel")
+            #if DEBUG
+            if oldValue != processingLevel {
+                print("[Vox] Processing level updated: \(oldValue.rawValue) -> \(processingLevel.rawValue)")
+            }
+            #endif
+        }
     }
 
     @Published public var selectedInputDeviceUID: String? {

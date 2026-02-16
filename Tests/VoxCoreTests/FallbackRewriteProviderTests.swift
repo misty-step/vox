@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import VoxCore
 
@@ -114,17 +115,28 @@ struct FallbackRewriteProviderTests {
 // MARK: - Test Doubles
 
 private final class StubRewriteProvider: RewriteProvider, @unchecked Sendable {
+    private let lock = NSLock()
     let result: Result<String, Error>
-    private(set) var callCount = 0
-    private(set) var lastModel: String?
+    private var _callCount = 0
+    private var _lastModel: String?
+
+    var callCount: Int {
+        lock.withLock { _callCount }
+    }
+
+    var lastModel: String? {
+        lock.withLock { _lastModel }
+    }
 
     init(result: Result<String, Error>) {
         self.result = result
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        callCount += 1
-        lastModel = model
+        lock.withLock {
+            _callCount += 1
+            _lastModel = model
+        }
         return try result.get()
     }
 }

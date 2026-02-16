@@ -51,8 +51,8 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.toggleEnabled == false)
     }
 
-    @Test("Off mode with cloud STT shows cloud transcription ready")
-    func offModeWithCloudSTT() {
+    @Test("Raw mode with cloud STT shows cloud transcription ready")
+    func rawModeWithCloudSTT() {
         let snapshot = StatusBarMenuSnapshot.make(
             state: .idle(processingLevel: .raw),
             hasCloudSTT: true,

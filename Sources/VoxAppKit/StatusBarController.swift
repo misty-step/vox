@@ -87,7 +87,7 @@ enum CloudStatus {
     ) -> (title: String, needsAction: Bool) {
         switch level {
         case .raw:
-            // Off mode: only transcription matters, rewrite not used
+            // Raw mode: only transcription matters, rewrite not used
             if hasCloudSTT {
                 return ("Cloud transcription ready", false)
             } else {
@@ -293,6 +293,9 @@ public final class StatusBarController: NSObject {
     @objc private func selectProcessingLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? ProcessingLevel else { return }
         guard prefs.processingLevel != level else { return }
+        #if DEBUG
+        print("[Vox] Processing level menu selection: \(prefs.processingLevel.rawValue) -> \(level.rawValue)")
+        #endif
         prefs.processingLevel = level
         applyState(currentState.updatingProcessingLevel(level))
     }

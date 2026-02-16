@@ -61,4 +61,4 @@ tests: file://datasets/smoke.yaml
 
 evaluateOptions:
   maxConcurrency: 3
-  cache: true
+  cache: false

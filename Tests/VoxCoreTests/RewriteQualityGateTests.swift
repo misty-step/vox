@@ -60,13 +60,13 @@ final class RewriteQualityGateTests: XCTestCase {
         // Pure ratio math: synthetic strings with .raw mode (no distance checks)
         let raw = String(repeating: "r", count: 10)
 
-        let lightCandidate = String(repeating: "c", count: 6)
-        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: lightCandidate, level: .raw)
-        XCTAssertEqual(lightDecision.ratio, 0.6, accuracy: 0.0001)
+        let candidateAt60Percent = String(repeating: "c", count: 6)
+        let decisionAt60Percent = RewriteQualityGate.evaluate(raw: raw, candidate: candidateAt60Percent, level: .raw)
+        XCTAssertEqual(decisionAt60Percent.ratio, 0.6, accuracy: 0.0001)
 
-        let aggressiveCandidate = String(repeating: "c", count: 3)
-        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: aggressiveCandidate, level: .raw)
-        XCTAssertEqual(aggressiveDecision.ratio, 0.3, accuracy: 0.0001)
+        let candidateAt30Percent = String(repeating: "c", count: 3)
+        let decisionAt30Percent = RewriteQualityGate.evaluate(raw: raw, candidate: candidateAt30Percent, level: .raw)
+        XCTAssertEqual(decisionAt30Percent.ratio, 0.3, accuracy: 0.0001)
     }
 
     func test_evaluate_cleanExpansionAboveMax_isNotAcceptable() {
@@ -132,24 +132,24 @@ final class RewriteQualityGateTests: XCTestCase {
         let raw = "hello world"  // 11 chars
         let candidate = "hello"   // 5 chars, ratio = 5/11 ≈ 0.45
 
-        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
-        XCTAssertTrue(aggressiveDecision.isAcceptable)
-        XCTAssertEqual(aggressiveDecision.ratio, 5.0/11.0, accuracy: 0.0001)
+        let polishDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
+        XCTAssertTrue(polishDecision.isAcceptable)
+        XCTAssertEqual(polishDecision.ratio, 5.0/11.0, accuracy: 0.0001)
 
-        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .clean)
-        XCTAssertFalse(lightDecision.isAcceptable)
+        let cleanDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .clean)
+        XCTAssertFalse(cleanDecision.isAcceptable)
     }
 
     func test_evaluate_justBelowMinimumRatio_isNotAcceptable() {
         let raw = "hello world test"  // 16 chars
         let candidate = "hello"        // 5 chars, ratio = 5/16 = 0.3125
 
-        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
-        XCTAssertTrue(aggressiveDecision.isAcceptable)  // Just above 0.3
+        let polishDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
+        XCTAssertTrue(polishDecision.isAcceptable)  // Just above 0.3
 
         let candidate2 = "hello wor"  // 9 chars, ratio = 9/16 = 0.5625
-        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate2, level: .clean)
-        XCTAssertFalse(lightDecision.isAcceptable)  // Below 0.6
+        let cleanDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate2, level: .clean)
+        XCTAssertFalse(cleanDecision.isAcceptable)  // Below 0.6
     }
 
     func test_evaluate_veryLongRaw_veryShortCandidate() {
@@ -217,14 +217,14 @@ final class RewriteQualityGateTests: XCTestCase {
         let raw = "test"
         let candidate = String(repeating: "x", count: 1000)
 
-        let lightDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .clean)
-        XCTAssertEqual(lightDecision.maximumRatio!, 3.0, accuracy: 0.0001)
+        let cleanDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .clean)
+        XCTAssertEqual(cleanDecision.maximumRatio!, 3.0, accuracy: 0.0001)
 
-        let aggressiveDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
-        XCTAssertNil(aggressiveDecision.maximumRatio)
+        let polishDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .polish)
+        XCTAssertNil(polishDecision.maximumRatio)
 
-        let offDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .raw)
-        XCTAssertNil(offDecision.maximumRatio)
+        let rawDecision = RewriteQualityGate.evaluate(raw: raw, candidate: candidate, level: .raw)
+        XCTAssertNil(rawDecision.maximumRatio)
     }
 
     // MARK: - Levenshtein Similarity

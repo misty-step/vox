@@ -1,7 +1,7 @@
 import VoxCore
 
 public enum RewritePrompts {
-    public static func prompt(for level: ProcessingLevel, transcript: String = "") -> String {
+    public static func prompt(for level: ProcessingLevel) -> String {
         switch level {
         case .raw: return ""
         case .clean: return """

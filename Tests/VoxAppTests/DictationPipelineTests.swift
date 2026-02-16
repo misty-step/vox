@@ -62,6 +62,8 @@ final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
     var lastPrompt: String? { lock.withLock { _lastPrompt } }
     private var _lastModel: String?
     var lastModel: String? { lock.withLock { _lastModel } }
+    private var _modelHistory: [String] = []
+    var modelHistory: [String] { lock.withLock { _modelHistory } }
     private var _delay: TimeInterval = 0
     var delay: TimeInterval {
         get { lock.withLock { _delay } }
@@ -75,6 +77,7 @@ final class MockRewriteProvider: RewriteProvider, @unchecked Sendable {
             _lastTranscript = transcript
             _lastPrompt = systemPrompt
             _lastModel = model
+            _modelHistory.append(model)
             return (index, _delay, _results)
         }
 
@@ -253,7 +256,7 @@ struct DictationPipelineTests {
             prefs: prefs,
             rewriteCache: makeRewriteCache(),
             enableOpus: false,
-            rewriteStageTimeouts: RewriteStageTimeouts(cleanSeconds: 0.05, polishSeconds: 0.05)
+            rewriteStageTimeouts: RewriteStageTimeouts(cleanSeconds: 0.1, polishSeconds: 0.1)
         )
 
         let result = try await pipeline.process(audioURL: audioURL)
@@ -410,7 +413,7 @@ struct DictationPipelineTests {
     }
 
     @Test("Process with clean processing - rewrite succeeds")
-    func process_cleanRewriteSucceeds() async throws {
+    func test_process_cleanRewrite_succeeds() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
@@ -1113,5 +1116,35 @@ struct DictationPipelineTests {
 
             #expect(rewriter.lastModel == expectedModel, "Failed for level: \(level)")
         }
+    }
+
+    @Test("Processing level change uses updated rewrite model on same pipeline")
+    func process_processingLevelChange_updatesRewriteModel() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("test one"), .success("test two")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Test one."), .success("Test two.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        _ = try await pipeline.process(audioURL: audioURL)
+        prefs.processingLevel = .polish
+        _ = try await pipeline.process(audioURL: audioURL)
+
+        #expect(rewriter.modelHistory == [
+            ProcessingLevel.clean.defaultModel,
+            ProcessingLevel.polish.defaultModel,
+        ])
     }
 }

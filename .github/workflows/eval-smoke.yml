@@ -38,6 +38,7 @@ jobs:
         continue-on-error: true
         run: |
           promptfoo eval \
+            --no-cache \
             --config evals/promptfooconfig.yaml \
             --no-progress-bar \
             -o evals/output/results.json

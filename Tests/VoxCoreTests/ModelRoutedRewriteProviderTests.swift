@@ -1,10 +1,11 @@
+import Foundation
 import Testing
 @testable import VoxCore
 
 @Suite("ModelRoutedRewriteProvider")
 struct ModelRoutedRewriteProviderTests {
     @Test("Routes bare Gemini model id to Gemini provider")
-    func routesBareGeminiToGemini() async throws {
+    func test_rewrite_routesBareGeminiToGemini() async throws {
         let gemini = StubRewriteProvider(result: .success("gemini ok"))
         let openRouter = StubRewriteProvider(result: .success("openrouter ok"))
         let sut = ModelRoutedRewriteProvider(
@@ -21,7 +22,7 @@ struct ModelRoutedRewriteProviderTests {
     }
 
     @Test("Routes google/gemini prefixed id to Gemini provider (strips prefix)")
-    func routesPrefixedGeminiToGemini() async throws {
+    func test_rewrite_routesPrefixedGeminiToGemini() async throws {
         let gemini = StubRewriteProvider(result: .success("gemini ok"))
         let openRouter = StubRewriteProvider(result: .success("openrouter ok"))
         let sut = ModelRoutedRewriteProvider(
@@ -38,7 +39,7 @@ struct ModelRoutedRewriteProviderTests {
     }
 
     @Test("Falls back to OpenRouter when Gemini direct fails for a Gemini model")
-    func fallsBackFromGeminiToOpenRouter() async throws {
+    func test_rewrite_fallsBackFromGeminiToOpenRouter() async throws {
         let gemini = StubRewriteProvider(result: .failure(RewriteError.network("boom")))
         let openRouter = StubRewriteProvider(result: .success("openrouter ok"))
         let sut = ModelRoutedRewriteProvider(
@@ -55,7 +56,7 @@ struct ModelRoutedRewriteProviderTests {
     }
 
     @Test("Routes OpenRouter-only model to OpenRouter without calling Gemini")
-    func routesOpenRouterModelToOpenRouter() async throws {
+    func test_rewrite_routesOpenRouterModelToOpenRouter() async throws {
         let gemini = StubRewriteProvider(result: .success("gemini ok"))
         let openRouter = StubRewriteProvider(result: .success("openrouter ok"))
         let sut = ModelRoutedRewriteProvider(
@@ -72,7 +73,7 @@ struct ModelRoutedRewriteProviderTests {
     }
 
     @Test("Falls back to Gemini fallback model when OpenRouter is unavailable for OpenRouter-only model")
-    func fallsBackToGeminiWhenOpenRouterMissing() async throws {
+    func test_rewrite_fallsBackToGeminiWhenOpenRouterMissing() async throws {
         let gemini = StubRewriteProvider(result: .success("gemini ok"))
         let sut = ModelRoutedRewriteProvider(
             gemini: gemini,
@@ -87,7 +88,7 @@ struct ModelRoutedRewriteProviderTests {
     }
 
     @Test("Falls back to Gemini fallback model when OpenRouter fails for OpenRouter-only model")
-    func fallsBackFromOpenRouterToGemini() async throws {
+    func test_rewrite_fallsBackFromOpenRouterToGemini() async throws {
         let gemini = StubRewriteProvider(result: .success("gemini ok"))
         let openRouter = StubRewriteProvider(result: .failure(RewriteError.network("503")))
         let sut = ModelRoutedRewriteProvider(
@@ -106,17 +107,28 @@ struct ModelRoutedRewriteProviderTests {
 // MARK: - Test Double
 
 private final class StubRewriteProvider: RewriteProvider, @unchecked Sendable {
+    private let lock = NSLock()
     let result: Result<String, Error>
-    private(set) var callCount = 0
-    private(set) var lastModel: String?
+    private var _callCount = 0
+    private var _lastModel: String?
+
+    var callCount: Int {
+        lock.withLock { _callCount }
+    }
+
+    var lastModel: String? {
+        lock.withLock { _lastModel }
+    }
 
     init(result: Result<String, Error>) {
         self.result = result
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        callCount += 1
-        lastModel = model
+        lock.withLock {
+            _callCount += 1
+            _lastModel = model
+        }
         return try result.get()
     }
 }

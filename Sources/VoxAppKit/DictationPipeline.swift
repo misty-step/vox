@@ -191,6 +191,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         let level = await MainActor.run { prefs.processingLevel }
+        logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
@@ -205,6 +206,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
         let level = await MainActor.run { prefs.processingLevel }
+        logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
         return processed.text
     }
@@ -230,7 +232,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                     print("[Pipeline] Rewrite cache hit")
                     #endif
                 } else {
-                    let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
+                    let prompt = RewritePrompts.prompt(for: level)
                     guard let rewriteTimeoutSeconds = rewriteStageTimeouts.seconds(for: level) else {
                         throw VoxError.internalError("Rewrite timeout requested for level: \(level)")
                     }
@@ -290,6 +292,16 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
         return (text: finalText, rewriteTime: rewriteTime, pasteTime: pasteTime)
+    }
+
+    private func logActiveProcessingLevel(_ level: ProcessingLevel) {
+        #if DEBUG
+        if level == .raw {
+            print("[Pipeline] Processing level: raw (rewrite disabled)")
+        } else {
+            print("[Pipeline] Processing level: \(level.rawValue) (model: \(level.defaultModel))")
+        }
+        #endif
     }
 
 }

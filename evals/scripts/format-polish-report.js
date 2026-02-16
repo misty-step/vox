@@ -3,10 +3,23 @@
 // Formats promptfoo JSON into a markdown report for manual polish review.
 // Usage: node format-polish-report.js < output.json > report.md
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: node format-polish-report.js < output.json > report.md");
+  console.log("Formats promptfoo JSON into a markdown report for manual polish review.");
+  process.exit(0);
+}
+
 const fs = require("fs");
 
 const input = fs.readFileSync(process.stdin.fd, "utf-8");
-const data = JSON.parse(input);
+let data;
+try {
+  data = JSON.parse(input);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Error: invalid JSON input (${message})`);
+  process.exit(1);
+}
 
 const resultsRoot = data.results || {};
 const rows = resultsRoot.results || [];
@@ -51,7 +64,7 @@ for (const testKey of testOrder) {
 
   md += `### ${escapeMd(desc)}\n\n`;
   md += `**Input**\n\n`;
-  md += "```text\n" + transcript + "\n```\n\n";
+  md += "```text\n" + escapeCodeBlock(transcript) + "\n```\n\n";
 
   const byProvider = new Map();
   for (const r of list) {
@@ -78,10 +91,10 @@ for (const testKey of testOrder) {
     md += `<summary>${ok} <code>${escapeHtml(providerLabel(pid))}</code> · score=${score} · latency=${latency} · cost=${cost}</summary>\n\n`;
     if (error) {
       md += `**Error**\n\n`;
-      md += "```text\n" + error + "\n```\n\n";
+      md += "```text\n" + escapeCodeBlock(error) + "\n```\n\n";
     }
     md += `**Output**\n\n`;
-    md += "```text\n" + output + "\n```\n\n";
+    md += "```text\n" + escapeCodeBlock(output) + "\n```\n\n";
     md += `</details>\n\n`;
   }
 }
@@ -100,3 +113,6 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+function escapeCodeBlock(str) {
+  return String(str).replace(/```/g, "` ` `");
+}
