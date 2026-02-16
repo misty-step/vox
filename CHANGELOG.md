@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/misty-step/vox/compare/v1.15.0...v1.16.0) (2026-02-16)
+
+
+### Features
+
+* Improve hotkey-registration failure recovery UX ([#251](https://github.com/misty-step/vox/issues/251)) ([87a062c](https://github.com/misty-step/vox/commit/87a062c77897321e83488f0e939761728f88a854)), closes [#187](https://github.com/misty-step/vox/issues/187)
+
 # [1.15.0](https://github.com/misty-step/vox/compare/v1.14.0...v1.15.0) (2026-02-16)
 
 
