@@ -225,7 +225,12 @@ actor DiagnosticsStore {
             fm.createFile(atPath: fileURL.path, contents: nil)
         }
         let handle = try FileHandle(forWritingTo: fileURL)
-        try handle.seekToEnd()
+        do {
+            try handle.seekToEnd()
+        } catch {
+            try? handle.close()
+            throw error
+        }
         currentFileHandle = handle
         currentFileHandleURL = fileURL
         return handle
@@ -234,7 +239,12 @@ actor DiagnosticsStore {
     private func append(_ event: DiagnosticsEvent, to fileURL: URL) throws {
         let data = try encoder.encode(event) + Data([0x0A])
         let handle = try writableHandle(for: fileURL)
-        try handle.write(contentsOf: data)
+        do {
+            try handle.write(contentsOf: data)
+        } catch {
+            closeCurrentHandle()
+            throw error
+        }
     }
 
     private func rotateIfNeeded(in directoryURL: URL) throws {
