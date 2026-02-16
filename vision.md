@@ -7,7 +7,7 @@ Voice-to-text with optional AI polish — from raw transcript to refined prose.
 The invisible writing assistant. Press hotkey, speak naturally, get text your way. No configuration maze, no learning curve, no friction. Just works.
 
 ## Key Differentiators
-- **Rewrite as first-class feature** — Light cleanup, aggressive refinement, or raw transcript. Your choice.
+- **Rewrite as first-class feature** — Clean tidy-up, Polish refinement, or Raw transcript. Your choice.
 - **Zero configuration** — Works perfectly out of the box, BYOK simplicity
 - **World-class UX** — Delightful interactions, not feature sprawl
 - **Open source core** — Community-driven, extensible, trustworthy

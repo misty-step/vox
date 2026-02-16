@@ -103,7 +103,7 @@ private enum LatencyBudget {
     static let totalP50: TimeInterval = 1.2
     static let totalP95: TimeInterval = 2.5
     static let pasteP95: TimeInterval = 0.08
-    static let rewriteLightP95: TimeInterval = 0.9
+    static let rewriteCleanP95: TimeInterval = 0.9
 }
 
 // MARK: - Thread-Safe Timing Collector
@@ -140,7 +140,7 @@ struct PipelineBenchmarkTests {
     private func collectTimings(
         sttDelay: TimeInterval,
         rewriteDelay: TimeInterval,
-        processingLevel: ProcessingLevel = .light,
+        processingLevel: ProcessingLevel = .clean,
         enableOpus: Bool = false
     ) async throws -> [PipelineTiming] {
         let stt = BenchmarkSTTProvider(delay: sttDelay)
@@ -209,7 +209,7 @@ struct PipelineBenchmarkTests {
             "total_p50": check("total", percentile: \.p50, target: LatencyBudget.totalP50),
             "total_p95": check("total", percentile: \.p95, target: LatencyBudget.totalP95),
             "paste_p95": check("paste", percentile: \.p95, target: LatencyBudget.pasteP95),
-            "rewrite_p95_light": check("rewrite", percentile: \.p95, target: LatencyBudget.rewriteLightP95),
+            "rewrite_p95_clean": check("rewrite", percentile: \.p95, target: LatencyBudget.rewriteCleanP95),
         ]
 
         return BenchmarkResult(

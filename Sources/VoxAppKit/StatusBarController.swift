@@ -103,14 +103,14 @@ enum CloudStatus {
         hasRewrite: Bool
     ) -> (title: String, needsAction: Bool) {
         switch level {
-        case .off:
-            // Off mode: only transcription matters, rewrite not used
+        case .raw:
+            // Raw mode: only transcription matters, rewrite not used
             if hasCloudSTT {
                 return ("Cloud transcription ready", false)
             } else {
                 return ("On-device transcription", false)
             }
-        case .light, .aggressive, .enhance:
+        case .clean, .polish:
             // These modes require rewrite; show nuanced status
             switch (hasCloudSTT, hasRewrite) {
             case (true, true):
@@ -120,7 +120,7 @@ enum CloudStatus {
             case (false, true):
                 return ("Rewrite ready; transcription on-device", false)
             case (false, false):
-                return ("Cloud services not configured; limited to Off mode", true)
+                return ("Cloud services not configured; limited to Raw mode", true)
             }
         }
     }
@@ -129,14 +129,12 @@ enum CloudStatus {
 private extension ProcessingLevel {
     var menuDisplayName: String {
         switch self {
-        case .off:
-            return "Off"
-        case .light:
-            return "Light"
-        case .aggressive:
-            return "Aggressive"
-        case .enhance:
-            return "Enhance"
+        case .raw:
+            return "Raw"
+        case .clean:
+            return "Clean"
+        case .polish:
+            return "Polish"
         }
     }
 }
@@ -153,7 +151,7 @@ public final class StatusBarController: NSObject {
     private var prefsObserver: AnyCancellable?
     private var hotkeyAvailable: Bool = true
 
-    private var currentState: StatusBarState = .idle(processingLevel: .off)
+    private var currentState: StatusBarState = .idle(processingLevel: .raw)
 
     public init(
         onToggle: @escaping () -> Void,
@@ -255,10 +253,9 @@ public final class StatusBarController: NSObject {
         let processingItem = NSMenuItem(title: "Processing Level", action: nil, keyEquivalent: "")
         let processingMenu = NSMenu()
         let levels: [(String, ProcessingLevel)] = [
-            ("Off", .off),
-            ("Light", .light),
-            ("Aggressive", .aggressive),
-            ("Enhance", .enhance)
+            ("Raw", .raw),
+            ("Clean", .clean),
+            ("Polish", .polish)
         ]
         for (title, level) in levels {
             let item = NSMenuItem(title: title, action: #selector(selectProcessingLevel(_:)), keyEquivalent: "")
@@ -334,6 +331,9 @@ public final class StatusBarController: NSObject {
     @objc private func selectProcessingLevel(_ sender: NSMenuItem) {
         guard let level = sender.representedObject as? ProcessingLevel else { return }
         guard prefs.processingLevel != level else { return }
+        #if DEBUG
+        print("[Vox] Processing level menu selection: \(prefs.processingLevel.rawValue) -> \(level.rawValue)")
+        #endif
         prefs.processingLevel = level
         applyState(currentState.updatingProcessingLevel(level))
     }

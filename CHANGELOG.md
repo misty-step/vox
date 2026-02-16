@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/misty-step/vox/compare/v1.13.0...v1.14.0) (2026-02-15)
+
+
+### Features
+
+* Handle microphone hot-swap and surface explicit fallback behavior ([#249](https://github.com/misty-step/vox/issues/249)) ([ac2c8b6](https://github.com/misty-step/vox/commit/ac2c8b67ed0016bb5b6fb1824dae612c8e5629ca)), closes [#185](https://github.com/misty-step/vox/issues/185)
+
 # [1.13.0](https://github.com/misty-step/vox/compare/v1.12.0...v1.13.0) (2026-02-14)
 
 

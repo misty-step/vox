@@ -11,12 +11,12 @@ struct SessionExtensionTests {
         let event = DictationUsageEvent(
             recordingDuration: 1.25,
             outputCharacterCount: -12,
-            processingLevel: .light
+            processingLevel: .clean
         )
 
         #expect(event.recordingDuration == 1.25)
         #expect(event.outputCharacterCount == 0)
-        #expect(event.processingLevel == .light)
+        #expect(event.processingLevel == .clean)
     }
 
     @Test("Default protocol methods are no-op")
@@ -28,7 +28,7 @@ struct SessionExtensionTests {
             event: DictationUsageEvent(
                 recordingDuration: 0,
                 outputCharacterCount: 0,
-                processingLevel: .off
+                processingLevel: .raw
             )
         )
         await sessionExtension.didFailDictation(reason: "ignored")

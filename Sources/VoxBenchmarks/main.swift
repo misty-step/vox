@@ -369,11 +369,10 @@ private struct BenchmarkArtifact: Codable {
 }
 
 private struct BenchmarkRunner {
-    private static let benchmarkLevels: [ProcessingLevel] = [.light, .aggressive, .enhance]
+    private static let benchmarkLevels: [ProcessingLevel] = [.clean, .polish]
     private static let qualityTargets: [ProcessingLevel: Double] = [
-        .light: 0.95,
-        .aggressive: 0.90,
-        .enhance: 0.90,
+        .clean: 0.95,
+        .polish: 0.90,
     ]
 
     private let config: BenchmarkConfig
@@ -393,7 +392,7 @@ private struct BenchmarkRunner {
         for model in config.models {
             for entry in corpus {
                 for iteration in 1...config.iterations {
-                    let prompt = RewritePrompts.prompt(for: entry.level, transcript: entry.transcript)
+                    let prompt = RewritePrompts.prompt(for: entry.level)
                     let startedAt = DispatchTime.now().uptimeNanoseconds
 
                     let record: BenchmarkInvocation
@@ -698,12 +697,12 @@ private func loadCorpus(from path: URL) throws -> [CorpusEntry] {
         throw BenchmarkError.invalidCorpus("unsupported version \(decoded.version); expected 1")
     }
 
-    let filtered = decoded.entries.filter { [.light, .aggressive, .enhance].contains($0.level) }
+    let filtered = decoded.entries.filter { [.clean, .polish].contains($0.level) }
     guard !filtered.isEmpty else {
-        throw BenchmarkError.invalidCorpus("no benchmark entries for light/aggressive/enhance")
+        throw BenchmarkError.invalidCorpus("no benchmark entries for clean/polish")
     }
 
-    for level in [ProcessingLevel.light, .aggressive, .enhance] {
+    for level in [ProcessingLevel.clean, .polish] {
         guard filtered.contains(where: { $0.level == level }) else {
             throw BenchmarkError.invalidCorpus("missing entries for level '\(level.rawValue)'")
         }
@@ -751,7 +750,7 @@ private enum BenchmarkReportMarkdown {
         lines.append("- Decision rule: filter by quality target, pick lowest p95 latency, tie-break by mean cost.")
         lines.append("")
 
-        for level in [ProcessingLevel.light, .aggressive, .enhance] {
+        for level in [ProcessingLevel.clean, .polish] {
             lines.append("## \(level.rawValue.capitalized) Results")
             lines.append("")
             lines.append("| Model | Quality pass | Errors | Non-empty | Latency p50 | Latency p95 | Mean cost | Cost p95 |")

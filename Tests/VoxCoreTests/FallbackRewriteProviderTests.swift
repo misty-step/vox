@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import VoxCore
 
@@ -8,14 +9,15 @@ struct FallbackRewriteProviderTests {
         let primary = StubRewriteProvider(result: .success("rewritten"))
         let fallback = StubRewriteProvider(result: .success("fallback"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "model-a", label: "Primary"),
-            .init(provider: fallback, model: "model-b", label: "Fallback"),
+            .init(provider: primary, label: "Primary"),
+            .init(provider: fallback, label: "Fallback"),
         ])
 
-        let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "ignored")
+        let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "model-x")
         #expect(result == "rewritten")
         #expect(primary.callCount == 1)
         #expect(fallback.callCount == 0)
+        #expect(primary.lastModel == "model-x")
     }
 
     @Test("Falls back on primary failure")
@@ -23,14 +25,16 @@ struct FallbackRewriteProviderTests {
         let primary = StubRewriteProvider(result: .failure(RewriteError.network("503")))
         let fallback = StubRewriteProvider(result: .success("fallback result"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "model-a", label: "Primary"),
-            .init(provider: fallback, model: "model-b", label: "Fallback"),
+            .init(provider: primary, label: "Primary"),
+            .init(provider: fallback, label: "Fallback"),
         ])
 
-        let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "ignored")
+        let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "model-y")
         #expect(result == "fallback result")
         #expect(primary.callCount == 1)
         #expect(fallback.callCount == 1)
+        #expect(primary.lastModel == "model-y")
+        #expect(fallback.lastModel == "model-y")
     }
 
     @Test("Throws last error when all providers fail")
@@ -38,8 +42,8 @@ struct FallbackRewriteProviderTests {
         let primary = StubRewriteProvider(result: .failure(RewriteError.network("DNS")))
         let fallback = StubRewriteProvider(result: .failure(RewriteError.throttled))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "model-a", label: "Primary"),
-            .init(provider: fallback, model: "model-b", label: "Fallback"),
+            .init(provider: primary, label: "Primary"),
+            .init(provider: fallback, label: "Fallback"),
         ])
 
         await #expect(throws: RewriteError.throttled) {
@@ -52,8 +56,8 @@ struct FallbackRewriteProviderTests {
         let primary = StubRewriteProvider(result: .failure(CancellationError()))
         let fallback = StubRewriteProvider(result: .success("should not reach"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "model-a", label: "Primary"),
-            .init(provider: fallback, model: "model-b", label: "Fallback"),
+            .init(provider: primary, label: "Primary"),
+            .init(provider: fallback, label: "Fallback"),
         ])
 
         await #expect(throws: CancellationError.self) {
@@ -62,18 +66,18 @@ struct FallbackRewriteProviderTests {
         #expect(fallback.callCount == 0)
     }
 
-    @Test("Passes entry-specific model to each provider")
+    @Test("Passes requested model to each provider")
     func modelPassthrough() async throws {
         let primary = StubRewriteProvider(result: .failure(RewriteError.network("fail")))
         let fallback = StubRewriteProvider(result: .success("ok"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "gemini-2.5-flash-lite", label: "Gemini"),
-            .init(provider: fallback, model: "google/gemini-2.5-flash-lite", label: "OpenRouter"),
+            .init(provider: primary, label: "Gemini"),
+            .init(provider: fallback, label: "OpenRouter"),
         ])
 
-        _ = try await sut.rewrite(transcript: "raw", systemPrompt: "sys", model: "should-be-ignored")
-        #expect(primary.lastModel == "gemini-2.5-flash-lite")
-        #expect(fallback.lastModel == "google/gemini-2.5-flash-lite")
+        _ = try await sut.rewrite(transcript: "raw", systemPrompt: "sys", model: "openai/gpt-5.2")
+        #expect(primary.lastModel == "openai/gpt-5.2")
+        #expect(fallback.lastModel == "openai/gpt-5.2")
     }
 
     @Test("Auth error on primary still triggers fallback")
@@ -81,8 +85,8 @@ struct FallbackRewriteProviderTests {
         let primary = StubRewriteProvider(result: .failure(RewriteError.auth))
         let fallback = StubRewriteProvider(result: .success("recovered"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: primary, model: "model-a", label: "Primary"),
-            .init(provider: fallback, model: "model-b", label: "Fallback"),
+            .init(provider: primary, label: "Primary"),
+            .init(provider: fallback, label: "Fallback"),
         ])
 
         let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "ignored")
@@ -95,9 +99,9 @@ struct FallbackRewriteProviderTests {
         let b = StubRewriteProvider(result: .failure(RewriteError.throttled))
         let c = StubRewriteProvider(result: .success("third time"))
         let sut = FallbackRewriteProvider(entries: [
-            .init(provider: a, model: "m1", label: "A"),
-            .init(provider: b, model: "m2", label: "B"),
-            .init(provider: c, model: "m3", label: "C"),
+            .init(provider: a, label: "A"),
+            .init(provider: b, label: "B"),
+            .init(provider: c, label: "C"),
         ])
 
         let result = try await sut.rewrite(transcript: "raw", systemPrompt: "", model: "ignored")
@@ -111,17 +115,28 @@ struct FallbackRewriteProviderTests {
 // MARK: - Test Doubles
 
 private final class StubRewriteProvider: RewriteProvider, @unchecked Sendable {
+    private let lock = NSLock()
     let result: Result<String, Error>
-    private(set) var callCount = 0
-    private(set) var lastModel: String?
+    private var _callCount = 0
+    private var _lastModel: String?
+
+    var callCount: Int {
+        lock.withLock { _callCount }
+    }
+
+    var lastModel: String? {
+        lock.withLock { _lastModel }
+    }
 
     init(result: Result<String, Error>) {
         self.result = result
     }
 
     func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        callCount += 1
-        lastModel = model
+        lock.withLock {
+            _callCount += 1
+            _lastModel = model
+        }
         return try result.get()
     }
 }

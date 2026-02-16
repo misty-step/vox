@@ -191,6 +191,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         let level = await MainActor.run { prefs.processingLevel }
+        logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
@@ -205,6 +206,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
         let level = await MainActor.run { prefs.processingLevel }
+        logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
         return processed.text
     }
@@ -215,7 +217,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     ) async throws -> (text: String, rewriteTime: TimeInterval, pasteTime: TimeInterval) {
         var output = transcript
         var rewriteTime: TimeInterval = 0
-        if level != .off {
+        if level != .raw {
             let rewriteStart = CFAbsoluteTimeGetCurrent()
             let model = level.defaultModel
             do {
@@ -230,7 +232,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
                     print("[Pipeline] Rewrite cache hit")
                     #endif
                 } else {
-                    let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
+                    let prompt = RewritePrompts.prompt(for: level)
                     guard let rewriteTimeoutSeconds = rewriteStageTimeouts.seconds(for: level) else {
                         throw VoxError.internalError("Rewrite timeout requested for level: \(level)")
                     }
@@ -290,6 +292,16 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
         return (text: finalText, rewriteTime: rewriteTime, pasteTime: pasteTime)
+    }
+
+    private func logActiveProcessingLevel(_ level: ProcessingLevel) {
+        #if DEBUG
+        if level == .raw {
+            print("[Pipeline] Processing level: raw (rewrite disabled)")
+        } else {
+            print("[Pipeline] Processing level: \(level.rawValue) (model: \(level.defaultModel))")
+        }
+        #endif
     }
 
 }
@@ -352,25 +364,21 @@ private func validatedTimeoutNanoseconds(seconds: TimeInterval, context: Timeout
 }
 
 struct RewriteStageTimeouts: Sendable {
-    let lightSeconds: TimeInterval
-    let aggressiveSeconds: TimeInterval
-    let enhanceSeconds: TimeInterval
+    let cleanSeconds: TimeInterval
+    let polishSeconds: TimeInterval
 
     static let `default` = RewriteStageTimeouts(
-        lightSeconds: 15,
-        aggressiveSeconds: 20,
-        enhanceSeconds: 30
+        cleanSeconds: 15,
+        polishSeconds: 30
     )
 
     func seconds(for level: ProcessingLevel) -> TimeInterval? {
         switch level {
-        case .light:
-            return lightSeconds
-        case .aggressive:
-            return aggressiveSeconds
-        case .enhance:
-            return enhanceSeconds
-        case .off:
+        case .clean:
+            return cleanSeconds
+        case .polish:
+            return polishSeconds
+        case .raw:
             return nil
         }
     }

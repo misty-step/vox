@@ -16,7 +16,7 @@ struct OnboardingSessionExtensionTests {
         await ext.didCompleteDictation(event: DictationUsageEvent(
             recordingDuration: 1.2,
             outputCharacterCount: 42,
-            processingLevel: .light
+            processingLevel: .clean
         ))
 
         #expect(store.hasCompletedFirstDictation == true)
