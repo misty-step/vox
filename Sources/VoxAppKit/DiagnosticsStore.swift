@@ -124,16 +124,17 @@ actor DiagnosticsStore {
     private let currentFileName = "diagnostics-current.jsonl"
 
     init(
-        fileManager: FileManager = .default,
+        fileManager: FileManager? = nil,
         directoryURL: URL? = nil,
         maxFileBytes: Int = 512 * 1024,
         maxRotatedFiles: Int = 4
     ) {
-        self.fm = fileManager
+        let fm = fileManager ?? .default
+        self.fm = fm
         if let directoryURL {
             self.directoryURL = directoryURL
         } else {
-            let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             self.directoryURL = support?.appendingPathComponent("Vox/Diagnostics", isDirectory: true)
         }
         self.maxRotatedFiles = max(0, maxRotatedFiles)
