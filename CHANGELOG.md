@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/misty-step/vox/compare/v1.14.0...v1.15.0) (2026-02-16)
+
+
+### Features
+
+* **processing:** ship raw/clean/polish and lock polish to grok ([#252](https://github.com/misty-step/vox/issues/252)) ([56d68f2](https://github.com/misty-step/vox/commit/56d68f290092ef212bb4006c32295f77bb39d26d))
+
 # [1.14.0](https://github.com/misty-step/vox/compare/v1.13.0...v1.14.0) (2026-02-15)
 
 
