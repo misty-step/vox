@@ -1,13 +1,13 @@
 import Carbon
 import Foundation
 
-public enum HotkeyError: Error, Equatable {
+public enum HotkeyError: Error, Equatable, LocalizedError {
     case registrationFailed(OSStatus)
 
-    public var localizedDescription: String {
+    public var errorDescription: String? {
         switch self {
         case .registrationFailed(let status):
-            return "Registration failed with error code \(status)"
+            return "Hotkey registration failed (error \(status))"
         }
     }
 }
@@ -110,22 +110,6 @@ public final class HotkeyMonitor {
 
         let monitor = HotkeyMonitor(hotkeyId: id, hotKeyRef: hotKeyRef)
         return .success(monitor)
-    }
-
-    public init(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) throws {
-        HotkeyMonitor.installHandlerIfNeeded()
-
-        let id = UInt32.random(in: 1...UInt32.max)
-        hotkeyId = id
-        HotkeyMonitor.callbacks[id] = handler
-
-        var hotKeyRef: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x564C4858), id: id) // "VLHX"
-        let status = RegisterEventHotKey(
-            keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &hotKeyRef
-        )
-        guard status == noErr else { throw HotkeyError.registrationFailed(status) }
-        self.hotKeyRef = hotKeyRef
     }
 
     fileprivate init(hotkeyId: UInt32, hotKeyRef: EventHotKeyRef?) {

@@ -3,15 +3,13 @@ import XCTest
 
 final class HotkeyRegistrationResultTests: XCTestCase {
 
-    func testSuccessIsSuccess() {
-        // We can't easily create a HotkeyMonitor without registering,
-        // so we test the result enum behavior indirectly
+    func test_successResult_isSuccessAndHasMonitor() {
         let result = HotkeyRegistrationResult.successResult
         XCTAssertTrue(result.isSuccess)
         XCTAssertNotNil(result.monitor)
     }
 
-    func testFailureIsNotSuccess() {
+    func test_failureResult_isNotSuccessAndHasError() {
         let error = HotkeyError.registrationFailed(-1)
         let result = HotkeyRegistrationResult.failureResult(error)
 
@@ -20,31 +18,27 @@ final class HotkeyRegistrationResultTests: XCTestCase {
         XCTAssertEqual(result.error, error)
     }
 
-    func testFailureEquality() {
-        let error1 = HotkeyError.registrationFailed(-1)
-        let error2 = HotkeyError.registrationFailed(-1)
-        let error3 = HotkeyError.registrationFailed(-2)
-
-        let result1 = HotkeyRegistrationResult.failureResult(error1)
-        let result2 = HotkeyRegistrationResult.failureResult(error2)
-        let result3 = HotkeyRegistrationResult.failureResult(error3)
+    func test_failureResult_equalityByErrorCode() {
+        let result1 = HotkeyRegistrationResult.failureResult(.registrationFailed(-1))
+        let result2 = HotkeyRegistrationResult.failureResult(.registrationFailed(-1))
+        let result3 = HotkeyRegistrationResult.failureResult(.registrationFailed(-2))
 
         XCTAssertEqual(result1, result2)
         XCTAssertNotEqual(result1, result3)
     }
 
-    func testHotkeyErrorLocalizedDescription() {
+    func test_localizedDescription_containsErrorCode() {
         let error = HotkeyError.registrationFailed(-9876)
         XCTAssertTrue(error.localizedDescription.contains("-9876"))
-        XCTAssertTrue(error.localizedDescription.contains("failed"))
     }
 
-    func testHotkeyErrorEquality() {
-        let error1 = HotkeyError.registrationFailed(-1)
-        let error2 = HotkeyError.registrationFailed(-1)
-        let error3 = HotkeyError.registrationFailed(-2)
+    func test_localizedDescription_dispatchesThroughErrorExistential() {
+        let error: Error = HotkeyError.registrationFailed(-42)
+        XCTAssertTrue(error.localizedDescription.contains("-42"))
+    }
 
-        XCTAssertEqual(error1, error2)
-        XCTAssertNotEqual(error1, error3)
+    func test_hotkeyError_equalityByCode() {
+        XCTAssertEqual(HotkeyError.registrationFailed(-1), HotkeyError.registrationFailed(-1))
+        XCTAssertNotEqual(HotkeyError.registrationFailed(-1), HotkeyError.registrationFailed(-2))
     }
 }

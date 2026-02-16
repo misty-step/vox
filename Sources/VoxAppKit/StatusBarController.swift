@@ -182,6 +182,7 @@ public final class StatusBarController: NSObject {
         guard hotkeyAvailable != available else { return }
         hotkeyAvailable = available
         rebuildMenu()
+        updateIcon(for: currentState)
     }
 
     private func applyState(_ state: StatusBarState) {

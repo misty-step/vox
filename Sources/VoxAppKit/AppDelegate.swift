@@ -36,7 +36,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.session = session
 
         settingsWindowController = SettingsWindowController(
-            hotkeyAvailable: hotkeyMonitor != nil,
             onRetryHotkey: { [weak self] in self?.retryHotkeyRegistration() }
         )
         let statusBarController = StatusBarController(
@@ -61,21 +60,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarController?.updateState(statusState)
         }
 
-        let registrationResult = HotkeyMonitor.register(
-            keyCode: UInt32(kVK_Space),
-            modifiers: UInt32(optionKey),
-            handler: { Task { await session.toggleRecording() } }
-        )
-
-        switch registrationResult {
-        case .success(let monitor):
-            hotkeyMonitor = monitor
-            self.statusBarController?.setHotkeyAvailable(true)
-        case .failure(let error):
-            hotkeyMonitor = nil
-            self.statusBarController?.setHotkeyAvailable(false)
-            presentHotkeyError(error, canRetry: true)
-        }
+        attemptHotkeyRegistration(showErrorDialog: true)
 
         showOnboardingChecklistIfNeeded()
     }
@@ -122,55 +107,64 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func presentHotkeyError(_ error: Error, canRetry: Bool = false) {
-        let alert = NSAlert()
-        alert.messageText = "Hotkey Unavailable"
-        alert.informativeText = "Option+Space could not be registered because another app is already using this shortcut.\n\nYou can still start dictation by clicking \"Start Dictation\" in the Vox menu bar menu."
-        alert.alertStyle = .warning
-
-        // Define button indices explicitly based on configuration
-        // retryButtonIndex: first button if retry available, otherwise disabled
-        // settingsButtonIndex: second button if retry available, otherwise first  
-        // okButtonIndex: third button if retry available, otherwise second
-
-        if canRetry {
-            alert.addButton(withTitle: "Retry")
-        }
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "OK")
-
-        let response = alert.runModal()
-
-        // Handle button presses based on explicit button indices
-        if canRetry && response == .alertFirstButtonReturn {
-            // Retry registration (first button is Retry when canRetry is true)
-            retryHotkeyRegistration()
-        } else if response == .alertFirstButtonReturn || (canRetry && response == .alertSecondButtonReturn) {
-            // Open Settings - either first button (when no retry) or second button (when retry available)
-            showSettings()
-        }
-        // Third button (OK when retry available) does nothing - just dismisses
-    }
-
-    private func retryHotkeyRegistration() {
+    private func attemptHotkeyRegistration(showErrorDialog: Bool) {
         guard let session = session else { return }
 
-        let registrationResult = HotkeyMonitor.register(
+        // Release old registration before re-registering to avoid deinit race
+        hotkeyMonitor = nil
+
+        let result = HotkeyMonitor.register(
             keyCode: UInt32(kVK_Space),
             modifiers: UInt32(optionKey),
             handler: { Task { await session.toggleRecording() } }
         )
 
-        switch registrationResult {
+        let retryCallback: () -> Void = { [weak self] in self?.retryHotkeyRegistration() }
+
+        switch result {
         case .success(let monitor):
             hotkeyMonitor = monitor
             statusBarController?.setHotkeyAvailable(true)
-            settingsWindowController?.updateHotkeyAvailability(true, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
+            settingsWindowController?.updateHotkeyAvailability(true, onRetry: retryCallback)
         case .failure(let error):
-            hotkeyMonitor = nil
             statusBarController?.setHotkeyAvailable(false)
-            settingsWindowController?.updateHotkeyAvailability(false, onRetry: { [weak self] in self?.retryHotkeyRegistration() })
-            presentHotkeyError(error, canRetry: true)
+            settingsWindowController?.updateHotkeyAvailability(false, onRetry: retryCallback)
+            if showErrorDialog {
+                presentHotkeyError(error)
+            }
+        }
+    }
+
+    private func retryHotkeyRegistration() {
+        attemptHotkeyRegistration(showErrorDialog: true)
+    }
+
+    private func presentHotkeyError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Hotkey Unavailable"
+        alert.informativeText = """
+            Option+Space could not be registered. \(error.localizedDescription)
+
+            You can still start dictation by clicking "Start Dictation" in the Vox menu bar menu.
+            """
+        alert.alertStyle = .warning
+
+        alert.addButton(withTitle: "Retry")
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "OK")
+
+        let response = alert.runModal()
+
+        switch response {
+        case .alertFirstButtonReturn:
+            // Break mutual recursion: dispatch retry to next run loop cycle
+            DispatchQueue.main.async { [weak self] in
+                self?.retryHotkeyRegistration()
+            }
+        case .alertSecondButtonReturn:
+            showSettings()
+        default:
+            break
         }
     }
 }
