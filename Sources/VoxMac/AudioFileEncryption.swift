@@ -44,7 +44,7 @@ public enum AudioFileEncryption {
     }
 
     public static func zeroizeKey(_ key: inout Data) {
-        key.withUnsafeMutableBytes { bytes in
+        _ = key.withUnsafeMutableBytes { bytes in
             bytes.initializeMemory(as: UInt8.self, repeating: 0)
         }
     }
@@ -142,7 +142,9 @@ public enum AudioFileEncryption {
             guard chunkLength <= maxChunkLength else {
                 throw Error.tooLargeChunk
             }
-            let combined = try readBytes(count: chunkLength, from: inputStream)
+            guard let combined = try readBytes(count: chunkLength, from: inputStream) else {
+                throw Error.invalidEncryptedFormat
+            }
             let sealed = try AES.GCM.SealedBox(combined: combined)
             do {
                 let plain = try AES.GCM.open(sealed, using: symmetricKey)
