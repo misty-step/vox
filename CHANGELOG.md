@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/misty-step/vox/compare/v1.16.0...v1.17.0) (2026-02-17)
+
+
+### Features
+
+* **observability:** export diagnostics bundle ([#262](https://github.com/misty-step/vox/issues/262)) ([a6821c6](https://github.com/misty-step/vox/commit/a6821c63362cb6d0c2e32247ef2a275e9e9ceda5)), closes [#180](https://github.com/misty-step/vox/issues/180)
+
 # [1.16.0](https://github.com/misty-step/vox/compare/v1.15.0...v1.16.0) (2026-02-16)
 
 
