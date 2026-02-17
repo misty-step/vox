@@ -8,7 +8,7 @@
 - `Sources/VoxMac`: macOS integrations (audio, keychain, permissions, hotkeys, paste, HUD).
 - `Sources/VoxAppKit`: app orchestration and UI controllers (`VoxSession`, `DictationPipeline`, settings).
 - `Sources/VoxApp`: executable entrypoint.
-- `Tests/VoxCoreTests`, `Tests/VoxProvidersTests`, `Tests/VoxAppTests`: XCTest suites.
+- `Tests/VoxCoreTests`, `Tests/VoxProvidersTests`, `Tests/VoxAppTests`: XCTest + Swift Testing suites.
 - `docs/`: architecture and ADRs (`docs/ARCHITECTURE.md`, `docs/adr/`).
 
 ## Build, Test, and Development Commands
@@ -29,7 +29,7 @@
 - Keep logs consistent with existing bracket tags (example: `[Pipeline]`, `[STT]`, `[Vox]`, `[AudioRecorder]`).
 
 ## Testing Guidelines
-- Framework: XCTest (`async` tests are standard where relevant).
+- Framework: XCTest + Swift Testing (`async` tests are standard where relevant).
 - Test files end in `Tests.swift`; test methods follow behavior naming like `test_transcribe_retriesOnThrottledError`.
 - Add/adjust tests in the corresponding module test target.
 - Cover happy path plus retry/fallback/error paths for pipeline and provider changes.
