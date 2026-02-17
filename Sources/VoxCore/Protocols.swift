@@ -65,6 +65,7 @@ public protocol AudioRecording: AnyObject {
 }
 
 /// Provides access to an ephemeral per-recording key for encrypted temp files.
+@MainActor
 public protocol EncryptedAudioRecording: AudioRecording {
     /// Returns and clears the in-memory key for the current recording.
     func consumeRecordingEncryptionKey() -> Data?
