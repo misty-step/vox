@@ -51,6 +51,21 @@ struct DiagnosticsStoreTests {
         #expect(urls.contains { $0.lastPathComponent == "diagnostics-current.jsonl" })
     }
 
+    @Test("Rotation deletes all rotated files when maxRotatedFiles is 0")
+    func record_rotatesAndDeletesAllRotatedFiles() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = DiagnosticsStore(directoryURL: dir, maxFileBytes: 1, maxRotatedFiles: 0)
+
+        await store.record(name: "one")
+        await store.record(name: "two")
+        await store.record(name: "three")
+
+        let urls = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+        let rotated = urls.filter { $0.lastPathComponent.hasPrefix("diagnostics-") && $0.lastPathComponent != "diagnostics-current.jsonl" }
+        #expect(rotated.isEmpty)
+        #expect(urls.contains { $0.lastPathComponent == "diagnostics-current.jsonl" })
+    }
+
     @Test("Export writes zip containing context.json and logs")
     func exportZip_createsBundle() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -58,25 +73,7 @@ struct DiagnosticsStoreTests {
         await store.record(name: "event", fields: ["x": .int(1)])
 
         let zipURL = dir.appendingPathComponent("out.zip")
-        let context = DiagnosticsContext(
-            exportedAt: "2026-01-01T00:00:00Z",
-            appVersion: "1.2.3",
-            appBuild: "456",
-            osVersion: "macOS",
-            processingLevel: "raw",
-            selectedInputDeviceConfigured: false,
-            sttRouting: "sequential",
-            streamingAllowed: true,
-            audioBackend: "engine",
-            maxConcurrentSTT: 8,
-            keysPresent: .init(
-                elevenLabs: false,
-                deepgram: false,
-                openAI: false,
-                gemini: false,
-                openRouter: false
-            )
-        )
+        let context = sampleContext()
 
         try await store.exportZip(to: zipURL, context: context)
         #expect(FileManager.default.fileExists(atPath: zipURL.path))
@@ -93,6 +90,61 @@ struct DiagnosticsStoreTests {
         #expect(decoded?["appVersion"] as? String == "1.2.3")
         #expect(decoded?["appBuild"] as? String == "456")
     }
+
+    @Test("Export succeeds even if the diagnostics directory doesn't exist yet")
+    func exportZip_succeedsWithoutLogs() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let diagnosticsDir = root.appendingPathComponent("Diagnostics", isDirectory: true)
+        let store = DiagnosticsStore(directoryURL: diagnosticsDir, maxFileBytes: 1024 * 1024, maxRotatedFiles: 2)
+
+        let zipURL = root.appendingPathComponent("out.zip")
+        try await store.exportZip(to: zipURL, context: sampleContext())
+        #expect(FileManager.default.fileExists(atPath: zipURL.path))
+
+        let extractDir = root.appendingPathComponent("extract", isDirectory: true)
+        try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        try await runDittoExtract(zipURL: zipURL, to: extractDir)
+
+        let names = exportedFileNames(in: extractDir)
+        #expect(names.contains("context.json"))
+        #expect(!names.contains("diagnostics-current.jsonl"))
+    }
+}
+
+private func sampleContext() -> DiagnosticsContext {
+    DiagnosticsContext(
+        exportedAt: "2026-01-01T00:00:00Z",
+        appVersion: "1.2.3",
+        appBuild: "456",
+        osVersion: "macOS",
+        processingLevel: "raw",
+        selectedInputDeviceConfigured: false,
+        sttRouting: "sequential",
+        streamingAllowed: true,
+        audioBackend: "engine",
+        maxConcurrentSTT: 8,
+        keysPresent: .init(
+            elevenLabs: false,
+            deepgram: false,
+            openAI: false,
+            gemini: false,
+            openRouter: false
+        )
+    )
+}
+
+private func exportedFileNames(in root: URL) -> Set<String> {
+    let fm = FileManager.default
+    guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: nil) else {
+        return []
+    }
+    var names: Set<String> = []
+    for case let file as URL in enumerator {
+        names.insert(file.lastPathComponent)
+    }
+    return names
 }
 
 private func findExportedFiles(in root: URL) -> (context: URL, log: URL)? {

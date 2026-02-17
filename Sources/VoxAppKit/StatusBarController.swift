@@ -142,6 +142,8 @@ private extension ProcessingLevel {
 
 @MainActor
 public final class StatusBarController: NSObject {
+    private static let exportFormatter = ISO8601DateFormatter()
+
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
     private let onSetupChecklist: () -> Void
@@ -349,7 +351,7 @@ public final class StatusBarController: NSObject {
     @objc private func openSettings() { onSettings() }
     @objc private func exportDiagnostics() {
         let product = ProductInfo.current()
-        let ts = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let ts = Self.exportFormatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [UTType.zip]
@@ -387,11 +389,10 @@ public final class StatusBarController: NSObject {
             } catch {
                 await DiagnosticsStore.shared.record(
                     name: "diagnostics_export_failed",
-                    fields: [
-                        "zip_name": .string(destinationURL.lastPathComponent),
-                        "error_code": .string(DiagnosticsStore.errorCode(for: error)),
-                        "error_type": .string(String(describing: type(of: error))),
-                    ]
+                    fields: DiagnosticsStore.errorFields(
+                        for: error,
+                        additional: ["zip_name": .string(destinationURL.lastPathComponent)]
+                    )
                 )
                 await MainActor.run {
                     let alert = NSAlert()

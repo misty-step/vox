@@ -346,6 +346,26 @@ private extension URL {
 }
 
 extension DiagnosticsStore {
+    nonisolated static func recordAsync(
+        name: String,
+        sessionID: String? = nil,
+        fields: [String: DiagnosticsValue] = [:]
+    ) {
+        Task {
+            await shared.record(name: name, sessionID: sessionID, fields: fields)
+        }
+    }
+
+    nonisolated static func errorFields(
+        for error: Error,
+        additional: [String: DiagnosticsValue] = [:]
+    ) -> [String: DiagnosticsValue] {
+        var fields = additional
+        fields["error_code"] = .string(errorCode(for: error))
+        fields["error_type"] = .string(String(describing: type(of: error)))
+        return fields
+    }
+
     nonisolated static func errorCode(for error: Error) -> String {
         if let err = error as? STTError {
             return "stt.\(err.diagnosticsCode)"

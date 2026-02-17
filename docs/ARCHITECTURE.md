@@ -96,6 +96,14 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 
 Before STT, `DictationPipeline` delegates payload validation to `CapturedAudioInspector` and fails fast with `VoxError.emptyCapture` when decoded frame count is zero.
 
+## Diagnostics
+
+Vox records structured, privacy-safe diagnostics events to `~/Library/Application Support/Vox/Diagnostics/` as JSONL:
+
+- `diagnostics-current.jsonl` (append-only), rotated to `diagnostics-<timestamp>-<id>.jsonl`
+- Export via menu bar: "Export Diagnostics…" creates a zip containing `context.json` + recent log files (copies path to clipboard)
+- Logs never include transcript text or API keys (counts/booleans/timings only)
+
 ## Audio Capture Contract
 
 `AudioRecorder` has two backends with reliability-first defaults:

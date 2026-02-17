@@ -87,21 +87,19 @@ public final class VoxSession: ObservableObject {
             enableRewriteCache: true,
             enableOpus: hasCloudProviders,
             timingHandler: { timing in
-                Task {
-                    await DiagnosticsStore.shared.record(
-                        name: "pipeline_timing",
-                        sessionID: dictationID,
-                        fields: [
-                            "total_ms": .int(Int(timing.totalTime * 1000)),
-                            "encode_ms": .int(Int(timing.encodeTime * 1000)),
-                            "stt_ms": .int(Int(timing.sttTime * 1000)),
-                            "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
-                            "paste_ms": .int(Int(timing.pasteTime * 1000)),
-                            "original_bytes": .int(timing.originalSizeBytes),
-                            "encoded_bytes": .int(timing.encodedSizeBytes),
-                        ]
-                    )
-                }
+                DiagnosticsStore.recordAsync(
+                    name: "pipeline_timing",
+                    sessionID: dictationID,
+                    fields: [
+                        "total_ms": .int(Int(timing.totalTime * 1000)),
+                        "encode_ms": .int(Int(timing.encodeTime * 1000)),
+                        "stt_ms": .int(Int(timing.sttTime * 1000)),
+                        "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
+                        "paste_ms": .int(Int(timing.pasteTime * 1000)),
+                        "original_bytes": .int(timing.originalSizeBytes),
+                        "encoded_bytes": .int(timing.encodedSizeBytes),
+                    ]
+                )
             }
         )
     }
@@ -397,65 +395,43 @@ public final class VoxSession: ObservableObject {
         let dictationID = UUID().uuidString
         let processingLevelAtStop = prefs.processingLevel.rawValue
         let hadStreamingBridgeAtStop = activeStreamingBridge != nil
-        Task {
-            await DiagnosticsStore.shared.record(
-                name: "processing_started",
-                sessionID: dictationID,
-                fields: [
-                    "processing_level": .string(processingLevelAtStop),
-                    "recording_s": .double(recordingDuration),
-                    "had_streaming_bridge": .bool(hadStreamingBridgeAtStop),
-                ]
-            )
-        }
+        DiagnosticsStore.recordAsync(
+            name: "processing_started",
+            sessionID: dictationID,
+            fields: [
+                "processing_level": .string(processingLevelAtStop),
+                "recording_s": .double(recordingDuration),
+                "had_streaming_bridge": .bool(hadStreamingBridgeAtStop),
+            ]
+        )
 
         let url: URL
         do {
             url = try recorder.stop()
-        } catch let error as VoxError {
-            await cancelAndAwaitStreamingSetup()
-            let streamingBridge = detachStreamingBridge()
-            await streamingBridge?.cancel()
-            switch error {
-            case .audioCaptureFailed:
-                await sessionExtension.didFailDictation(reason: "recording_tap_failed")
-            default:
-                await sessionExtension.didFailDictation(reason: "recording_stop_failed")
-            }
-            presentError(error.localizedDescription)
-            let errorCode = DiagnosticsStore.errorCode(for: error)
-            let errorType = String(describing: type(of: error))
-            Task {
-                await DiagnosticsStore.shared.record(
-                    name: "recording_stop_failed",
-                    sessionID: dictationID,
-                    fields: [
-                        "error_code": .string(errorCode),
-                        "error_type": .string(errorType),
-                    ]
-                )
-            }
-            state = .idle
-            hud.hide()
-            return
         } catch {
             await cancelAndAwaitStreamingSetup()
             let streamingBridge = detachStreamingBridge()
             await streamingBridge?.cancel()
-            await sessionExtension.didFailDictation(reason: "recording_stop_failed")
-            presentError(error.localizedDescription)
-            let errorCode = DiagnosticsStore.errorCode(for: error)
-            let errorType = String(describing: type(of: error))
-            Task {
-                await DiagnosticsStore.shared.record(
-                    name: "recording_stop_failed",
-                    sessionID: dictationID,
-                    fields: [
-                        "error_code": .string(errorCode),
-                        "error_type": .string(errorType),
-                    ]
-                )
+
+            let reason: String
+            if let voxError = error as? VoxError {
+                switch voxError {
+                case .audioCaptureFailed:
+                    reason = "recording_tap_failed"
+                default:
+                    reason = "recording_stop_failed"
+                }
+            } else {
+                reason = "recording_stop_failed"
             }
+
+            await sessionExtension.didFailDictation(reason: reason)
+            presentError(error.localizedDescription)
+            DiagnosticsStore.recordAsync(
+                name: "recording_stop_failed",
+                sessionID: dictationID,
+                fields: DiagnosticsStore.errorFields(for: error)
+            )
             state = .idle
             hud.hide()
             return
@@ -494,23 +470,19 @@ public final class VoxSession: ObservableObject {
             succeeded = true
             let processingLevelOnSuccess = prefs.processingLevel.rawValue
             let outputChars = output.count
-            Task {
-                await DiagnosticsStore.shared.record(
-                    name: "processing_succeeded",
-                    sessionID: dictationID,
-                    fields: [
-                        "processing_level": .string(processingLevelOnSuccess),
-                        "output_chars": .int(outputChars),
-                    ]
-                )
-            }
+            DiagnosticsStore.recordAsync(
+                name: "processing_succeeded",
+                sessionID: dictationID,
+                fields: [
+                    "processing_level": .string(processingLevelOnSuccess),
+                    "output_chars": .int(outputChars),
+                ]
+            )
         } catch is CancellationError {
             print("[Vox] Processing cancelled")
             await sessionExtension.didFailDictation(reason: "processing_cancelled")
             SecureFileDeleter.delete(at: url)
-            Task {
-                await DiagnosticsStore.shared.record(name: "processing_cancelled", sessionID: dictationID)
-            }
+            DiagnosticsStore.recordAsync(name: "processing_cancelled", sessionID: dictationID)
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
@@ -522,20 +494,17 @@ public final class VoxSession: ObservableObject {
                 presentError(error.localizedDescription)
             }
             let processingLevelOnError = prefs.processingLevel.rawValue
-            let errorCode = DiagnosticsStore.errorCode(for: error)
-            let errorType = String(describing: type(of: error))
-            Task {
-                await DiagnosticsStore.shared.record(
-                    name: "processing_failed",
-                    sessionID: dictationID,
-                    fields: [
+            DiagnosticsStore.recordAsync(
+                name: "processing_failed",
+                sessionID: dictationID,
+                fields: DiagnosticsStore.errorFields(
+                    for: error,
+                    additional: [
                         "processing_level": .string(processingLevelOnError),
-                        "error_code": .string(errorCode),
-                        "error_type": .string(errorType),
                         "audio_preserved": .bool(preserved),
                     ]
                 )
-            }
+            )
         }
 
         if succeeded {
@@ -564,22 +533,20 @@ public final class VoxSession: ObservableObject {
             } else {
                 print("[Vox] Streaming finalize outcome=\(outcome) waited_ms=\(waitedMs) recording_s=\(durationStr) reason=\(reason)")
             }
-            Task {
-                var fields: [String: DiagnosticsValue] = [
-                    "outcome": .string(outcome),
-                    "reason": .string(reason),
-                    "waited_ms": .int(waitedMs),
-                    "recording_s": .double(recordingDurationSeconds),
-                ]
-                if let transcriptChars {
-                    fields["transcript_chars"] = .int(transcriptChars)
-                }
-                await DiagnosticsStore.shared.record(
-                    name: "streaming_finalize",
-                    sessionID: dictationID,
-                    fields: fields
-                )
+            var fields: [String: DiagnosticsValue] = [
+                "outcome": .string(outcome),
+                "reason": .string(reason),
+                "waited_ms": .int(waitedMs),
+                "recording_s": .double(recordingDurationSeconds),
+            ]
+            if let transcriptChars {
+                fields["transcript_chars"] = .int(transcriptChars)
             }
+            DiagnosticsStore.recordAsync(
+                name: "streaming_finalize",
+                sessionID: dictationID,
+                fields: fields
+            )
         }
         func reasonCode(for error: Error) -> String {
             if let streamingError = error as? StreamingSTTError {
