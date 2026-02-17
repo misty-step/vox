@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/misty-step/vox/compare/v1.17.0...v1.18.0) (2026-02-17)
+
+
+### Features
+
+* **audio:** decrypt encrypted recordings before batch transcription ([#266](https://github.com/misty-step/vox/issues/266)) ([818b75c](https://github.com/misty-step/vox/commit/818b75cecc15f31ab97b4ef5422b416dcd548d75))
+
 # [1.17.0](https://github.com/misty-step/vox/compare/v1.16.0...v1.17.0) (2026-02-17)
 
 
