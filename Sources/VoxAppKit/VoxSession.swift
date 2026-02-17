@@ -635,7 +635,7 @@ public final class VoxSession: ObservableObject {
         from recordedURL: URL,
         decryptionKey: inout Data?
     ) throws -> (batchAudioURL: URL, temporaryAudioURL: URL?) {
-        guard AudioFileEncryption.isEncrypted(recordedURL) else {
+        guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
             return (recordedURL, nil)
         }
 
