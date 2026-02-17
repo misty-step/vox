@@ -123,7 +123,7 @@ def main() -> None:
         lines.append(f"- STT: {head.get('sttProvider', '—')}")
     lines.append(f"- Rewrite routing: {rewrite_routing}")
     lines.append(f"- Fixture: `{audio_file}` ({audio_bytes} bytes), iterations={iters} per level")
-    lines.append(f"- Note: paste stage is a no-op in CI; focus on generation timings.")
+    lines.append("- Note: paste stage is a no-op in CI; focus on generation timings.")
     lines.append("")
 
     levels = ["raw", "clean", "polish"]

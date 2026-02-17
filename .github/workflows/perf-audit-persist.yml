@@ -55,6 +55,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${HEAD_JSON:-}" ]; then
+            echo "HEAD_JSON unset; skipping."
+            exit 0
+          fi
+
           python3 - > meta.env <<'PY'
           import json, os, sys
           path = os.environ["HEAD_JSON"]

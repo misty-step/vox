@@ -19,6 +19,11 @@ if [ -z "${GH_TOKEN:-}" ]; then
   exit 2
 fi
 
+if [ -z "${GITHUB_REPOSITORY:-}" ]; then
+  echo "missing GITHUB_REPOSITORY" >&2
+  exit 2
+fi
+
 # Delete previous perf comment if it exists (match marker).
 COMMENT_ID="$(gh api \
   repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments \
@@ -30,4 +35,3 @@ if [ -n "$COMMENT_ID" ]; then
 fi
 
 gh pr comment "$PR_NUMBER" --body-file "$REPORT_PATH"
-

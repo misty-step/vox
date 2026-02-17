@@ -160,7 +160,7 @@ actor DiagnosticsStore {
             try rotateIfNeeded(in: directoryURL)
             let fileURL = directoryURL.appendingPathComponent(currentFileName)
             try append(event, to: fileURL)
-            if event.name == "pipeline_timing" {
+            if event.name == DiagnosticsEventNames.pipelineTiming {
                 PerformanceIngestClient.recordAsync(event)
             }
         } catch {

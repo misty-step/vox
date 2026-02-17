@@ -1,5 +1,9 @@
 import Foundation
 
+enum DiagnosticsEventNames {
+    static let pipelineTiming = "pipeline_timing"
+}
+
 /// Best-effort performance telemetry uploader.
 ///
 /// - Disabled by default. Enable with `VOX_PERF_INGEST_URL`.
@@ -21,7 +25,7 @@ actor PerformanceIngestClient {
     private let encoder: JSONEncoder
     private let flushIntervalSeconds: TimeInterval
     private let maxBufferedBytes: Int
-    private let allowedEventNames: Set<String> = ["pipeline_timing"]
+    private let allowedEventNames: Set<String> = [DiagnosticsEventNames.pipelineTiming]
     private let appVersion: String
     private let appBuild: String
     private let osVersion: String

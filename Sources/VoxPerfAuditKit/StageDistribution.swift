@@ -22,6 +22,7 @@ package struct StageDistribution: Codable, Sendable {
     }
 
     static func percentile(_ sorted: [Double], quantile: Double) -> Double {
+        guard !sorted.isEmpty else { return 0 }
         guard sorted.count > 1 else { return sorted[0] }
         let rank = quantile * Double(sorted.count - 1)
         let lower = Int(rank.rounded(.down))

@@ -60,18 +60,66 @@ private struct PerfAuditResult: Codable {
     let levels: [PerfLevelResult]
 }
 
+private func loadDotEnv(from url: URL) -> [String: String] {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: url.path) else { return [:] }
+    guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return [:] }
+
+    var out: [String: String] = [:]
+    for line in raw.split(separator: "\n", omittingEmptySubsequences: true) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+        guard let idx = trimmed.firstIndex(of: "=") else { continue }
+        let k = trimmed[..<idx].trimmingCharacters(in: .whitespacesAndNewlines)
+        let v = trimmed[trimmed.index(after: idx)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        if k.isEmpty { continue }
+
+        let unquoted: String
+        if (v.hasPrefix("\"") && v.hasSuffix("\"")) || (v.hasPrefix("'") && v.hasSuffix("'")) {
+            unquoted = String(v.dropFirst().dropLast())
+        } else {
+            unquoted = v
+        }
+        out[String(k)] = unquoted
+    }
+    return out
+}
+
+private func mergedEnvironment(_ environment: [String: String], dotenv: [String: String]) -> [String: String] {
+    func configured(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var merged = environment
+    for (k, v) in dotenv {
+        if !configured(merged[k]) && configured(v) {
+            merged[k] = v
+        }
+    }
+    return merged
+}
+
 @MainActor
 // @unchecked Sendable: constrained to MainActor, but must satisfy PreferencesReading: Sendable.
 private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
-    var processingLevel: ProcessingLevel
-    var selectedInputDeviceUID: String? = nil
-    var elevenLabsAPIKey: String = ""
-    var openRouterAPIKey: String = ""
-    var deepgramAPIKey: String = ""
-    var geminiAPIKey: String = ""
+    let processingLevel: ProcessingLevel
+    let selectedInputDeviceUID: String? = nil
+    let elevenLabsAPIKey: String
+    let openRouterAPIKey: String
+    let deepgramAPIKey: String
+    let geminiAPIKey: String
 
-    init(level: ProcessingLevel) {
+    init(level: ProcessingLevel, environment: [String: String]) {
         self.processingLevel = level
+
+        func key(_ name: String) -> String {
+            environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        self.elevenLabsAPIKey = key("ELEVENLABS_API_KEY")
+        self.openRouterAPIKey = key("OPENROUTER_API_KEY")
+        self.deepgramAPIKey = key("DEEPGRAM_API_KEY")
+        self.geminiAPIKey = key("GEMINI_API_KEY")
     }
 }
 
@@ -144,9 +192,10 @@ private func resolvedProviders(
         return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
     }
 
+    let maxConcurrent = Int(key("VOX_MAX_CONCURRENT_STT")) ?? 8
     let sttProvider = ConcurrencyLimitedSTTProvider(
         provider: sttChain.provider,
-        maxConcurrent: 1  // perf audit is single-threaded; keep it deterministic.
+        maxConcurrent: max(1, maxConcurrent)
     )
 
     let openRouterKey = key("OPENROUTER_API_KEY")
@@ -286,6 +335,10 @@ struct VoxPerfAudit {
             let config = try PerfAuditConfig(arguments: Array(CommandLine.arguments.dropFirst()), environment: env)
 
             let fm = FileManager.default
+            let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+            let dotenv = loadDotEnv(from: cwd.appendingPathComponent(".env.local"))
+            let mergedEnv = mergedEnvironment(config.environment, dotenv: dotenv)
+
             let audioAttrs = try? fm.attributesOfItem(atPath: config.audioURL.path)
             let audioBytes = audioAttrs?[.size] as? Int ?? 0
 
@@ -295,13 +348,13 @@ struct VoxPerfAudit {
             var levelResults: [PerfLevelResult] = []
 
             for level in ProcessingLevel.allCases {
-                let prefs = await MainActor.run { PerfPreferences(level: level) }
+                let prefs = await MainActor.run { PerfPreferences(level: level, environment: mergedEnv) }
 
                 let paster = NoopPaster()
                 let collector = TimingCollector()
                 let usageRecorder = ProviderUsageRecorder()
 
-                let providers = try resolvedProviders(environment: config.environment, usageRecorder: usageRecorder)
+                let providers = try resolvedProviders(environment: mergedEnv, usageRecorder: usageRecorder)
 
                 let pipeline = await MainActor.run {
                     DictationPipeline(
@@ -353,7 +406,7 @@ struct VoxPerfAudit {
             }
 
             let usageRecorder = ProviderUsageRecorder()
-            let providers = try resolvedProviders(environment: config.environment, usageRecorder: usageRecorder)
+            let providers = try resolvedProviders(environment: mergedEnv, usageRecorder: usageRecorder)
 
             let result = PerfAuditResult(
                 schemaVersion: 2,
@@ -382,11 +435,18 @@ struct VoxPerfAudit {
             try data.write(to: config.outputURL, options: [.atomic])
         } catch {
             if let err = error as? PerfAuditError {
-                fputs("\(err.description)\n", stderr)
+                switch err {
+                case .helpRequested:
+                    print(err.description)
+                    exit(0)
+                default:
+                    fputs("\(err.description)\n", stderr)
+                    exit(2)
+                }
             } else {
                 fputs("\(error)\n", stderr)
+                exit(1)
             }
-            exit(1)
         }
     }
 }
