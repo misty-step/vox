@@ -22,6 +22,9 @@ actor PerformanceIngestClient {
     private let flushIntervalSeconds: TimeInterval
     private let maxBufferedBytes: Int
     private let allowedEventNames: Set<String> = ["pipeline_timing"]
+    private let appVersion: String
+    private let appBuild: String
+    private let osVersion: String
 
     private var buffered: [Data] = []
     private var bufferedBytes: Int = 0
@@ -40,6 +43,11 @@ actor PerformanceIngestClient {
         self.maxBufferedBytes = max(1024, maxBufferedBytes)
         self.encoder = JSONEncoder()
         self.encoder.outputFormatting = [.withoutEscapingSlashes]
+
+        let product = ProductInfo.current()
+        self.appVersion = product.version
+        self.appBuild = product.build
+        self.osVersion = ProcessInfo.processInfo.operatingSystemVersionString
     }
 
     nonisolated static func recordAsync(_ event: DiagnosticsEvent) {
@@ -52,18 +60,11 @@ actor PerformanceIngestClient {
         guard let ingestURL else { return }
         guard allowedEventNames.contains(event.name) else { return }
 
-        if flushTask == nil {
-            flushTask = Task { [weak self] in
-                await self?.flushLoop()
-            }
-        }
-
-        let product = ProductInfo.current()
         let envelope = Envelope(
             schemaVersion: 1,
-            appVersion: product.version,
-            appBuild: product.build,
-            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            appVersion: appVersion,
+            appBuild: appBuild,
+            osVersion: osVersion,
             event: event
         )
 
@@ -79,16 +80,30 @@ actor PerformanceIngestClient {
         }
 
         if bufferedBytes >= maxBufferedBytes {
+            flushTask?.cancel()
+            flushTask = nil
             await flush(to: ingestURL)
+            return
+        }
+
+        scheduleFlush(to: ingestURL)
+    }
+
+    private func scheduleFlush(to ingestURL: URL) {
+        guard flushTask == nil else { return }
+        let intervalNanoseconds = UInt64(max(0.1, flushIntervalSeconds) * 1_000_000_000)
+        flushTask = Task { [intervalNanoseconds] in
+            try? await Task.sleep(nanoseconds: intervalNanoseconds)
+            guard !Task.isCancelled else { return }
+            await self.flush(to: ingestURL)
+            flushCompleted(to: ingestURL)
         }
     }
 
-    private func flushLoop() async {
-        guard let ingestURL else { return }
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: UInt64(flushIntervalSeconds * 1_000_000_000))
-            if Task.isCancelled { return }
-            await flush(to: ingestURL)
+    private func flushCompleted(to ingestURL: URL) {
+        flushTask = nil
+        if !buffered.isEmpty {
+            scheduleFlush(to: ingestURL)
         }
     }
 
@@ -98,6 +113,7 @@ actor PerformanceIngestClient {
         let payload = buffered.reduce(into: Data()) { acc, line in
             acc.append(line)
         }
+        // Best-effort. We drop on upload failure to avoid backpressure in dictation hot paths.
         buffered.removeAll(keepingCapacity: true)
         bufferedBytes = 0
 

@@ -7,6 +7,10 @@ Two complementary lanes:
 
 ## Live Perf Audit (Local)
 
+Notes:
+- Measures **batch STT** (file upload), not streaming STT.
+- To force the batch STT provider in a run: `VOX_PERF_STT_PROVIDER=auto|elevenlabs|deepgram|whisper`.
+
 ```bash
 bash scripts/perf/make-fixture-audio.sh /tmp/vox-perf-fixture.caf
 swift run VoxPerfAudit --audio /tmp/vox-perf-fixture.caf --output /tmp/vox-perf.json --iterations 2

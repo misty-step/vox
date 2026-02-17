@@ -5,15 +5,18 @@ public final class OpenRouterClient: RewriteProvider {
     private let apiKey: String
     private let session: URLSession
     private let fallbackModels: [String]
+    private let onModelUsed: (@Sendable (_ routerModel: String, _ isFallback: Bool) -> Void)?
 
     public init(
         apiKey: String,
         session: URLSession = .shared,
-        fallbackModels: [String] = []
+        fallbackModels: [String] = [],
+        onModelUsed: (@Sendable (_ routerModel: String, _ isFallback: Bool) -> Void)? = nil
     ) {
         self.apiKey = apiKey
         self.session = session
         self.fallbackModels = fallbackModels
+        self.onModelUsed = onModelUsed
     }
 
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
@@ -24,11 +27,13 @@ public final class OpenRouterClient: RewriteProvider {
             try Task.checkCancellation()
             let start = CFAbsoluteTimeGetCurrent()
             do {
+                let routerModel = currentModel.contains("/") ? currentModel : "google/\(currentModel)"
                 let result = try await executeRequest(
                     transcript: transcript,
                     systemPrompt: systemPrompt,
                     model: currentModel
                 )
+                onModelUsed?(routerModel, index > 0)
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
                 if index > 0 {
                     print("[Rewrite] Fallback \(currentModel) succeeded in \(String(format: "%.2f", elapsed))s")

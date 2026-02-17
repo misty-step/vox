@@ -1,0 +1,159 @@
+import Foundation
+import Testing
+
+import VoxPerfAuditKit
+
+@Suite("PerfAuditConfig")
+struct PerfAuditConfigTests {
+    @Test("Parses required args and defaults")
+    func test_init_parsesRequiredArgsAndDefaults() throws {
+        let env = ["GITHUB_SHA": "deadbeef"]
+        let cfg = try PerfAuditConfig(
+            arguments: ["--audio", "fixture.caf", "--output", "out.json"],
+            environment: env
+        )
+
+        #expect(cfg.audioURL.lastPathComponent == "fixture.caf")
+        #expect(cfg.outputURL.lastPathComponent == "out.json")
+        #expect(cfg.iterations == 3)
+        #expect(cfg.commitSHA == "deadbeef")
+        #expect(cfg.pullRequestNumber == nil)
+        #expect(cfg.runLabel == nil)
+    }
+
+    @Test("Parses iterations, commit, pr, and label")
+    func test_init_parsesOptions() throws {
+        let cfg = try PerfAuditConfig(
+            arguments: [
+                "--audio", "a.caf",
+                "--output", "b.json",
+                "--iterations", "2",
+                "--commit", " abc123 ",
+                "--pr", "42",
+                "--label", " ci ",
+            ],
+            environment: [:]
+        )
+
+        #expect(cfg.iterations == 2)
+        #expect(cfg.commitSHA == "abc123")
+        #expect(cfg.pullRequestNumber == 42)
+        #expect(cfg.runLabel == "ci")
+    }
+
+    @Test("Treats empty label as nil")
+    func test_init_emptyLabelIsNil() throws {
+        let cfg = try PerfAuditConfig(
+            arguments: ["--audio", "a.caf", "--output", "b.json", "--label", "   "],
+            environment: [:]
+        )
+        #expect(cfg.runLabel == nil)
+    }
+
+    @Test("Help requested throws helpRequested")
+    func test_init_helpThrows() {
+        #expect(throws: PerfAuditError.helpRequested) {
+            _ = try PerfAuditConfig(arguments: ["--help"], environment: [:])
+        }
+    }
+}
+
+@Suite("StageDistribution")
+struct StageDistributionTests {
+    @Test("Empty samples")
+    func test_init_empty() {
+        let d = StageDistribution(samples: [])
+        #expect(d.min == 0)
+        #expect(d.max == 0)
+        #expect(d.p50 == 0)
+        #expect(d.p95 == 0)
+    }
+
+    @Test("Single sample")
+    func test_init_single() {
+        let d = StageDistribution(samples: [10.0])
+        #expect(d.min == 10)
+        #expect(d.max == 10)
+        #expect(d.p50 == 10)
+        #expect(d.p95 == 10)
+    }
+
+    @Test("Interpolates percentiles")
+    func test_percentiles_interpolate() {
+        let d = StageDistribution(samples: [0.0, 100.0])
+        #expect(d.p50 == 50)
+        #expect(d.p95 == 95)
+    }
+}
+
+@Suite("PerfProviderPlan")
+struct PerfProviderPlanTests {
+    @Test("Auto selects providers by preference order")
+    func test_resolve_autoOrder() throws {
+        let plan = try PerfProviderPlan.resolve(environment: [
+            "OPENROUTER_API_KEY": "or",
+            "ELEVENLABS_API_KEY": "el",
+            "DEEPGRAM_API_KEY": "dg",
+            "OPENAI_API_KEY": "oa",
+        ])
+
+        #expect(plan.stt.mode == "batch")
+        #expect(plan.stt.selectionPolicy == "auto")
+        #expect(plan.stt.forcedProvider == nil)
+        #expect(plan.stt.chain.map { $0.id } == ["elevenlabs", "deepgram", "whisper"])
+        #expect(plan.rewrite.routing == "openrouter")
+        #expect(plan.rewrite.hasGeminiDirect == false)
+    }
+
+    @Test("Forced provider reorders chain")
+    func test_resolve_forcedOrder() throws {
+        let plan = try PerfProviderPlan.resolve(environment: [
+            "OPENROUTER_API_KEY": "or",
+            "ELEVENLABS_API_KEY": "el",
+            "DEEPGRAM_API_KEY": "dg",
+            "OPENAI_API_KEY": "oa",
+            "VOX_PERF_STT_PROVIDER": "deepgram",
+        ])
+
+        #expect(plan.stt.selectionPolicy == "forced")
+        #expect(plan.stt.forcedProvider == "deepgram")
+        #expect(plan.stt.chain.map { $0.id } == ["deepgram", "elevenlabs", "whisper"])
+    }
+
+    @Test("Missing OPENROUTER_API_KEY fails fast")
+    func test_resolve_missingOpenRouterKey() {
+        #expect(throws: PerfAuditError.missingRequiredKey("OPENROUTER_API_KEY")) {
+            _ = try PerfProviderPlan.resolve(environment: ["ELEVENLABS_API_KEY": "el"])
+        }
+    }
+
+    @Test("Missing STT key fails fast")
+    func test_resolve_missingSTTKeys() {
+        #expect(throws: PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY / OPENAI_API_KEY)")) {
+            _ = try PerfProviderPlan.resolve(environment: ["OPENROUTER_API_KEY": "or"])
+        }
+    }
+
+    @Test("Forced provider with missing key yields precise error")
+    func test_resolve_forcedProviderMissingKey() {
+        #expect(throws: PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY")) {
+            _ = try PerfProviderPlan.resolve(environment: [
+                "OPENROUTER_API_KEY": "or",
+                "OPENAI_API_KEY": "oa",
+                "VOX_PERF_STT_PROVIDER": "elevenlabs",
+            ])
+        }
+    }
+
+    @Test("Gemini key enables model-routed rewrite")
+    func test_resolve_geminiEnablesModelRouted() throws {
+        let plan = try PerfProviderPlan.resolve(environment: [
+            "OPENROUTER_API_KEY": "or",
+            "ELEVENLABS_API_KEY": "el",
+            "GEMINI_API_KEY": "g",
+        ])
+
+        #expect(plan.rewrite.routing == "model-routed")
+        #expect(plan.rewrite.hasGeminiDirect == true)
+    }
+}

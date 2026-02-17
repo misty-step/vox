@@ -76,8 +76,37 @@ def main() -> None:
     iters = head.get("iterationsPerLevel", "?")
     audio_file = head.get("audioFile", "—")
     audio_bytes = head.get("audioBytes", 0)
-    stt_provider = head.get("sttProvider", "—")
-    rewrite_provider = head.get("rewriteProvider", "—")
+    stt_mode = head.get("sttMode") or "—"
+    stt_policy = head.get("sttSelectionPolicy") or "—"
+    stt_forced = head.get("sttForcedProvider")
+    stt_chain = head.get("sttChain") or []
+    rewrite_routing = head.get("rewriteRouting") or head.get("rewriteProvider") or "—"
+
+    def fmt_chain(chain: list[dict[str, Any]]) -> str:
+        parts: list[str] = []
+        for entry in chain:
+            provider = str(entry.get("provider") or "—")
+            model = str(entry.get("model") or "")
+            if model:
+                parts.append(f"{provider}({model})")
+            else:
+                parts.append(provider)
+        return " -> ".join(parts) if parts else "—"
+
+    def fmt_usage(items: list[dict[str, Any]], max_items: int = 2) -> str:
+        if not items:
+            return "—"
+        # Prefer highest-count entries.
+        items_sorted = sorted(items, key=lambda x: (int(x.get("count", 0)), str(x.get("provider", "")), str(x.get("model", ""))), reverse=True)
+        rendered: list[str] = []
+        for it in items_sorted[:max_items]:
+            provider = str(it.get("provider") or it.get("path") or "—")
+            model = str(it.get("model") or "—")
+            count = int(it.get("count", 0))
+            rendered.append(f"{provider}({model}) x{count}")
+        if len(items_sorted) > max_items:
+            rendered.append(f"+{len(items_sorted) - max_items} more")
+        return ", ".join(rendered)
 
     lines: list[str] = []
     lines.append("<!-- vox-perf-audit -->")
@@ -86,12 +115,37 @@ def main() -> None:
     lines.append(f"- Head: `{short_sha(head_sha)}`")
     if base:
         lines.append(f"- Base: `{short_sha(base_sha)}`")
-    lines.append(f"- Providers: STT={stt_provider}, rewrite={rewrite_provider}")
+    if stt_chain:
+        forced = f", forced={stt_forced}" if stt_forced else ""
+        lines.append(f"- STT: mode={stt_mode}, policy={stt_policy}{forced}, chain={fmt_chain(stt_chain)}")
+    else:
+        # Back-compat for schema v1.
+        lines.append(f"- STT: {head.get('sttProvider', '—')}")
+    lines.append(f"- Rewrite routing: {rewrite_routing}")
     lines.append(f"- Fixture: `{audio_file}` ({audio_bytes} bytes), iterations={iters} per level")
     lines.append(f"- Note: paste stage is a no-op in CI; focus on generation timings.")
     lines.append("")
 
     levels = ["raw", "clean", "polish"]
+    lines.append("| Level | STT observed | Rewrite observed |")
+    lines.append("| --- | --- | --- |")
+    for lvl in levels:
+        h = get_level(head, lvl)
+        providers = h.get("providers") or {}
+        stt_obs = providers.get("sttObserved") or []
+        rw_obs = providers.get("rewriteObserved") or []
+
+        if not providers:
+            # schema v1 back-compat
+            stt_text = head.get("sttProvider", "—")
+            rw_text = "—" if lvl == "raw" else head.get("rewriteProvider", "—")
+        else:
+            stt_text = fmt_usage(stt_obs)
+            rw_text = "—" if lvl == "raw" else fmt_usage(rw_obs)
+
+        lines.append(f"| {lvl} | {stt_text} | {rw_text} |")
+    lines.append("")
+
     lines.append("| Level | Generation p50 | Generation p95 | STT p95 | Rewrite p95 | Encode p95 |")
     lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
     for lvl in levels:

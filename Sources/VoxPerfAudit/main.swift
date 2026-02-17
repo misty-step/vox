@@ -1,156 +1,8 @@
 import Foundation
+import VoxPerfAuditKit
 import VoxAppKit
 import VoxCore
 import VoxProviders
-
-private enum PerfAuditError: Error, CustomStringConvertible {
-    case helpRequested
-    case missingAudioPath
-    case missingOutputPath
-    case invalidArgument(String)
-    case missingRequiredKey(String)
-
-    var description: String {
-        switch self {
-        case .helpRequested:
-            return PerfAuditConfig.usage()
-        case .missingAudioPath:
-            return "Missing --audio <path>."
-        case .missingOutputPath:
-            return "Missing --output <path>."
-        case let .invalidArgument(message):
-            return "Invalid argument: \(message)"
-        case let .missingRequiredKey(name):
-            return "Missing required API key: \(name)"
-        }
-    }
-}
-
-private struct PerfAuditConfig {
-    let audioURL: URL
-    let outputURL: URL
-    let iterations: Int
-    let commitSHA: String?
-    let pullRequestNumber: Int?
-    let runLabel: String?
-    let environment: [String: String]
-
-    static func usage() -> String {
-        """
-        Usage: swift run VoxPerfAudit --audio <path> --output <path> [options]
-
-        Options:
-          --audio <path>         Input audio file (CAF recommended).
-          --output <path>        Output JSON path.
-          --iterations <N>       Iterations per level (default: 3)
-          --commit <sha>         Commit SHA (default: GITHUB_SHA if set)
-          --pr <number>          Pull request number (optional)
-          --label <string>       Run label (optional, e.g. "ci", "local")
-          --help                 Show this message
-        """
-    }
-
-    init(arguments: [String], environment: [String: String]) throws {
-        var audioPath: String?
-        var outputPath: String?
-        var iterations = 3
-        var commitSHA: String? = environment["GITHUB_SHA"]
-        var pullRequestNumber: Int?
-        var runLabel: String?
-
-        var index = 0
-        while index < arguments.count {
-            let arg = arguments[index]
-            switch arg {
-            case "--help":
-                throw PerfAuditError.helpRequested
-            case "--audio":
-                index += 1
-                guard index < arguments.count else { throw PerfAuditError.invalidArgument("--audio needs a value") }
-                audioPath = arguments[index]
-            case "--output":
-                index += 1
-                guard index < arguments.count else { throw PerfAuditError.invalidArgument("--output needs a value") }
-                outputPath = arguments[index]
-            case "--iterations":
-                index += 1
-                guard index < arguments.count, let value = Int(arguments[index]), value > 0 else {
-                    throw PerfAuditError.invalidArgument("--iterations needs an integer > 0")
-                }
-                iterations = value
-            case "--commit":
-                index += 1
-                guard index < arguments.count else { throw PerfAuditError.invalidArgument("--commit needs a value") }
-                commitSHA = arguments[index].trimmingCharacters(in: .whitespacesAndNewlines)
-            case "--pr":
-                index += 1
-                guard index < arguments.count, let value = Int(arguments[index]), value > 0 else {
-                    throw PerfAuditError.invalidArgument("--pr needs an integer > 0")
-                }
-                pullRequestNumber = value
-            case "--label":
-                index += 1
-                guard index < arguments.count else { throw PerfAuditError.invalidArgument("--label needs a value") }
-                let trimmed = arguments[index].trimmingCharacters(in: .whitespacesAndNewlines)
-                runLabel = trimmed.isEmpty ? nil : trimmed
-            default:
-                throw PerfAuditError.invalidArgument("unknown option '\(arg)'")
-            }
-            index += 1
-        }
-
-        guard let audioPath else { throw PerfAuditError.missingAudioPath }
-        guard let outputPath else { throw PerfAuditError.missingOutputPath }
-
-        self.audioURL = Self.resolve(audioPath)
-        self.outputURL = Self.resolve(outputPath)
-        self.iterations = iterations
-        self.commitSHA = commitSHA?.isEmpty == true ? nil : commitSHA
-        self.pullRequestNumber = pullRequestNumber
-        self.runLabel = runLabel
-        self.environment = environment
-    }
-
-    private static func resolve(_ path: String) -> URL {
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        return URL(fileURLWithPath: path, relativeTo: cwd).standardizedFileURL
-    }
-}
-
-private struct StageDistribution: Codable {
-    let p50: Double
-    let p95: Double
-    let min: Double
-    let max: Double
-
-    init(samples: [Double]) {
-        guard !samples.isEmpty else {
-            self.p50 = 0
-            self.p95 = 0
-            self.min = 0
-            self.max = 0
-            return
-        }
-        let sorted = samples.sorted()
-        self.min = sorted[0]
-        self.max = sorted[sorted.count - 1]
-        self.p50 = Self.percentile(sorted, quantile: 0.50)
-        self.p95 = Self.percentile(sorted, quantile: 0.95)
-    }
-
-    private static func percentile(_ sorted: [Double], quantile: Double) -> Double {
-        guard sorted.count > 1 else { return sorted[0] }
-        let rank = quantile * Double(sorted.count - 1)
-        let lower = Int(rank.rounded(.down))
-        let upper = Int(rank.rounded(.up))
-        if lower == upper { return sorted[lower] }
-
-        let lowerValue = sorted[lower]
-        let upperValue = sorted[upper]
-        let fraction = rank - Double(lower)
-        return lowerValue + ((upperValue - lowerValue) * fraction)
-    }
-}
 
 private struct PerfLevelDistributions: Codable {
     let encodeMs: StageDistribution
@@ -161,9 +13,33 @@ private struct PerfLevelDistributions: Codable {
     let totalStageMs: StageDistribution
 }
 
+private struct ProviderDescriptor: Codable {
+    let provider: String
+    let model: String
+}
+
+private struct ProviderUsage: Codable {
+    let provider: String
+    let model: String
+    let count: Int
+}
+
+private struct RewriteUsage: Codable {
+    let path: String
+    let model: String
+    let count: Int
+}
+
+private struct PerfLevelProviders: Codable {
+    let sttMode: String
+    let sttObserved: [ProviderUsage]
+    let rewriteObserved: [RewriteUsage]?
+}
+
 private struct PerfLevelResult: Codable {
     let level: String
     let iterations: Int
+    let providers: PerfLevelProviders
     let distributions: PerfLevelDistributions
 }
 
@@ -176,12 +52,16 @@ private struct PerfAuditResult: Codable {
     let iterationsPerLevel: Int
     let audioFile: String
     let audioBytes: Int
-    let sttProvider: String
-    let rewriteProvider: String
+    let sttMode: String
+    let sttSelectionPolicy: String
+    let sttForcedProvider: String?
+    let sttChain: [ProviderDescriptor]
+    let rewriteRouting: String
     let levels: [PerfLevelResult]
 }
 
 @MainActor
+// @unchecked Sendable: constrained to MainActor, but must satisfy PreferencesReading: Sendable.
 private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
     var processingLevel: ProcessingLevel
     var selectedInputDeviceUID: String? = nil
@@ -196,6 +76,7 @@ private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
     }
 }
 
+// @unchecked Sendable: no state; paste is @MainActor and a no-op in perf audit.
 private final class NoopPaster: TextPaster, @unchecked Sendable {
     @MainActor
     func paste(text: String) async throws {}
@@ -204,47 +85,66 @@ private final class NoopPaster: TextPaster, @unchecked Sendable {
 private struct ResolvedProviders {
     let sttProvider: STTProvider
     let sttName: String
+    let sttSelectionPolicy: String
+    let sttForcedProvider: String?
+    let sttChain: [ProviderDescriptor]
+    let sttMode: String
     let rewriteProvider: RewriteProvider
     let rewriteName: String
+    let rewriteRouting: String
     let hasCloudSTT: Bool
 }
 
 private func resolvedProviders(
-    environment: [String: String]
+    environment: [String: String],
+    usageRecorder: ProviderUsageRecorder
 ) throws -> ResolvedProviders {
-    func configured(_ value: String) -> Bool {
-        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     func key(_ name: String) -> String {
         environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    let elevenKey = key("ELEVENLABS_API_KEY")
-    let deepgramKey = key("DEEPGRAM_API_KEY")
-    let openAIKey = key("OPENAI_API_KEY")
+    let plan = try PerfProviderPlan.resolve(environment: environment)
 
-    // STT: prefer ElevenLabs → Deepgram → Whisper. (AppleSpeech isn't viable in `swift run` without a bundle.)
-    var sttEntries: [(name: String, provider: STTProvider)] = []
-
-    if configured(elevenKey) {
-        let eleven = ElevenLabsClient(apiKey: elevenKey)
-        sttEntries.append((name: "ElevenLabs", provider: RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs")))
-    }
-    if configured(deepgramKey) {
-        let deepgram = DeepgramClient(apiKey: deepgramKey)
-        sttEntries.append((name: "Deepgram", provider: RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")))
-    }
-    if configured(openAIKey) {
-        let whisper = WhisperClient(apiKey: openAIKey)
-        sttEntries.append((name: "Whisper", provider: RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")))
+    struct STTEntry {
+        let name: String
+        let model: String
+        let provider: STTProvider
     }
 
-    guard !sttEntries.isEmpty else {
-        throw PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY / OPENAI_API_KEY)")
+    var sttEntries: [STTEntry] = []
+    for entry in plan.stt.chain {
+        let apiKey = key(entry.apiKeyEnv)
+        switch entry.id {
+        case "elevenlabs":
+            let eleven = ElevenLabsClient(apiKey: apiKey)
+            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: entry.displayName)
+            sttEntries.append(.init(
+                name: entry.displayName,
+                model: entry.model,
+                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
+            ))
+        case "deepgram":
+            let deepgram = DeepgramClient(apiKey: apiKey)
+            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: entry.displayName)
+            sttEntries.append(.init(
+                name: entry.displayName,
+                model: entry.model,
+                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
+            ))
+        case "whisper":
+            let whisper = WhisperClient(apiKey: apiKey)
+            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
+            sttEntries.append(.init(
+                name: entry.displayName,
+                model: entry.model,
+                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
+            ))
+        default:
+            throw PerfAuditError.invalidArgument("Unknown STT provider id '\(entry.id)'")
+        }
     }
 
-    let sttChain = sttEntries.dropFirst().reduce(sttEntries[0]) { accumulated, next in
+    let sttChain = sttEntries.dropFirst().reduce((name: sttEntries[0].name, provider: sttEntries[0].provider as STTProvider)) { accumulated, next in
         let wrapper = FallbackSTTProvider(
             primary: accumulated.provider,
             fallback: next.provider,
@@ -258,47 +158,122 @@ private func resolvedProviders(
         maxConcurrent: 1  // perf audit is single-threaded; keep it deterministic.
     )
 
-    // Rewrite: prefer OpenRouter (needed for polish default), optionally route Gemini direct when configured.
     let openRouterKey = key("OPENROUTER_API_KEY")
     let geminiKey = key("GEMINI_API_KEY")
 
-    let openRouter: OpenRouterClient? = openRouterKey.isEmpty ? nil : OpenRouterClient(
+    let openRouter = OpenRouterClient(
         apiKey: openRouterKey,
         fallbackModels: [
             "google/gemini-2.5-flash",
             "google/gemini-2.0-flash-001",
-        ]
+        ],
+        onModelUsed: { model, _ in
+            usageRecorder.recordRewrite(path: "openrouter", model: model)
+        }
     )
-    let gemini: GeminiClient? = geminiKey.isEmpty ? nil : GeminiClient(apiKey: geminiKey)
-
-    guard let openRouter else {
-        throw PerfAuditError.missingRequiredKey("OPENROUTER_API_KEY")
-    }
 
     let rewriteProvider: RewriteProvider
     let rewriteName: String
-    if let gemini {
+    let rewriteRouting: String
+    if plan.rewrite.hasGeminiDirect {
+        let gemini = GeminiClient(apiKey: geminiKey)
+        let instrumentedGemini = InstrumentedRewriteProvider(
+            provider: gemini,
+            path: "gemini_direct",
+            recorder: usageRecorder
+        )
         rewriteProvider = ModelRoutedRewriteProvider(
-            gemini: gemini,
+            gemini: instrumentedGemini,
             openRouter: openRouter,
             fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
         )
         rewriteName = "Gemini+OpenRouter"
+        rewriteRouting = "model-routed (gemini_direct + openrouter)"
     } else {
         rewriteProvider = openRouter
         rewriteName = "OpenRouter"
+        rewriteRouting = "openrouter"
     }
 
-    let hasCloudSTT = sttEntries.contains { $0.name != "Apple Speech" }
     return ResolvedProviders(
         sttProvider: sttProvider,
         sttName: sttChain.name,
+        sttSelectionPolicy: plan.stt.selectionPolicy,
+        sttForcedProvider: plan.stt.forcedProvider,
+        sttChain: sttEntries.map { ProviderDescriptor(provider: $0.name, model: $0.model) },
+        sttMode: plan.stt.mode,
         rewriteProvider: rewriteProvider,
         rewriteName: rewriteName,
-        hasCloudSTT: hasCloudSTT
+        rewriteRouting: rewriteRouting,
+        hasCloudSTT: true
     )
 }
 
+private final class ProviderUsageRecorder: @unchecked Sendable {
+    // NSLock-protected counters to avoid any actor hops on hot paths.
+    private let lock = NSLock()
+    private var sttCounts: [String: Int] = [:]
+    private var rewriteCounts: [String: Int] = [:]
+
+    func recordSTT(provider: String, model: String) {
+        let key = "\(provider)\u{001F}\(model)"
+        lock.withLock { sttCounts[key, default: 0] += 1 }
+    }
+
+    func recordRewrite(path: String, model: String) {
+        let key = "\(path)\u{001F}\(model)"
+        lock.withLock { rewriteCounts[key, default: 0] += 1 }
+    }
+
+    func snapshotSTT() -> [ProviderUsage] {
+        lock.withLock {
+            sttCounts
+                .map { key, count in
+                    let parts = key.split(separator: "\u{001F}", maxSplits: 1).map(String.init)
+                    return ProviderUsage(provider: parts[0], model: parts.count > 1 ? parts[1] : "", count: count)
+                }
+                .sorted { ($0.count, $0.provider, $0.model) > ($1.count, $1.provider, $1.model) }
+        }
+    }
+
+    func snapshotRewrite() -> [RewriteUsage] {
+        lock.withLock {
+            rewriteCounts
+                .map { key, count in
+                    let parts = key.split(separator: "\u{001F}", maxSplits: 1).map(String.init)
+                    return RewriteUsage(path: parts[0], model: parts.count > 1 ? parts[1] : "", count: count)
+                }
+                .sorted { ($0.count, $0.path, $0.model) > ($1.count, $1.path, $1.model) }
+        }
+    }
+}
+
+private struct InstrumentedSTTProvider: STTProvider {
+    let provider: STTProvider
+    let providerName: String
+    let model: String
+    let recorder: ProviderUsageRecorder
+
+    func transcribe(audioURL: URL) async throws -> String {
+        let result = try await provider.transcribe(audioURL: audioURL)
+        recorder.recordSTT(provider: providerName, model: model)
+        return result
+    }
+}
+
+private struct InstrumentedRewriteProvider: RewriteProvider {
+    let provider: RewriteProvider
+    let path: String
+    let recorder: ProviderUsageRecorder
+
+    func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
+        let result = try await provider.rewrite(transcript: transcript, systemPrompt: systemPrompt, model: model)
+        recorder.recordRewrite(path: path, model: model)
+        return result
+    }
+}
+
+// @unchecked Sendable: NSLock protects cross-task writes from the timing handler.
 private final class TimingCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var _timings: [PipelineTiming] = []
@@ -323,8 +298,6 @@ struct VoxPerfAudit {
             let audioAttrs = try? fm.attributesOfItem(atPath: config.audioURL.path)
             let audioBytes = audioAttrs?[.size] as? Int ?? 0
 
-            let providers = try resolvedProviders(environment: config.environment)
-
             let iso = ISO8601DateFormatter()
             let generatedAt = iso.string(from: Date())
 
@@ -335,6 +308,9 @@ struct VoxPerfAudit {
 
                 let paster = NoopPaster()
                 let collector = TimingCollector()
+                let usageRecorder = ProviderUsageRecorder()
+
+                let providers = try resolvedProviders(environment: config.environment, usageRecorder: usageRecorder)
 
                 let pipeline = await MainActor.run {
                     DictationPipeline(
@@ -372,15 +348,24 @@ struct VoxPerfAudit {
                     totalStageMs: StageDistribution(samples: totalStageMs)
                 )
 
+                let rewriteObserved = level == .raw ? nil : usageRecorder.snapshotRewrite()
                 levelResults.append(PerfLevelResult(
                     level: level.rawValue,
                     iterations: config.iterations,
+                    providers: PerfLevelProviders(
+                        sttMode: providers.sttMode,
+                        sttObserved: usageRecorder.snapshotSTT(),
+                        rewriteObserved: rewriteObserved
+                    ),
                     distributions: distributions
                 ))
             }
 
+            let usageRecorder = ProviderUsageRecorder()
+            let providers = try resolvedProviders(environment: config.environment, usageRecorder: usageRecorder)
+
             let result = PerfAuditResult(
-                schemaVersion: 1,
+                schemaVersion: 2,
                 generatedAt: generatedAt,
                 commitSHA: config.commitSHA,
                 pullRequestNumber: config.pullRequestNumber,
@@ -388,8 +373,11 @@ struct VoxPerfAudit {
                 iterationsPerLevel: config.iterations,
                 audioFile: config.audioURL.lastPathComponent,
                 audioBytes: audioBytes,
-                sttProvider: providers.sttName,
-                rewriteProvider: providers.rewriteName,
+                sttMode: providers.sttMode,
+                sttSelectionPolicy: providers.sttSelectionPolicy,
+                sttForcedProvider: providers.sttForcedProvider,
+                sttChain: providers.sttChain,
+                rewriteRouting: providers.rewriteRouting,
                 levels: levelResults
             )
 
