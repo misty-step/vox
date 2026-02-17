@@ -64,6 +64,15 @@ public protocol AudioRecording: AnyObject {
     func stop() throws -> URL
 }
 
+/// Provides access to an ephemeral per-recording key for encrypted temp files.
+public protocol EncryptedAudioRecording: AudioRecording {
+    /// Returns and clears the in-memory key for the current recording.
+    func consumeRecordingEncryptionKey() -> Data?
+
+    /// Clears any cached in-memory key without exposing it.
+    func discardRecordingEncryptionKey()
+}
+
 extension AudioRecording {
     public func start() throws { try start(inputDeviceUID: nil) }
 }

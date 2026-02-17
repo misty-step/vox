@@ -3,7 +3,7 @@ import AudioToolbox
 import Foundation
 import VoxCore
 
-public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
+public final class AudioRecorder: AudioRecording, AudioChunkStreaming, EncryptedAudioRecording {
     private var recorder: AVAudioRecorder?
     private var engine: AVAudioEngine?
     private var audioFile: AVAudioFile?
@@ -14,6 +14,8 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
     private var captureIntegrityFailure: VoxError?
     private var audioChunkHandler: (@Sendable (AudioChunk) -> Void)?
     private var currentURL: URL?
+    private var currentEncryptedURL: URL?
+    private var currentRecordingEncryptionKey: Data?
     private var latestAverage: Float = 0
     private var latestPeak: Float = 0
 
@@ -37,16 +39,37 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
     public func start(inputDeviceUID: String?) throws {
         if recorder != nil || engine != nil { return }
         clearCaptureIntegrityFailure()
+        clearRecordingEncryptionKey()
         let backend = Self.selectedBackend(environment: ProcessInfo.processInfo.environment)
         #if DEBUG
         print("[AudioRecorder] Backend: \(backend == .avAudioRecorder ? "AVAudioRecorder" : "AVAudioEngine")")
         #endif
-        switch backend {
-        case .avAudioRecorder:
-            try startWithAVAudioRecorder(inputDeviceUID: inputDeviceUID)
-        case .avAudioEngine:
-            try startWithAVAudioEngine(inputDeviceUID: inputDeviceUID)
+        currentRecordingEncryptionKey = AudioFileEncryption.randomKey()
+        do {
+            switch backend {
+            case .avAudioRecorder:
+                try startWithAVAudioRecorder(inputDeviceUID: inputDeviceUID)
+            case .avAudioEngine:
+                try startWithAVAudioEngine(inputDeviceUID: inputDeviceUID)
+            }
+        } catch {
+            clearRecordingEncryptionKey()
+            throw error
         }
+    }
+
+    public func consumeRecordingEncryptionKey() -> Data? {
+        guard let key = currentRecordingEncryptionKey else {
+            return nil
+        }
+        currentRecordingEncryptionKey = nil
+        return key
+    }
+
+    public func discardRecordingEncryptionKey() {
+        var key = currentRecordingEncryptionKey ?? Data()
+        AudioFileEncryption.zeroizeKey(&key)
+        currentRecordingEncryptionKey = nil
     }
 
     private func startWithAVAudioRecorder(inputDeviceUID: String?) throws {
@@ -58,6 +81,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vox-\(UUID().uuidString).caf")
+        let encryptedURL = AudioFileEncryption.encryptedURL(for: url)
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: 16_000,
@@ -74,6 +98,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
         }
         self.recorder = recorder
         self.currentURL = url
+        self.currentEncryptedURL = encryptedURL
     }
 
     private func startWithAVAudioEngine(inputDeviceUID: String?) throws {
@@ -122,6 +147,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vox-\(UUID().uuidString).caf")
+        let encryptedURL = AudioFileEncryption.encryptedURL(for: url)
         let file = try AVAudioFile(
             forWriting: url,
             settings: targetFormat.settings,
@@ -224,6 +250,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
         self.engine = engine
         self.audioFile = file
         self.currentURL = url
+        self.currentEncryptedURL = encryptedURL
     }
 
     public func currentLevel() -> (average: Float, peak: Float) {
@@ -239,19 +266,22 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
 
     public func stop() throws -> URL {
         if let recorder, let url = currentURL {
+            let encryptedURL = currentEncryptedURL
             recorder.stop()
             self.recorder = nil
             setConverter(nil)
+            self.currentEncryptedURL = nil
             self.currentURL = nil
             self.latestAverage = 0
             self.latestPeak = 0
             try throwCaptureIntegrityFailureIfPresent()
-            return url
+            return try finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
         }
 
         guard let engine, let url = currentURL else {
             throw VoxError.internalError("No active recording.")
         }
+        let encryptedURL = currentEncryptedURL
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
 
@@ -263,11 +293,38 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming {
         self.engine = nil
         self.audioFile = nil
         setConverter(nil)
+        self.currentEncryptedURL = nil
         self.currentURL = nil
         self.latestAverage = 0
         self.latestPeak = 0
         try throwCaptureIntegrityFailureIfPresent()
-        return url
+        return try finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
+    }
+
+    private func finalizedRecordingURL(
+        from plainURL: URL,
+        encryptedURL: URL?
+    ) throws -> URL {
+        guard let key = currentRecordingEncryptionKey else {
+            return plainURL
+        }
+        guard let encryptedURL else {
+            throw VoxError.internalError("Missing encrypted recording URL.")
+        }
+        do {
+            try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+            SecureFileDeleter.delete(at: plainURL)
+            return encryptedURL
+        } catch {
+            SecureFileDeleter.delete(at: plainURL)
+            throw VoxError.internalError("Failed to encrypt recording.")
+        }
+    }
+
+    private func clearRecordingEncryptionKey() {
+        var current = currentRecordingEncryptionKey ?? Data()
+        AudioFileEncryption.zeroizeKey(&current)
+        currentRecordingEncryptionKey = nil
     }
 
     /// Drain remaining samples from the converter by signaling end-of-stream.
