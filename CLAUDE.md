@@ -95,6 +95,7 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 ## Concurrency Gotchas
 
 - `@MainActor` protocol default params can't call `@MainActor` init in default expressions — use `nil` + resolve in body
+- Swift 6: don't pass non-Sendable deps into actor init (esp. for `static let shared`); construct inside actor instead
 - `AudioConverter` uses `terminationHandler` continuation, not blocking `waitUntilExit()`
 - Mock providers in tests use `NSLock` + `@unchecked Sendable` for thread safety (callbacks arrive from non-MainActor threads)
 - Continuation guards need `NSLock` — see `ContinuationGuard` pattern in `AppleSpeechClient`

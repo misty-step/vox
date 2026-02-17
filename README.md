@@ -21,6 +21,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
 - **BYOK** (Bring Your Own Keys) for complete control over costs
 - **Secure storage** via macOS Keychain
+- **Exportable diagnostics bundle** (menu bar → Export Diagnostics…): zip of privacy-safe context + event logs (no transcript text, no audio, no API keys)
 
 ## Quick Start
 
@@ -112,6 +113,14 @@ Click the menu bar icon and select Settings. Keys stored securely in macOS Keych
 Vox requires Accessibility permissions to paste text into applications. macOS will prompt on first launch. If denied, enable manually:
 
 System Settings > Privacy & Security > Accessibility > Enable Vox
+
+### Diagnostics
+
+Menu bar icon → Export Diagnostics…
+
+Creates a `.zip` containing `VoxDiagnostics/context.json` + `VoxDiagnostics/diagnostics-*.jsonl`.
+
+Privacy: no transcript text, no audio, no API keys (presence booleans only). Nothing uploaded automatically.
 
 ## Development
 

@@ -30,6 +30,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         print("[Vox] Rewrite: \(rewriteChain.isEmpty ? "–" : rewriteChain)")
         print("[Vox] Initial processing level: \(prefs.processingLevel.rawValue)")
 
+        let diagnosticsContext = DiagnosticsContext.current(prefs: prefs)
+        DiagnosticsStore.recordAsync(
+            name: "app_launch",
+            fields: [
+                "app_version": .string(diagnosticsContext.appVersion),
+                "app_build": .string(diagnosticsContext.appBuild),
+                "os_version": .string(diagnosticsContext.osVersion),
+                "processing_level": .string(diagnosticsContext.processingLevel),
+                "stt_routing": .string(diagnosticsContext.sttRouting),
+                "streaming_allowed": .bool(diagnosticsContext.streamingAllowed),
+                "audio_backend": .string(diagnosticsContext.audioBackend),
+                "max_concurrent_stt": .int(diagnosticsContext.maxConcurrentSTT),
+                "keys_elevenlabs": .bool(diagnosticsContext.keysPresent.elevenLabs),
+                "keys_deepgram": .bool(diagnosticsContext.keysPresent.deepgram),
+                "keys_openai": .bool(diagnosticsContext.keysPresent.openAI),
+                "keys_gemini": .bool(diagnosticsContext.keysPresent.gemini),
+                "keys_openrouter": .bool(diagnosticsContext.keysPresent.openRouter),
+            ]
+        )
+
         PermissionManager.promptForAccessibilityIfNeeded()
 
         let session = VoxSession(sessionExtension: OnboardingSessionExtension(onboarding: onboarding))
