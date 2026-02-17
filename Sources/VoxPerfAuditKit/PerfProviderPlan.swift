@@ -38,7 +38,6 @@ package struct PerfProviderPlan: Sendable, Codable, Equatable {
 
         let elevenKey = key("ELEVENLABS_API_KEY")
         let deepgramKey = key("DEEPGRAM_API_KEY")
-        let openAIKey = key("OPENAI_API_KEY")
 
         var sttChain: [PerfSTTProviderPlan] = []
         if configured(elevenKey) {
@@ -46,9 +45,6 @@ package struct PerfProviderPlan: Sendable, Codable, Equatable {
         }
         if configured(deepgramKey) {
             sttChain.append(.init(id: "deepgram", displayName: "Deepgram", model: "nova-3", apiKeyEnv: "DEEPGRAM_API_KEY"))
-        }
-        if configured(openAIKey) {
-            sttChain.append(.init(id: "whisper", displayName: "OpenAI", model: "whisper-1", apiKeyEnv: "OPENAI_API_KEY"))
         }
 
         if sttSelectionPolicy == "forced" {
@@ -61,17 +57,15 @@ package struct PerfProviderPlan: Sendable, Codable, Equatable {
                     throw PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY")
                 case "deepgram":
                     throw PerfAuditError.missingRequiredKey("DEEPGRAM_API_KEY")
-                case "whisper":
-                    throw PerfAuditError.missingRequiredKey("OPENAI_API_KEY")
                 default:
-                    throw PerfAuditError.invalidArgument("Unknown VOX_PERF_STT_PROVIDER '\(forced)'; use auto|elevenlabs|deepgram|whisper")
+                    throw PerfAuditError.invalidArgument("Unknown VOX_PERF_STT_PROVIDER '\(forced)'; use auto|elevenlabs|deepgram")
                 }
             }
             sttChain = [forcedEntry] + sttChain.filter { $0.id != forcedEntry.id }
         }
 
         guard !sttChain.isEmpty else {
-            throw PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY / OPENAI_API_KEY)")
+            throw PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY)")
         }
 
         let openRouterKey = key("OPENROUTER_API_KEY")

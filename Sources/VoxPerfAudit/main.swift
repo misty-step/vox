@@ -68,7 +68,6 @@ private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
     var elevenLabsAPIKey: String = ""
     var openRouterAPIKey: String = ""
     var deepgramAPIKey: String = ""
-    var openAIAPIKey: String = ""
     var geminiAPIKey: String = ""
 
     init(level: ProcessingLevel) {
@@ -126,14 +125,6 @@ private func resolvedProviders(
         case "deepgram":
             let deepgram = DeepgramClient(apiKey: apiKey)
             let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: entry.displayName)
-            sttEntries.append(.init(
-                name: entry.displayName,
-                model: entry.model,
-                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
-            ))
-        case "whisper":
-            let whisper = WhisperClient(apiKey: apiKey)
-            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
             sttEntries.append(.init(
                 name: entry.displayName,
                 model: entry.model,

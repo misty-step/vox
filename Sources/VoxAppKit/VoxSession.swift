@@ -68,7 +68,6 @@ public final class VoxSession: ObservableObject {
         let keys = [
             prefs.elevenLabsAPIKey,
             prefs.deepgramAPIKey,
-            prefs.openAIAPIKey,
         ]
         return keys.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
@@ -167,13 +166,6 @@ public final class VoxSession: ObservableObject {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
             let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
             cloudProviders.append((name: "Deepgram", provider: retried))
-        }
-
-        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !openAIKey.isEmpty {
-            let whisper = WhisperClient(apiKey: openAIKey)
-            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
-            cloudProviders.append((name: "Whisper", provider: retried))
         }
 
         let chain: STTProvider

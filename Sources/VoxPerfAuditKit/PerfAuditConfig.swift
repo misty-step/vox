@@ -46,7 +46,7 @@ package struct PerfAuditConfig {
           --help                 Show this message
 
         Environment:
-          VOX_PERF_STT_PROVIDER  auto|elevenlabs|deepgram|whisper (default: auto)
+          VOX_PERF_STT_PROVIDER  auto|elevenlabs|deepgram (default: auto)
         """
     }
 

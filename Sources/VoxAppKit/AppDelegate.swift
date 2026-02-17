@@ -20,8 +20,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasElevenLabs = !prefs.elevenLabsAPIKey.isEmpty
         let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
         let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
-        let hasOpenAI = !prefs.openAIAPIKey.isEmpty
-        print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Whisper \(hasOpenAI ? "✓" : "–") | Apple Speech ✓")
+        print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Apple Speech ✓")
         let hasGemini = !prefs.geminiAPIKey.isEmpty
         let rewriteChain = [
             hasGemini ? "Gemini" : nil,
@@ -44,7 +43,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 "max_concurrent_stt": .int(diagnosticsContext.maxConcurrentSTT),
                 "keys_elevenlabs": .bool(diagnosticsContext.keysPresent.elevenLabs),
                 "keys_deepgram": .bool(diagnosticsContext.keysPresent.deepgram),
-                "keys_openai": .bool(diagnosticsContext.keysPresent.openAI),
                 "keys_gemini": .bool(diagnosticsContext.keysPresent.gemini),
                 "keys_openrouter": .bool(diagnosticsContext.keysPresent.openRouter),
             ]

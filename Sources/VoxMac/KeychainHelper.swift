@@ -8,7 +8,6 @@ public enum KeychainHelper {
         case elevenLabsAPIKey = "com.vox.elevenlabs.apikey"
         case openRouterAPIKey = "com.vox.openrouter.apikey"
         case deepgramAPIKey = "com.vox.deepgram.apikey"
-        case openAIAPIKey = "com.vox.openai.apikey"
         case geminiAPIKey = "com.vox.gemini.apikey"
     }
 

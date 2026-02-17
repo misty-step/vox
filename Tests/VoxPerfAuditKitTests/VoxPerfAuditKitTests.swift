@@ -94,13 +94,12 @@ struct PerfProviderPlanTests {
             "OPENROUTER_API_KEY": "or",
             "ELEVENLABS_API_KEY": "el",
             "DEEPGRAM_API_KEY": "dg",
-            "OPENAI_API_KEY": "oa",
         ])
 
         #expect(plan.stt.mode == "batch")
         #expect(plan.stt.selectionPolicy == "auto")
         #expect(plan.stt.forcedProvider == nil)
-        #expect(plan.stt.chain.map { $0.id } == ["elevenlabs", "deepgram", "whisper"])
+        #expect(plan.stt.chain.map { $0.id } == ["elevenlabs", "deepgram"])
         #expect(plan.rewrite.routing == "openrouter")
         #expect(plan.rewrite.hasGeminiDirect == false)
     }
@@ -111,13 +110,12 @@ struct PerfProviderPlanTests {
             "OPENROUTER_API_KEY": "or",
             "ELEVENLABS_API_KEY": "el",
             "DEEPGRAM_API_KEY": "dg",
-            "OPENAI_API_KEY": "oa",
             "VOX_PERF_STT_PROVIDER": "deepgram",
         ])
 
         #expect(plan.stt.selectionPolicy == "forced")
         #expect(plan.stt.forcedProvider == "deepgram")
-        #expect(plan.stt.chain.map { $0.id } == ["deepgram", "elevenlabs", "whisper"])
+        #expect(plan.stt.chain.map { $0.id } == ["deepgram", "elevenlabs"])
     }
 
     @Test("Missing OPENROUTER_API_KEY fails fast")
@@ -129,7 +127,7 @@ struct PerfProviderPlanTests {
 
     @Test("Missing STT key fails fast")
     func test_resolve_missingSTTKeys() {
-        #expect(throws: PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY / OPENAI_API_KEY)")) {
+        #expect(throws: PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY)")) {
             _ = try PerfProviderPlan.resolve(environment: ["OPENROUTER_API_KEY": "or"])
         }
     }
@@ -139,7 +137,7 @@ struct PerfProviderPlanTests {
         #expect(throws: PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY")) {
             _ = try PerfProviderPlan.resolve(environment: [
                 "OPENROUTER_API_KEY": "or",
-                "OPENAI_API_KEY": "oa",
+                "DEEPGRAM_API_KEY": "dg",
                 "VOX_PERF_STT_PROVIDER": "elevenlabs",
             ])
         }

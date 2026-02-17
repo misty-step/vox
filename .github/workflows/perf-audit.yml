@@ -30,7 +30,6 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -41,7 +40,7 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
 
           # Secrets are unavailable to fork PRs. Keep this non-failing and still comment.
-          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; }; then
+          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ]; }; then
             bash scripts/perf/write-skip-report.sh "$OUT_DIR/report.md" "missing OPENROUTER_API_KEY and/or STT API key in CI"
             bash scripts/perf/post-pr-comment.sh "$PR_NUMBER" "$OUT_DIR/report.md"
             exit 0
@@ -108,14 +107,13 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
 
           OUT_DIR="perf-out"
           mkdir -p "$OUT_DIR"
 
-          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; }; then
+          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ]; }; then
             echo "Perf audit skipped: missing OPENROUTER_API_KEY and/or STT API key."
             exit 0
           fi
