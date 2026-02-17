@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VoxCore
+@testable import VoxMac
 @testable import VoxAppKit
 
 // MARK: - Mocks
@@ -52,6 +53,63 @@ final class MockRecorder: AudioChunkStreaming {
 
     func emitChunk(_ chunk: AudioChunk) {
         audioChunkHandler?(chunk)
+    }
+}
+
+@MainActor
+final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording {
+    var startCallCount = 0
+    var stopCallCount = 0
+    var levelCallCount = 0
+    var shouldThrowOnStart = false
+    var shouldThrowOnStop = false
+    var stopError: Error?
+    private var currentEncryptionKey: Data?
+    private(set) var recordingURL: URL
+    var consumeEncryptionKeyCallCount = 0
+    var discardEncryptionKeyCallCount = 0
+
+    init(recordingURL: URL, encryptionKey: Data) {
+        self.recordingURL = recordingURL
+        self.currentEncryptionKey = encryptionKey
+    }
+
+    func start(inputDeviceUID: String?) throws {
+        startCallCount += 1
+        if shouldThrowOnStart {
+            throw VoxError.internalError("Mock start failure")
+        }
+    }
+
+    func currentLevel() -> (average: Float, peak: Float) {
+        levelCallCount += 1
+        return (0.5, 0.7)
+    }
+
+    func stop() throws -> URL {
+        stopCallCount += 1
+        if let stopError {
+            throw stopError
+        }
+        if shouldThrowOnStop {
+            throw VoxError.internalError("Mock stop failure")
+        }
+        return recordingURL
+    }
+
+    func consumeRecordingEncryptionKey() -> Data? {
+        consumeEncryptionKeyCallCount += 1
+        defer { currentEncryptionKey = nil }
+        return currentEncryptionKey
+    }
+
+    func discardRecordingEncryptionKey() {
+        discardEncryptionKeyCallCount += 1
+        currentEncryptionKey = nil
+    }
+
+    func ensureKeyCleared() -> Bool {
+        currentEncryptionKey == nil
     }
 }
 
@@ -760,6 +818,47 @@ struct VoxSessionDITests {
         #expect(streamingProvider.makeSessionCallCount == 1)
         #expect(pipeline.processCallCount == 1)
         #expect(pipeline.processTranscriptCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Batch processing decrypts encrypted recordings before transcription")
+    @MainActor func test_batchProcessing_decryptsEncryptedRecordingBeforeTranscription() async throws {
+        let plainURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-session-test-\(UUID().uuidString).caf")
+        let encryptionKey = Data(repeating: 0xA1, count: 32)
+        let encryptedURL = plainURL.appendingPathExtension(AudioFileEncryption.encryptedFileExtension)
+
+        defer {
+            try? FileManager.default.removeItem(at: plainURL)
+            try? FileManager.default.removeItem(at: encryptedURL)
+        }
+
+        try Data([0x01, 0x02, 0x03]).write(to: plainURL)
+        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try? FileManager.default.removeItem(at: plainURL)
+
+        let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
+        let pipeline = MockPipeline()
+        pipeline.result = "decrypted transcript"
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.lastAudioURL == plainURL)
+        #expect(AudioFileEncryption.isEncrypted(url: pipeline.lastAudioURL ?? URL(fileURLWithPath: "")) == false)
+        #expect(!FileManager.default.fileExists(atPath: plainURL.path))
+        #expect(!FileManager.default.fileExists(atPath: encryptedURL.path))
+        #expect(recorder.ensureKeyCleared())
+        #expect(recorder.consumeEncryptionKeyCallCount == 1)
         #expect(session.state == .idle)
     }
 

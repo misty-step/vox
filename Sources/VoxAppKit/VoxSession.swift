@@ -412,6 +412,7 @@ public final class VoxSession: ObservableObject {
             await cancelAndAwaitStreamingSetup()
             let streamingBridge = detachStreamingBridge()
             await streamingBridge?.cancel()
+            (recorder as? EncryptedAudioRecording)?.discardRecordingEncryptionKey()
 
             let reason: String
             if let voxError = error as? VoxError {
@@ -446,6 +447,18 @@ public final class VoxSession: ObservableObject {
         let streamingBridge = detachStreamingBridge()
 
         var succeeded = false
+        var decryptionKey = (recorder as? EncryptedAudioRecording)?.consumeRecordingEncryptionKey()
+        var temporaryBatchAudioURL: URL?
+
+        defer {
+            if var key = decryptionKey {
+                AudioFileEncryption.zeroizeKey(&key)
+            }
+            if let temporaryBatchAudioURL {
+                SecureFileDeleter.delete(at: temporaryBatchAudioURL)
+            }
+        }
+
         do {
             let active = pipeline ?? makePipeline(dictationID: dictationID)
             let output: String
@@ -455,8 +468,14 @@ public final class VoxSession: ObservableObject {
                     batchPipeline: active,
                     audioURL: url,
                     recordingDurationSeconds: recordingDuration,
-                    dictationID: dictationID
+                    dictationID: dictationID,
+                    decryptionKey: &decryptionKey,
+                    temporaryBatchAudioURL: &temporaryBatchAudioURL
                 )
+            } else if AudioFileEncryption.isEncrypted(url: url) {
+                let prepared = try prepareBatchAudioURL(from: url, decryptionKey: &decryptionKey)
+                temporaryBatchAudioURL = prepared.temporaryAudioURL
+                output = try await active.process(audioURL: prepared.batchAudioURL)
             } else {
                 output = try await active.process(audioURL: url)
             }
@@ -486,7 +505,11 @@ public final class VoxSession: ObservableObject {
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
-            let preservedURL = preserveAudio(at: url)
+            let preservedURL = preserveRecoverableAudio(
+                recordedURL: url,
+                decryptionKey: &decryptionKey,
+                temporaryBatchAudioURL: temporaryBatchAudioURL
+            )
             let preserved = preservedURL != nil
             if let saved = preservedURL {
                 presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
@@ -522,7 +545,9 @@ public final class VoxSession: ObservableObject {
         batchPipeline: DictationProcessing,
         audioURL: URL,
         recordingDurationSeconds: TimeInterval,
-        dictationID: String
+        dictationID: String,
+        decryptionKey: inout Data?,
+        temporaryBatchAudioURL: inout URL?
     ) async throws -> String {
         let finalizeStart = CFAbsoluteTimeGetCurrent()
         func logFinalize(outcome: String, reason: String, transcriptChars: Int? = nil) {
@@ -603,7 +628,80 @@ public final class VoxSession: ObservableObject {
         }
 
         await bridge.cancel()
-        return try await batchPipeline.process(audioURL: audioURL)
+        let preparedAudio = try prepareBatchAudioURL(from: audioURL, decryptionKey: &decryptionKey)
+        temporaryBatchAudioURL = preparedAudio.temporaryAudioURL
+        return try await batchPipeline.process(audioURL: preparedAudio.batchAudioURL)
+    }
+
+    private func prepareBatchAudioURL(
+        from recordedURL: URL,
+        decryptionKey: inout Data?
+    ) throws -> (batchAudioURL: URL, temporaryAudioURL: URL?) {
+        guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
+            return (recordedURL, nil)
+        }
+
+        guard var key = decryptionKey else {
+            throw VoxError.internalError("Missing decryption key for encrypted recording.")
+        }
+
+        let plainURL = recordedURL.deletingPathExtension()
+        defer {
+            AudioFileEncryption.zeroizeKey(&key)
+            decryptionKey = nil
+        }
+
+        do {
+            try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+        } catch {
+            SecureFileDeleter.delete(at: plainURL)
+            throw error
+        }
+        return (plainURL, plainURL)
+    }
+
+    /// Persists audio for troubleshooting while keeping it usable (decryptable) when encrypted recording is enabled.
+    private func preserveRecoverableAudio(
+        recordedURL: URL,
+        decryptionKey: inout Data?,
+        temporaryBatchAudioURL: URL?
+    ) -> URL? {
+        guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
+            return preserveAudio(at: recordedURL)
+        }
+
+        if let temporaryBatchAudioURL {
+            if let preservedPlain = preserveAudio(at: temporaryBatchAudioURL) {
+                SecureFileDeleter.delete(at: recordedURL)
+                return preservedPlain
+            }
+            return preserveAudio(at: recordedURL)
+        }
+
+        if var key = decryptionKey {
+            let plainURL = recordedURL.deletingPathExtension()
+            defer {
+                AudioFileEncryption.zeroizeKey(&key)
+                decryptionKey = nil
+            }
+
+            do {
+                try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+            } catch {
+                SecureFileDeleter.delete(at: plainURL)
+                return preserveAudio(at: recordedURL)
+            }
+
+            if let preservedPlain = preserveAudio(at: plainURL) {
+                SecureFileDeleter.delete(at: recordedURL)
+                return preservedPlain
+            }
+
+            SecureFileDeleter.delete(at: plainURL)
+            return preserveAudio(at: recordedURL)
+        }
+
+        return preserveAudio(at: recordedURL)
     }
 
     private func detachStreamingBridge() -> StreamingAudioBridge? {
