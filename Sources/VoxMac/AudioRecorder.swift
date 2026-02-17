@@ -317,7 +317,8 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming, Encrypted
             return encryptedURL
         } catch {
             SecureFileDeleter.delete(at: plainURL)
-            throw VoxError.internalError("Failed to encrypt recording.")
+            SecureFileDeleter.delete(at: encryptedURL)
+            throw VoxError.internalError("Failed to encrypt recording: \(error.localizedDescription)")
         }
     }
 

@@ -505,7 +505,11 @@ public final class VoxSession: ObservableObject {
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
-            let preservedURL = preserveAudio(at: url)
+            let preservedURL = preserveRecoverableAudio(
+                recordedURL: url,
+                decryptionKey: &decryptionKey,
+                temporaryBatchAudioURL: temporaryBatchAudioURL
+            )
             let preserved = preservedURL != nil
             if let saved = preservedURL {
                 presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
@@ -527,9 +531,7 @@ public final class VoxSession: ObservableObject {
         }
 
         if succeeded {
-            if !AudioFileEncryption.isEncrypted(url: url) {
-                SecureFileDeleter.delete(at: url)
-            }
+            SecureFileDeleter.delete(at: url)
             state = .idle
             hud.showSuccess()
         } else {
@@ -649,8 +651,57 @@ public final class VoxSession: ObservableObject {
             decryptionKey = nil
         }
 
-        try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+        do {
+            try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+        } catch {
+            SecureFileDeleter.delete(at: plainURL)
+            throw error
+        }
         return (plainURL, plainURL)
+    }
+
+    /// Persists audio for troubleshooting while keeping it usable (decryptable) when encrypted recording is enabled.
+    private func preserveRecoverableAudio(
+        recordedURL: URL,
+        decryptionKey: inout Data?,
+        temporaryBatchAudioURL: URL?
+    ) -> URL? {
+        guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
+            return preserveAudio(at: recordedURL)
+        }
+
+        if let temporaryBatchAudioURL {
+            if let preservedPlain = preserveAudio(at: temporaryBatchAudioURL) {
+                SecureFileDeleter.delete(at: recordedURL)
+                return preservedPlain
+            }
+            return preserveAudio(at: recordedURL)
+        }
+
+        if var key = decryptionKey {
+            let plainURL = recordedURL.deletingPathExtension()
+            defer {
+                AudioFileEncryption.zeroizeKey(&key)
+                decryptionKey = nil
+            }
+
+            do {
+                try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+            } catch {
+                SecureFileDeleter.delete(at: plainURL)
+                return preserveAudio(at: recordedURL)
+            }
+
+            if let preservedPlain = preserveAudio(at: plainURL) {
+                SecureFileDeleter.delete(at: recordedURL)
+                return preservedPlain
+            }
+
+            SecureFileDeleter.delete(at: plainURL)
+            return preserveAudio(at: recordedURL)
+        }
+
+        return preserveAudio(at: recordedURL)
     }
 
     private func detachStreamingBridge() -> StreamingAudioBridge? {

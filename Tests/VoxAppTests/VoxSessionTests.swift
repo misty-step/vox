@@ -856,7 +856,7 @@ struct VoxSessionDITests {
         #expect(pipeline.lastAudioURL == plainURL)
         #expect(AudioFileEncryption.isEncrypted(url: pipeline.lastAudioURL ?? URL(fileURLWithPath: "")) == false)
         #expect(!FileManager.default.fileExists(atPath: plainURL.path))
-        #expect(FileManager.default.fileExists(atPath: encryptedURL.path))
+        #expect(!FileManager.default.fileExists(atPath: encryptedURL.path))
         #expect(recorder.ensureKeyCleared())
         #expect(recorder.consumeEncryptionKeyCallCount == 1)
         #expect(session.state == .idle)

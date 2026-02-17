@@ -38,9 +38,8 @@ public enum AudioFileEncryption {
     }
 
     public static func randomKey() -> Data {
-        Data(SymmetricKey(size: .bits256).withUnsafeBytes { bytes in
-            Data(bytes)
-        })
+        let key = SymmetricKey(size: .bits256)
+        return key.withUnsafeBytes { Data($0) }
     }
 
     public static func zeroizeKey(_ key: inout Data) {
