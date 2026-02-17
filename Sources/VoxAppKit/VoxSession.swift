@@ -87,11 +87,14 @@ public final class VoxSession: ObservableObject {
             enableRewriteCache: true,
             enableOpus: hasCloudProviders,
             timingHandler: { timing in
+                let totalStageMs = Int((timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime) * 1000)
                 DiagnosticsStore.recordAsync(
                     name: "pipeline_timing",
                     sessionID: dictationID,
                     fields: [
+                        "processing_level": .string(timing.processingLevel?.rawValue ?? ""),
                         "total_ms": .int(Int(timing.totalTime * 1000)),
+                        "total_stage_ms": .int(totalStageMs),
                         "encode_ms": .int(Int(timing.encodeTime * 1000)),
                         "stt_ms": .int(Int(timing.sttTime * 1000)),
                         "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),

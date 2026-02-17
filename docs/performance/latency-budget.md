@@ -68,3 +68,9 @@ Inputs:
 Outputs (dated):
 - `docs/performance/rewrite-benchmark-results-YYYY-MM-DD.json`
 - `docs/performance/rewrite-model-bakeoff-YYYY-MM-DD.md`
+
+## Live Perf Audit
+
+CI runs a live perf audit (real STT + rewrite) and posts a PR comment report.
+
+See `docs/performance/README.md` and `.github/workflows/perf-audit.yml`.

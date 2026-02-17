@@ -103,6 +103,7 @@ export VOX_MAX_CONCURRENT_STT=8            # optional global STT in-flight limit
 export VOX_DISABLE_STREAMING_STT=1         # optional: disable streaming STT path
 export VOX_STT_ROUTING=hedged              # optional: parallel race w stagger delays
 export VOX_AUDIO_BACKEND=recorder          # optional: legacy file-only audio backend
+export VOX_PERF_INGEST_URL=https://...     # optional: upload pipeline_timing perf events as NDJSON (disabled by default)
 ```
 
 **Settings window** (persisted in Keychain):

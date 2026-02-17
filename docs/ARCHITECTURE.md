@@ -103,6 +103,7 @@ Vox records structured, privacy-safe diagnostics events to `~/Library/Applicatio
 - `diagnostics-current.jsonl` (append-only), rotated to `diagnostics-<timestamp>-<id>.jsonl`
 - Export via menu bar: "Export Diagnostics…" creates a zip containing `context.json` + recent log files (copies path to clipboard)
 - Logs never include transcript text or API keys (counts/booleans/timings only)
+- Optional: set `VOX_PERF_INGEST_URL` to upload `pipeline_timing` events as NDJSON (disabled by default)
 
 ## Audio Capture Contract
 

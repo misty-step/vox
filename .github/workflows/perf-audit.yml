@@ -1,0 +1,167 @@
+name: 'Perf: Audit'
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+jobs:
+  pr:
+    name: Perf Audit (PR Comment)
+    if: github.event_name == 'pull_request'
+    runs-on: macos-14
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Perf Audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          OUT_DIR="perf-out"
+          mkdir -p "$OUT_DIR"
+
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+
+          # Secrets are unavailable to fork PRs. Keep this non-failing and still comment.
+          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; }; then
+            bash scripts/perf/write-skip-report.sh "$OUT_DIR/report.md" "missing OPENROUTER_API_KEY and/or STT API key in CI"
+            bash scripts/perf/post-pr-comment.sh "$PR_NUMBER" "$OUT_DIR/report.md"
+            exit 0
+          fi
+
+          bash scripts/perf/make-fixture-audio.sh "$OUT_DIR/fixture.caf"
+
+          swift run VoxPerfAudit \
+            --audio "$OUT_DIR/fixture.caf" \
+            --output "$OUT_DIR/head.json" \
+            --iterations 2 \
+            --commit "${GITHUB_SHA}" \
+            --pr "$PR_NUMBER" \
+            --label "ci"
+
+          # Optional baseline: pulled from perf-audit branch if present.
+          git fetch origin perf-audit || true
+          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
+            if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$OUT_DIR/base.json" 2>/dev/null; then
+              python3 scripts/perf/format-perf-report.py \
+                --base "$OUT_DIR/base.json" \
+                --head "$OUT_DIR/head.json" \
+                --base-sha "$BASE_SHA" \
+                --head-sha "$GITHUB_SHA" \
+                --out "$OUT_DIR/report.md"
+            fi
+          fi
+
+          if [ ! -f "$OUT_DIR/report.md" ]; then
+            python3 scripts/perf/format-perf-report.py \
+              --head "$OUT_DIR/head.json" \
+              --head-sha "$GITHUB_SHA" \
+              --out "$OUT_DIR/report.md"
+          fi
+
+          bash scripts/perf/post-pr-comment.sh "$PR_NUMBER" "$OUT_DIR/report.md"
+
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-audit-pr-${{ github.run_number }}
+          path: perf-out/
+          retention-days: 30
+
+  master:
+    name: Perf Audit (Persist Baseline)
+    if: github.event_name == 'push'
+    runs-on: macos-14
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Run Audit
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          OUT_DIR="perf-out"
+          mkdir -p "$OUT_DIR"
+
+          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; }; then
+            echo "Perf audit skipped: missing OPENROUTER_API_KEY and/or STT API key."
+            exit 0
+          fi
+
+          bash scripts/perf/make-fixture-audio.sh "$OUT_DIR/fixture.caf"
+
+          swift run VoxPerfAudit \
+            --audio "$OUT_DIR/fixture.caf" \
+            --output "$OUT_DIR/head.json" \
+            --iterations 3 \
+            --commit "${GITHUB_SHA}" \
+            --label "ci-master"
+
+      - name: Persist To perf-audit Branch
+        if: always() && hashFiles('perf-out/head.json') != ''
+        run: |
+          set -euo pipefail
+
+          SHA="${GITHUB_SHA}"
+
+          git fetch origin perf-audit || true
+
+          WORKTREE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vox-perf-audit.XXXXXX")"
+          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
+            git worktree add "$WORKTREE_DIR" origin/perf-audit
+          else
+            git worktree add "$WORKTREE_DIR" --detach
+            cd "$WORKTREE_DIR"
+            git checkout --orphan perf-audit
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          cd "$WORKTREE_DIR"
+          mkdir -p audit
+          cp "${GITHUB_WORKSPACE}/perf-out/head.json" "audit/${SHA}.json"
+
+          git add "audit/${SHA}.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "perf(audit): ${SHA}" || exit 0
+          git push origin HEAD:perf-audit
+
+      - name: Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-audit-master-${{ github.run_number }}
+          path: perf-out/
+          retention-days: 30
