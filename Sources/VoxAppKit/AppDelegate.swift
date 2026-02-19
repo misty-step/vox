@@ -58,6 +58,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let statusBarController = StatusBarController(
             onToggle: { Task { await session.toggleRecording() } },
+            onCopyLastRawTranscript: { Task { await session.copyLastRawTranscript() } },
+            onRetryLastRewrite: { Task { await session.retryLastRewrite() } },
             onSetupChecklist: { [weak self] in self?.showOnboardingChecklist() },
             onSettings: { [weak self] in self?.showSettings() },
             onQuit: { NSApplication.shared.terminate(nil) }

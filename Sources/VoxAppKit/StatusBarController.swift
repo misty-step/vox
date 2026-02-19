@@ -146,6 +146,8 @@ public final class StatusBarController: NSObject {
 
     private let statusItem: NSStatusItem
     private let onToggle: () -> Void
+    private let onCopyLastRawTranscript: () -> Void
+    private let onRetryLastRewrite: () -> Void
     private let onSetupChecklist: () -> Void
     private let onSettings: () -> Void
     private let onQuit: () -> Void
@@ -158,11 +160,15 @@ public final class StatusBarController: NSObject {
 
     public init(
         onToggle: @escaping () -> Void,
+        onCopyLastRawTranscript: @escaping () -> Void,
+        onRetryLastRewrite: @escaping () -> Void,
         onSetupChecklist: @escaping () -> Void,
         onSettings: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
         self.onToggle = onToggle
+        self.onCopyLastRawTranscript = onCopyLastRawTranscript
+        self.onRetryLastRewrite = onRetryLastRewrite
         self.onSetupChecklist = onSetupChecklist
         self.onSettings = onSettings
         self.onQuit = onQuit
@@ -272,6 +278,28 @@ public final class StatusBarController: NSObject {
         menu.addItem(processingItem)
         menu.addItem(.separator())
 
+        let copyRawItem = NSMenuItem(
+            title: "Copy Last Raw Transcript",
+            action: #selector(copyLastRawTranscript),
+            keyEquivalent: ""
+        )
+        copyRawItem.target = self
+        menu.addItem(copyRawItem)
+
+        let retryRewriteItem = NSMenuItem(
+            title: "Retry Last Rewrite",
+            action: #selector(retryLastRewrite),
+            keyEquivalent: ""
+        )
+        retryRewriteItem.target = self
+        if case .idle = currentState {
+            retryRewriteItem.isEnabled = true
+        } else {
+            retryRewriteItem.isEnabled = false
+        }
+        menu.addItem(retryRewriteItem)
+        menu.addItem(.separator())
+
         let setupItem = NSMenuItem(title: "Setup Checklist...", action: #selector(openSetupChecklist), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
@@ -347,6 +375,8 @@ public final class StatusBarController: NSObject {
     }
 
     @objc private func toggleRecording() { onToggle() }
+    @objc private func copyLastRawTranscript() { onCopyLastRawTranscript() }
+    @objc private func retryLastRewrite() { onRetryLastRewrite() }
     @objc private func openSetupChecklist() { onSetupChecklist() }
     @objc private func openSettings() { onSettings() }
     @objc private func exportDiagnostics() {

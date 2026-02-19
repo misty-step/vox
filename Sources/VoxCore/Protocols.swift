@@ -110,6 +110,16 @@ public protocol TranscriptProcessing: Sendable {
     func process(transcript: String) async throws -> String
 }
 
+/// Advanced transcript processing used for recovery flows.
+/// Allows replaying rewrite with an explicit level and cache policy.
+public protocol TranscriptRecoveryProcessing: TranscriptProcessing {
+    func process(
+        transcript: String,
+        processingLevel: ProcessingLevel,
+        bypassRewriteCache: Bool
+    ) async throws -> String
+}
+
 /// Read-only preferences abstraction for dependency injection.
 @MainActor
 public protocol PreferencesReading: AnyObject, Sendable {

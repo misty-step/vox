@@ -17,6 +17,7 @@ SuperWhisper alternative that's simpler and smarter.
 - **Microphone selection**: choose input device from Settings
 - **Auto-paste** directly into any application
 - **Menu bar app** with minimal footprint
+- **Recovery actions**: menu bar supports "Copy Last Raw Transcript" and "Retry Last Rewrite"
 - **State-aware visual identity**: consistent menu icon + HUD language for ready/recording/processing
 - **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
 - **BYOK** (Bring Your Own Keys) for complete control over costs

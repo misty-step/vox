@@ -42,7 +42,7 @@ private func formatBytes(_ bytes: Int) -> String {
     return String(format: "%.1fMB", Double(bytes) / (1024 * 1024))
 }
 
-public final class DictationPipeline: DictationProcessing, TranscriptProcessing {
+public final class DictationPipeline: DictationProcessing, TranscriptRecoveryProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
     private let paster: TextPaster
@@ -58,6 +58,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     private let audioFrameValidator: @Sendable (URL) throws -> Void
     // Invoked once per process call. On failures it receives partial stage timings.
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
+    // Invoked when a transcript is successfully processed and pasted.
+    private let onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)?
 
     #if DEBUG
     private nonisolated(unsafe) var gateAccepts = 0
@@ -76,7 +78,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         },
         opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
-        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
+        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
+        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)? = nil
     ) {
         self.init(
             stt: stt,
@@ -89,7 +92,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
             convertCAFToOpus: convertCAFToOpus,
             opusBypassThreshold: opusBypassThreshold,
             pipelineTimeout: pipelineTimeout,
-            timingHandler: timingHandler
+            timingHandler: timingHandler,
+            onProcessedTranscript: onProcessedTranscript
         )
     }
 
@@ -109,6 +113,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         pipelineTimeout: TimeInterval = 120,
         rewriteStageTimeouts: RewriteStageTimeouts = .default,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
+        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)? = nil,
         audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { url in
             try CapturedAudioInspector.ensureHasAudioFrames(at: url)
         }
@@ -125,6 +130,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         self.pipelineTimeout = pipelineTimeout
         self.rewriteStageTimeouts = rewriteStageTimeouts
         self.timingHandler = timingHandler
+        self.onProcessedTranscript = onProcessedTranscript
         self.audioFrameValidator = audioFrameValidator
     }
 
@@ -202,7 +208,12 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let level = await MainActor.run { prefs.processingLevel }
         timing.processingLevel = level
         logActiveProcessingLevel(level)
-        let processed = try await rewriteAndPaste(transcript: transcript, level: level)
+        let processed = try await rewriteAndPaste(
+            transcript: transcript,
+            level: level,
+            bypassRewriteCache: false
+        )
+        onProcessedTranscript?(transcript, processed.text, level)
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
 
@@ -213,6 +224,19 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
     }
 
     public func process(transcript rawTranscript: String) async throws -> String {
+        let level = await MainActor.run { prefs.processingLevel }
+        return try await process(
+            transcript: rawTranscript,
+            processingLevel: level,
+            bypassRewriteCache: false
+        )
+    }
+
+    public func process(
+        transcript rawTranscript: String,
+        processingLevel: ProcessingLevel,
+        bypassRewriteCache: Bool
+    ) async throws -> String {
         var timing = PipelineTiming()
         defer {
             timingHandler?(timing)
@@ -220,10 +244,14 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
-        let level = await MainActor.run { prefs.processingLevel }
-        timing.processingLevel = level
-        logActiveProcessingLevel(level)
-        let processed = try await rewriteAndPaste(transcript: transcript, level: level)
+        timing.processingLevel = processingLevel
+        logActiveProcessingLevel(processingLevel)
+        let processed = try await rewriteAndPaste(
+            transcript: transcript,
+            level: processingLevel,
+            bypassRewriteCache: bypassRewriteCache
+        )
+        onProcessedTranscript?(transcript, processed.text, processingLevel)
 
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
@@ -236,7 +264,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
 
     private func rewriteAndPaste(
         transcript: String,
-        level: ProcessingLevel
+        level: ProcessingLevel,
+        bypassRewriteCache: Bool
     ) async throws -> (text: String, rewriteTime: TimeInterval, pasteTime: TimeInterval) {
         var output = transcript
         var rewriteTime: TimeInterval = 0
@@ -245,6 +274,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
             let model = level.defaultModel
             do {
                 if enableRewriteCache,
+                   !bypassRewriteCache,
                    let cached = await rewriteCache.value(
                     for: transcript,
                     level: level,

@@ -155,14 +155,17 @@ final class DefaultShowSuccessHUD: HUDDisplaying {
 }
 
 @MainActor
-final class MockPipeline: DictationProcessing, TranscriptProcessing {
+final class MockPipeline: DictationProcessing, TranscriptRecoveryProcessing {
     var processCallCount = 0
     var lastAudioURL: URL?
     var result: String = "mock transcript"
     var shouldThrow = false
     var errorToThrow: Error?
     var processTranscriptCallCount = 0
+    var processRecoveryCallCount = 0
     var lastTranscript: String?
+    var lastRecoveryLevel: ProcessingLevel?
+    var lastBypassRewriteCache: Bool?
     var transcriptResult: String = "mock transcript"
     var transcriptError: Error?
 
@@ -181,6 +184,22 @@ final class MockPipeline: DictationProcessing, TranscriptProcessing {
     func process(transcript: String) async throws -> String {
         processTranscriptCallCount += 1
         lastTranscript = transcript
+        if let transcriptError {
+            throw transcriptError
+        }
+        return transcriptResult
+    }
+
+    func process(
+        transcript: String,
+        processingLevel: ProcessingLevel,
+        bypassRewriteCache: Bool
+    ) async throws -> String {
+        processRecoveryCallCount += 1
+        processTranscriptCallCount += 1
+        lastTranscript = transcript
+        lastRecoveryLevel = processingLevel
+        lastBypassRewriteCache = bypassRewriteCache
         if let transcriptError {
             throw transcriptError
         }
@@ -894,6 +913,114 @@ struct VoxSessionDITests {
         #expect(streamingSession.sentChunks.count == sentBefore)
         #expect(pipeline.processCallCount == 0)
         #expect(errors.count == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Copy last raw transcript uses recovery snapshot")
+    @MainActor func copyLastRawTranscript_usesRecoverySnapshot() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+        await recoveryStore.store(
+            rawTranscript: "raw transcript text",
+            finalText: "formatted output text",
+            processingLevel: .polish
+        )
+
+        var copiedText: String?
+        var errors: [String] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) },
+            copyRawTranscriptToClipboard: { copiedText = $0 },
+            recoveryStore: recoveryStore
+        )
+
+        await session.copyLastRawTranscript()
+
+        #expect(copiedText == "raw transcript text")
+        #expect(errors.isEmpty)
+    }
+
+    @Test("Copy last raw transcript shows error when unavailable")
+    @MainActor func copyLastRawTranscript_missingSnapshot_showsError() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+
+        var copiedText: String?
+        var errors: [String] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) },
+            copyRawTranscriptToClipboard: { copiedText = $0 },
+            recoveryStore: recoveryStore
+        )
+
+        await session.copyLastRawTranscript()
+
+        #expect(copiedText == nil)
+        #expect(errors.count == 1)
+    }
+
+    @Test("Retry last rewrite uses stored level and bypasses rewrite cache")
+    @MainActor func retryLastRewrite_usesStoredLevelAndBypassesCache() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+        await recoveryStore.store(
+            rawTranscript: "retry transcript text",
+            finalText: "previous output",
+            processingLevel: .polish
+        )
+
+        let pipeline = MockPipeline()
+        pipeline.transcriptResult = "retried output"
+        let hud = MockHUD()
+        var errors: [String] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: pipeline,
+            hud: hud,
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) },
+            recoveryStore: recoveryStore
+        )
+
+        await session.retryLastRewrite()
+
+        #expect(pipeline.processRecoveryCallCount == 1)
+        #expect(pipeline.lastTranscript == "retry transcript text")
+        #expect(pipeline.lastRecoveryLevel == .polish)
+        #expect(pipeline.lastBypassRewriteCache == true)
+        #expect(hud.showProcessingCallCount == 1)
+        #expect(hud.showSuccessCallCount == 1)
+        #expect(errors.isEmpty)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Retry last rewrite shows error when unavailable")
+    @MainActor func retryLastRewrite_missingSnapshot_showsError() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+        let hud = MockHUD()
+        var errors: [String] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: MockPipeline(),
+            hud: hud,
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) },
+            recoveryStore: recoveryStore
+        )
+
+        await session.retryLastRewrite()
+
+        #expect(errors.count == 1)
+        #expect(hud.hideCallCount == 1)
         #expect(session.state == .idle)
     }
 }

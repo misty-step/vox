@@ -1114,6 +1114,74 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 2)
     }
 
+    @Test("Recovery replay bypasses cache and re-runs rewrite")
+    func process_transcriptReplay_bypassCache_rerunsRewrite() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("unused")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Cache phrase one."), .success("Cache phrase one retry.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            rewriteCache: makeRewriteCache(),
+            enableRewriteCache: true,
+            enableOpus: false
+        )
+
+        let first = try await pipeline.process(
+            transcript: "cache phrase one",
+            processingLevel: .clean,
+            bypassRewriteCache: false
+        )
+        let second = try await pipeline.process(
+            transcript: "cache phrase one",
+            processingLevel: .clean,
+            bypassRewriteCache: true
+        )
+
+        #expect(first == "Cache phrase one.")
+        #expect(second == "Cache phrase one retry.")
+        #expect(rewriter.callCount == 2)
+        #expect(paster.callCount == 2)
+    }
+
+    @Test("Recovery replay uses explicit processing level model")
+    func process_transcriptReplay_usesExplicitProcessingLevel() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("unused")]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success("Recovered output.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        _ = try await pipeline.process(
+            transcript: "retry transcript text",
+            processingLevel: .polish,
+            bypassRewriteCache: true
+        )
+
+        #expect(rewriter.lastModel == ProcessingLevel.polish.defaultModel)
+    }
+
     @Test("Rewrite cache key includes processing level/model")
     func process_rewriteCache_levelChange_missesCache() async throws {
         let stt = MockSTTProvider()
