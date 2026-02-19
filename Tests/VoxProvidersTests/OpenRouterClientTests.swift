@@ -75,7 +75,7 @@ struct OpenRouterClientTests {
     }
 
     @Test("Model usage callback reports served model from response")
-    func modelUsageReportsServedModel() async throws {
+    func test_modelUsage_reportsServedModelWhenResponseIncludesModel() async throws {
         let usage = Capture<[(model: String, isFallback: Bool)]>([])
         URLProtocolStub.requestHandler = { request in
             (
@@ -101,7 +101,7 @@ struct OpenRouterClientTests {
     }
 
     @Test("Model usage callback falls back to requested model when response omits model")
-    func modelUsageFallsBackToRequestedModel() async throws {
+    func test_modelUsage_fallsBackToRequestedModelWhenResponseOmitsModel() async throws {
         let usage = Capture<[String]>([])
         URLProtocolStub.requestHandler = { request in
             (
