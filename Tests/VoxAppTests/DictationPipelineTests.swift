@@ -130,7 +130,6 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
     var elevenLabsAPIKey: String = ""
     var openRouterAPIKey: String = ""
     var deepgramAPIKey: String = ""
-    var openAIAPIKey: String = ""
     var geminiAPIKey: String = ""
 }
 

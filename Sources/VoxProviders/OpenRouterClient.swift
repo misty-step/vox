@@ -5,15 +5,18 @@ public final class OpenRouterClient: RewriteProvider {
     private let apiKey: String
     private let session: URLSession
     private let fallbackModels: [String]
+    private let onModelUsed: (@Sendable (_ routerModel: String, _ isFallback: Bool) -> Void)?
 
     public init(
         apiKey: String,
         session: URLSession = .shared,
-        fallbackModels: [String] = []
+        fallbackModels: [String] = [],
+        onModelUsed: (@Sendable (_ routerModel: String, _ isFallback: Bool) -> Void)? = nil
     ) {
         self.apiKey = apiKey
         self.session = session
         self.fallbackModels = fallbackModels
+        self.onModelUsed = onModelUsed
     }
 
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
@@ -24,18 +27,19 @@ public final class OpenRouterClient: RewriteProvider {
             try Task.checkCancellation()
             let start = CFAbsoluteTimeGetCurrent()
             do {
-                let result = try await executeRequest(
+                let rewriteResult = try await executeRequest(
                     transcript: transcript,
                     systemPrompt: systemPrompt,
                     model: currentModel
                 )
+                onModelUsed?(rewriteResult.servedModel, index > 0)
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
                 if index > 0 {
                     print("[Rewrite] Fallback \(currentModel) succeeded in \(String(format: "%.2f", elapsed))s")
                 } else {
                     print("[Rewrite] \(currentModel) completed in \(String(format: "%.2f", elapsed))s")
                 }
-                return result
+                return rewriteResult.content
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -54,11 +58,16 @@ public final class OpenRouterClient: RewriteProvider {
 
     // MARK: - Private
 
+    private struct RewriteResult {
+        let content: String
+        let servedModel: String
+    }
+
     private func executeRequest(
         transcript: String,
         systemPrompt: String,
         model: String
-    ) async throws -> String {
+    ) async throws -> RewriteResult {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         // OpenRouter requires provider-prefixed model names (e.g. "google/gemini-2.5-flash-lite")
         let routerModel = model.contains("/") ? model : "google/\(model)"
@@ -98,7 +107,14 @@ public final class OpenRouterClient: RewriteProvider {
             guard let content = result.choices.first?.message.content else {
                 throw RewriteError.unknown("No content")
             }
-            return content
+            let servedModel = result.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedModel: String
+            if let servedModel, !servedModel.isEmpty {
+                resolvedModel = servedModel
+            } else {
+                resolvedModel = routerModel
+            }
+            return RewriteResult(content: content, servedModel: resolvedModel)
         case 401: throw RewriteError.auth
         case 429: throw RewriteError.throttled
         case 502, 503: throw RewriteError.network("HTTP \(httpResponse.statusCode)")
@@ -145,5 +161,6 @@ private struct OpenRouterResponse: Decodable {
         struct Message: Decodable { let content: String }
         let message: Message
     }
+    let model: String?
     let choices: [Choice]
 }

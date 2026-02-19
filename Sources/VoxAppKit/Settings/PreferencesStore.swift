@@ -52,11 +52,6 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         set { setAPIKey(newValue, for: .deepgramAPIKey) }
     }
 
-    public var openAIAPIKey: String {
-        get { apiKey(env: "OPENAI_API_KEY", keychain: .openAIAPIKey) }
-        set { setAPIKey(newValue, for: .openAIAPIKey) }
-    }
-
     public var geminiAPIKey: String {
         get { apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey) }
         set { setAPIKey(newValue, for: .geminiAPIKey) }

@@ -218,7 +218,6 @@ final class MockPreferencesStore: PreferencesReading {
     let elevenLabsAPIKey: String = ""
     let openRouterAPIKey: String = ""
     let deepgramAPIKey: String = ""
-    let openAIAPIKey: String = ""
     let geminiAPIKey: String = ""
 }
 

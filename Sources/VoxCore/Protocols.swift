@@ -118,6 +118,5 @@ public protocol PreferencesReading: AnyObject, Sendable {
     var elevenLabsAPIKey: String { get }
     var openRouterAPIKey: String { get }
     var deepgramAPIKey: String { get }
-    var openAIAPIKey: String { get }
     var geminiAPIKey: String { get }
 }

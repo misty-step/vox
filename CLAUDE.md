@@ -46,7 +46,7 @@ Providers are wrapped in composable decorators, with default routing via sequent
                                    ▼
                      Sequential FallbackSTTProvider chain
                                    │
-      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Whisper(Timeout+Retry) → Apple Speech
+      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Apple Speech
 ```
 
 - **Default routing**: sequential primary+fallback — tries providers in order, falls back on failure
@@ -78,7 +78,7 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Quality gate**: `RewriteQualityGate` scores candidate/raw similarity (ratio + distance metrics) for evaluation and benchmarks (clean: 0.6, polish: 0.3).
 
-**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional), `OPENAI_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback).
+**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback).
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 

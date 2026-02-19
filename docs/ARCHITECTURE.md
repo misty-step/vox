@@ -22,12 +22,12 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 │ AudioRecorder            │     │ ElevenLabsClient (STT)         │
 │ AudioDeviceManager       │     │ DeepgramClient (STT)           │
 │                          │     │ DeepgramStreamingClient (STT)  │
-│ HotkeyMonitor            │     │ WhisperClient (STT)            │
- │ HUDController / HUDView  │     │ AppleSpeechClient (STT)        │
- │ ClipboardPaster          │     │ AudioConverter (CAF→WAV)       │
- │ KeychainHelper           │     │ GeminiClient (rewrite)         │
- │ PermissionManager        │     │ OpenRouterClient (rewrite)     │
- │                          │     │ RewritePrompts                 │
+│ HotkeyMonitor            │     │ AppleSpeechClient (STT)        │
+ │ HUDController / HUDView  │     │ AudioConverter (CAF→WAV)       │
+ │ ClipboardPaster          │     │ GeminiClient (rewrite)         │
+ │ KeychainHelper           │     │ OpenRouterClient (rewrite)     │
+ │ PermissionManager        │     │ RewritePrompts                 │
+ │                          │     │                               │
  └──────────────────────────┘     └───────────────────────────────┘
                 ▲                         ▲
                 └──────────────┬──────────┘
@@ -57,7 +57,7 @@ Default routing: sequential primary → fallback → Apple Speech safety net.
                                    ▼
                      Sequential FallbackSTTProvider chain
                                    │
-      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Whisper(Timeout+Retry) → Apple Speech
+      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Apple Speech
 ```
 
 Opt-in hedged routing: `VOX_STT_ROUTING=hedged` runs a staggered parallel race.
@@ -68,7 +68,7 @@ Opt-in hedged routing: `VOX_STT_ROUTING=hedged` runs a staggered parallel race.
                                            ▼
                                  HedgedSTTProvider
                                             │
-      Apple Speech(0s) • ElevenLabs(0s Timeout+Retry) • Deepgram(5s Timeout+Retry) • Whisper(10s Timeout+Retry)
+      Apple Speech(0s) • ElevenLabs(0s Timeout+Retry) • Deepgram(5s Timeout+Retry)
 ```
 
 Each decorator is a `STTProvider`:
@@ -103,6 +103,7 @@ Vox records structured, privacy-safe diagnostics events to `~/Library/Applicatio
 - `diagnostics-current.jsonl` (append-only), rotated to `diagnostics-<timestamp>-<id>.jsonl`
 - Export via menu bar: "Export Diagnostics…" creates a zip containing `context.json` + recent log files (copies path to clipboard)
 - Logs never include transcript text or API keys (counts/booleans/timings only)
+- Optional: set `VOX_PERF_INGEST_URL` to upload `pipeline_timing` events as NDJSON (disabled by default)
 
 ## Audio Capture Contract
 
@@ -217,7 +218,6 @@ BYOK. `PreferencesStore` reads env first, then Keychain:
 - `GEMINI_API_KEY` — primary rewriting
 - `OPENROUTER_API_KEY` — rewrite fallback
 - `DEEPGRAM_API_KEY` — STT fallback + optional streaming STT
-- `OPENAI_API_KEY` — STT fallback via Whisper
 - `VOX_MAX_CONCURRENT_STT` — optional global in-flight STT limit (default: `8`)
 - `VOX_DISABLE_STREAMING_STT` — kill switch to force batch-only STT (`1`/`true`)
 - `VOX_STT_ROUTING` — set to `hedged` for staggered parallel STT race (default: sequential fallback)
@@ -227,7 +227,6 @@ Endpoints:
 - ElevenLabs STT: `https://api.elevenlabs.io/v1/speech-to-text`
 - Deepgram STT: `https://api.deepgram.com/v1/listen?model=nova-3`
 - Deepgram streaming STT: `wss://api.deepgram.com/v1/listen`
-- OpenAI Whisper: `https://api.openai.com/v1/audio/transcriptions`
 - OpenRouter chat: `https://openrouter.ai/api/v1/chat/completions`
 
 Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
@@ -240,7 +239,7 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift`, `StatusBarIconRenderer.swift` |
 | Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
 | Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `SettingsView.swift`, `BasicsSection.swift`, `CloudProvidersSection.swift`, `CloudKeysSheet.swift`, `CloudProviderCatalog.swift` |
-| STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `WhisperClient.swift`, `AppleSpeechClient.swift` |
+| STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
 | Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
@@ -276,7 +275,7 @@ Benchmarks treat below min (or above max when defined) as a reject signal; the r
 ## Logging Convention
 
 All modules log with bracket-prefixed tags to stdout:
-- `[ElevenLabs]`, `[Deepgram]`, `[Whisper]`, `[AppleSpeech]` — provider-level request/response
+- `[ElevenLabs]`, `[Deepgram]`, `[AppleSpeech]` — provider-level request/response
 - `[STT]` — decorator-level retries, hedge launches, winner/failure transitions
 - `[Pipeline]` — processing stages
 - `[Vox]` — session-level events

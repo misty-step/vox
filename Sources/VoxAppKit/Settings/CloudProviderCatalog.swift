@@ -25,12 +25,6 @@ enum CloudProviderCatalog {
             detail: "Optional fallback transcription.",
             keyPath: \.deepgramAPIKey
         ),
-        CloudProviderKey(
-            id: "openai-whisper",
-            title: "OpenAI (Whisper)",
-            detail: "Optional fallback transcription via Whisper.",
-            keyPath: \.openAIAPIKey
-        ),
     ]
 
     static let rewriteKeys: [CloudProviderKey] = [

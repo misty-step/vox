@@ -68,7 +68,6 @@ public final class VoxSession: ObservableObject {
         let keys = [
             prefs.elevenLabsAPIKey,
             prefs.deepgramAPIKey,
-            prefs.openAIAPIKey,
         ]
         return keys.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
@@ -87,11 +86,14 @@ public final class VoxSession: ObservableObject {
             enableRewriteCache: true,
             enableOpus: hasCloudProviders,
             timingHandler: { timing in
+                let totalStageMs = Int((timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime) * 1000)
                 DiagnosticsStore.recordAsync(
                     name: "pipeline_timing",
                     sessionID: dictationID,
                     fields: [
+                        "processing_level": .string(timing.processingLevel?.rawValue ?? ""),
                         "total_ms": .int(Int(timing.totalTime * 1000)),
+                        "total_stage_ms": .int(totalStageMs),
                         "encode_ms": .int(Int(timing.encodeTime * 1000)),
                         "stt_ms": .int(Int(timing.sttTime * 1000)),
                         "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
@@ -164,13 +166,6 @@ public final class VoxSession: ObservableObject {
             let deepgram = DeepgramClient(apiKey: deepgramKey)
             let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
             cloudProviders.append((name: "Deepgram", provider: retried))
-        }
-
-        let openAIKey = prefs.openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !openAIKey.isEmpty {
-            let whisper = WhisperClient(apiKey: openAIKey)
-            let retried = RetryingSTTProvider(provider: whisper, maxRetries: 2, baseDelay: 0.5, name: "Whisper")
-            cloudProviders.append((name: "Whisper", provider: retried))
         }
 
         let chain: STTProvider

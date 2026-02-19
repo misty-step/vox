@@ -36,7 +36,7 @@ The problem isn't individual states — it's the **transitions**. A user sees: `
 
 These apply regardless of which concept we choose:
 
-1. **Provider names never surface.** "Deepgram", "ElevenLabs", "Whisper" are implementation details.
+1. **Provider names never surface.** "Deepgram" and "ElevenLabs" are implementation details.
 2. **Retry mechanics never surface.** "2/3", "0.5s delay" are engineering telemetry, not user status.
 3. **One processing state, not three.** Recording → Processing → Done. No mid-processing state changes unless significantly delayed.
 4. **Done should register.** 0.5s is too fast for conscious acknowledgment. 1.0–1.5s lets the user see the result before it vanishes.

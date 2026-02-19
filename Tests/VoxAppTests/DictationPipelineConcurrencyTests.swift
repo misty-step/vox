@@ -74,7 +74,6 @@ private final class AccessTrackingPreferences: PreferencesReading {
     var elevenLabsAPIKey: String { "" }
     var openRouterAPIKey: String { "" }
     var deepgramAPIKey: String { "" }
-    var openAIAPIKey: String { "" }
     var geminiAPIKey: String { "" }
 
     var offMainAccessCount: Int { offMainAccesses }

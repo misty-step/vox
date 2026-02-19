@@ -4,7 +4,7 @@
 `Vox` is a Swift Package Manager macOS app (`swift-tools-version: 5.9`, macOS 14+).
 
 - `Sources/VoxCore`: core protocols, errors, decorators, shared utilities.
-- `Sources/VoxProviders`: STT + rewrite providers (ElevenLabs, Deepgram, Whisper, Apple Speech, OpenRouter).
+- `Sources/VoxProviders`: STT + rewrite providers (ElevenLabs, Deepgram, Apple Speech, OpenRouter).
 - `Sources/VoxMac`: macOS integrations (audio, keychain, permissions, hotkeys, paste, HUD).
 - `Sources/VoxAppKit`: app orchestration and UI controllers (`VoxSession`, `DictationPipeline`, settings).
 - `Sources/VoxApp`: executable entrypoint.
@@ -45,4 +45,4 @@
 
 ## Security & Configuration Tips
 - Never commit secrets. Use `.env.local` for local runs and Keychain-backed settings for persisted keys.
-- Expected env vars: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, optional `DEEPGRAM_API_KEY`, `OPENAI_API_KEY`.
+- Expected env vars: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, optional `DEEPGRAM_API_KEY`.

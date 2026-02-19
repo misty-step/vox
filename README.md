@@ -11,7 +11,7 @@ SuperWhisper alternative that's simpler and smarter.
 ## Features
 
 - **Press Option+Space** to start/stop recording
-- **STT resilience**: sequential fallback (ElevenLabs → Deepgram → Whisper → Apple Speech); opt-in hedged routing via `VOX_STT_ROUTING=hedged`
+- **STT resilience**: sequential fallback (ElevenLabs → Deepgram → Apple Speech); opt-in hedged routing via `VOX_STT_ROUTING=hedged`
 - **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
 - **Three processing levels**: Raw (verbatim transcript), Clean (tidy up), Polish (full rewrite)
 - **Microphone selection**: choose input device from Settings
@@ -53,7 +53,6 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 - [Gemini API key](https://ai.google.dev/) for AI rewriting
 - [OpenRouter API key](https://openrouter.ai) (optional) for rewrite fallback
 - [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription and streaming STT
-- [OpenAI API key](https://platform.openai.com) (optional) for Whisper fallback transcription
 - Apple Speech is always available as an on-device fallback (no key needed)
 
 ### Installation
@@ -98,11 +97,11 @@ export ELEVENLABS_API_KEY=your-key
 export GEMINI_API_KEY=your-key
 export OPENROUTER_API_KEY=your-key         # optional rewrite fallback
 export DEEPGRAM_API_KEY=your-key           # optional STT fallback + streaming
-export OPENAI_API_KEY=your-key             # optional Whisper fallback
 export VOX_MAX_CONCURRENT_STT=8            # optional global STT in-flight limit
 export VOX_DISABLE_STREAMING_STT=1         # optional: disable streaming STT path
 export VOX_STT_ROUTING=hedged              # optional: parallel race w stagger delays
 export VOX_AUDIO_BACKEND=recorder          # optional: legacy file-only audio backend
+export VOX_PERF_INGEST_URL=https://...     # optional: upload pipeline_timing perf events as NDJSON (disabled by default)
 ```
 
 **Settings window** (persisted in Keychain):
@@ -149,7 +148,7 @@ swift build -c release
 ```
 Sources/
   VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/routing/health-aware)
-  VoxProviders/  # STT clients (ElevenLabs, Deepgram, Whisper, Apple Speech), OpenRouter rewriting
+  VoxProviders/  # STT clients (ElevenLabs, Deepgram, Apple Speech), OpenRouter rewriting
   VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
   VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
   VoxApp/        # Executable entry point (just main.swift)

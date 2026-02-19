@@ -125,7 +125,6 @@ struct OnboardingChecklistView: View {
     private var hasCloudSTT: Bool {
         isConfigured(prefs.elevenLabsAPIKey)
             || isConfigured(prefs.deepgramAPIKey)
-            || isConfigured(prefs.openAIAPIKey)
     }
 
     private var hasRewrite: Bool {

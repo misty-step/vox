@@ -51,7 +51,6 @@ struct DiagnosticsContext: Codable, Sendable, Equatable {
     struct KeysPresent: Codable, Sendable, Equatable {
         let elevenLabs: Bool
         let deepgram: Bool
-        let openAI: Bool
         let gemini: Bool
         let openRouter: Bool
     }
@@ -107,7 +106,6 @@ struct DiagnosticsContext: Codable, Sendable, Equatable {
             keysPresent: KeysPresent(
                 elevenLabs: configured(prefs.elevenLabsAPIKey),
                 deepgram: configured(prefs.deepgramAPIKey),
-                openAI: configured(prefs.openAIAPIKey),
                 gemini: configured(prefs.geminiAPIKey),
                 openRouter: configured(prefs.openRouterAPIKey)
             )
@@ -162,6 +160,9 @@ actor DiagnosticsStore {
             try rotateIfNeeded(in: directoryURL)
             let fileURL = directoryURL.appendingPathComponent(currentFileName)
             try append(event, to: fileURL)
+            if event.name == DiagnosticsEventNames.pipelineTiming {
+                PerformanceIngestClient.recordAsync(event)
+            }
         } catch {
             #if DEBUG
             print("[Vox] Diagnostics record failed: \(error)")

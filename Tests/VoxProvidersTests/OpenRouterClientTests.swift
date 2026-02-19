@@ -74,6 +74,93 @@ struct OpenRouterClientTests {
         #expect(reasoning["enabled"] as? Bool == false)
     }
 
+    @Test("Model usage callback reports served model from response")
+    func test_modelUsage_reportsServedModelWhenResponseIncludesModel() async throws {
+        let usage = Capture<[(model: String, isFallback: Bool)]>([])
+        URLProtocolStub.requestHandler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"anthropic/claude-sonnet-4.5","choices":[{"message":{"content":"rewritten"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onModelUsed: { model, isFallback in
+                usage.mutate { $0.append((model: model, isFallback: isFallback)) }
+            }
+        )
+        _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
+
+        #expect(usage.value.count == 1)
+        #expect(usage.value[0].model == "anthropic/claude-sonnet-4.5")
+        #expect(usage.value[0].isFallback == false)
+    }
+
+    @Test("Model usage callback falls back to requested model when response omits model")
+    func test_modelUsage_fallsBackToRequestedModelWhenResponseOmitsModel() async throws {
+        let usage = Capture<[String]>([])
+        URLProtocolStub.requestHandler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"rewritten"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onModelUsed: { model, _ in
+                usage.mutate { $0.append(model) }
+            }
+        )
+        _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "gemini-2.5-flash-lite")
+
+        #expect(usage.value == ["google/gemini-2.5-flash-lite"])
+    }
+
+    @Test("Model usage callback marks fallback when second model succeeds")
+    func test_modelUsage_marksFallbackWhenFallbackModelSucceeds() async throws {
+        let usage = Capture<[(model: String, isFallback: Bool)]>([])
+        let attempts = Capture(0)
+
+        URLProtocolStub.requestHandler = { request in
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"fallback/served-model","choices":[{"message":{"content":"ok"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"],
+            onModelUsed: { model, isFallback in
+                usage.mutate { $0.append((model: model, isFallback: isFallback)) }
+            }
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "ok")
+        #expect(usage.value.count == 1)
+        #expect(usage.value[0].model == "fallback/served-model")
+        #expect(usage.value[0].isFallback == true)
+    }
+
     // MARK: - Fallback Model Chain
 
     @Test("Falls back to next model on throttled error")

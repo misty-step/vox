@@ -128,7 +128,6 @@ private func sampleContext() -> DiagnosticsContext {
         keysPresent: .init(
             elevenLabs: false,
             deepgram: false,
-            openAI: false,
             gemini: false,
             openRouter: false
         )

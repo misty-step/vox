@@ -1,0 +1,101 @@
+name: 'Perf: Persist PR Audit'
+
+on:
+  workflow_run:
+    workflows: ['Perf: Audit']
+    types: [completed]
+
+jobs:
+  persist:
+    name: Persist PR Perf JSON
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Perf Artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          RUN_ID="${{ github.event.workflow_run.id }}"
+
+          ART_ID="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '.artifacts[] | select(.name | startswith("perf-audit-pr-")) | .id' \
+            2>/dev/null | head -1 || true)"
+
+          if [ -z "$ART_ID" ]; then
+            echo "No perf-audit-pr-* artifact found."
+            exit 0
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ART_ID}/zip" > artifact.zip
+          unzip -q artifact.zip -d artifact
+
+          HEAD_JSON="$(find artifact -name head.json | head -1 || true)"
+          if [ -z "$HEAD_JSON" ]; then
+            echo "No head.json in artifact (audit likely skipped)."
+            exit 0
+          fi
+
+          echo "HEAD_JSON=$HEAD_JSON" >> "$GITHUB_ENV"
+
+      - name: Persist To perf-audit Branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${HEAD_JSON:-}" ]; then
+            echo "HEAD_JSON unset; skipping."
+            exit 0
+          fi
+
+          python3 - > meta.env <<'PY'
+          import json, os, sys
+          path = os.environ["HEAD_JSON"]
+          data = json.load(open(path, "r", encoding="utf-8"))
+          pr = data.get("pullRequestNumber")
+          sha = data.get("commitSHA")
+          if not pr or not sha:
+            sys.exit(0)
+          print(f"PR_NUMBER={pr}")
+          print(f"SHA={sha}")
+          PY
+
+          source meta.env
+          if [ -z "${PR_NUMBER:-}" ] || [ -z "${SHA:-}" ]; then
+            echo "Missing PR_NUMBER/SHA in head.json; skipping."
+            exit 0
+          fi
+
+          git fetch origin perf-audit || true
+
+          WORKTREE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vox-perf-audit.XXXXXX")"
+          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
+            git worktree add "$WORKTREE_DIR" origin/perf-audit
+          else
+            git worktree add "$WORKTREE_DIR" --detach
+            cd "$WORKTREE_DIR"
+            git checkout --orphan perf-audit
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          cd "$WORKTREE_DIR"
+          mkdir -p "audit/pr/${PR_NUMBER}"
+          cp "${GITHUB_WORKSPACE}/${HEAD_JSON}" "audit/pr/${PR_NUMBER}/${SHA}.json"
+
+          git add "audit/pr/${PR_NUMBER}/${SHA}.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "perf(audit): pr#${PR_NUMBER} ${SHA}" || exit 0
+          git push origin HEAD:perf-audit

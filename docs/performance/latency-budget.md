@@ -68,3 +68,20 @@ Inputs:
 Outputs (dated):
 - `docs/performance/rewrite-benchmark-results-YYYY-MM-DD.json`
 - `docs/performance/rewrite-model-bakeoff-YYYY-MM-DD.md`
+
+## Live Perf Audit
+
+CI runs a live perf audit (real STT + rewrite) and posts a PR comment report.
+
+Durable JSON artifacts are persisted on the `perf-audit` branch:
+- Baselines for `master`: `audit/<commit>.json`
+- PR heads: `audit/pr/<pr-number>/<commit>.json`
+
+Quick fetch example:
+
+```bash
+git fetch origin perf-audit
+git show origin/perf-audit:audit/<commit>.json
+```
+
+See `docs/performance/README.md` and `.github/workflows/perf-audit.yml`.

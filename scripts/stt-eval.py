@@ -141,7 +141,7 @@ def call_deepgram(api_key, wav_path):
 
 
 def call_openai(api_key, wav_path, model):
-    """OpenAI transcription (whisper-1, gpt-4o-mini-transcribe, etc.)."""
+    """OpenAI transcription (gpt-4o-mini-transcribe, etc.)."""
     start = time.monotonic()
     with open(wav_path, "rb") as f:
         resp = requests.post(
@@ -193,11 +193,6 @@ PROVIDERS = [
         "name": "OpenAI gpt-4o-mini-transcribe",
         "key_name": "OPENAI_API_KEY",
         "call": lambda key, path: call_openai(key, path, "gpt-4o-mini-transcribe"),
-    },
-    {
-        "name": "OpenAI whisper-1",
-        "key_name": "OPENAI_API_KEY",
-        "call": lambda key, path: call_openai(key, path, "whisper-1"),
     },
     {
         "name": "Groq whisper-large-v3-turbo",

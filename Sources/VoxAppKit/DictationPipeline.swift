@@ -5,24 +5,25 @@ import VoxProviders
 
 /// Tracks timing for each pipeline stage.
 /// Note: `totalTime` is a live wall-clock reading — use stage sums for captured snapshots.
-struct PipelineTiming: Sendable {
-    let startTime: CFAbsoluteTime
-    var encodeTime: TimeInterval = 0
-    var sttTime: TimeInterval = 0
-    var rewriteTime: TimeInterval = 0
-    var pasteTime: TimeInterval = 0
-    var originalSizeBytes: Int = 0
-    var encodedSizeBytes: Int = 0
+public struct PipelineTiming: Sendable {
+    public let startTime: CFAbsoluteTime
+    public var processingLevel: ProcessingLevel? = nil
+    public var encodeTime: TimeInterval = 0
+    public var sttTime: TimeInterval = 0
+    public var rewriteTime: TimeInterval = 0
+    public var pasteTime: TimeInterval = 0
+    public var originalSizeBytes: Int = 0
+    public var encodedSizeBytes: Int = 0
 
-    init() {
+    public init() {
         self.startTime = CFAbsoluteTimeGetCurrent()
     }
 
-    var totalTime: TimeInterval {
+    public var totalTime: TimeInterval {
         CFAbsoluteTimeGetCurrent() - startTime
     }
 
-    func summary() -> String {
+    public func summary() -> String {
         let encoded = encodedSizeBytes > 0 ? encodedSizeBytes : originalSizeBytes
         let ratio = originalSizeBytes > 0 ? Double(encoded) / Double(originalSizeBytes) : 1.0
         let sizeInfo = originalSizeBytes > 0
@@ -74,7 +75,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
         opusBypassThreshold: Int = 200_000,
-        pipelineTimeout: TimeInterval = 120
+        pipelineTimeout: TimeInterval = 120,
+        timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil
     ) {
         self.init(
             stt: stt,
@@ -86,7 +88,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
             enableOpus: enableOpus,
             convertCAFToOpus: convertCAFToOpus,
             opusBypassThreshold: opusBypassThreshold,
-            pipelineTimeout: pipelineTimeout
+            pipelineTimeout: pipelineTimeout,
+            timingHandler: timingHandler
         )
     }
 
@@ -197,6 +200,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
 
         let level = await MainActor.run { prefs.processingLevel }
+        timing.processingLevel = level
         logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
         timing.rewriteTime = processed.rewriteTime
@@ -217,6 +221,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptProcessing 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
         let level = await MainActor.run { prefs.processingLevel }
+        timing.processingLevel = level
         logActiveProcessingLevel(level)
         let processed = try await rewriteAndPaste(transcript: transcript, level: level)
 
