@@ -13,9 +13,11 @@ struct PerfAuditConfigTests {
             environment: env
         )
 
-        #expect(cfg.audioURL.lastPathComponent == "fixture.caf")
+        #expect(cfg.audioURLs.map(\.lastPathComponent) == ["fixture.caf"])
         #expect(cfg.outputURL.lastPathComponent == "out.json")
         #expect(cfg.iterations == 3)
+        #expect(cfg.warmupIterations == 1)
+        #expect(cfg.lane == .provider)
         #expect(cfg.commitSHA == "deadbeef")
         #expect(cfg.pullRequestNumber == nil)
         #expect(cfg.runLabel == nil)
@@ -26,8 +28,11 @@ struct PerfAuditConfigTests {
         let cfg = try PerfAuditConfig(
             arguments: [
                 "--audio", "a.caf",
+                "--audio", "b.caf",
                 "--output", "b.json",
                 "--iterations", "2",
+                "--warmup", "0",
+                "--lane", "codepath",
                 "--commit", " abc123 ",
                 "--pr", "42",
                 "--label", " ci ",
@@ -35,7 +40,10 @@ struct PerfAuditConfigTests {
             environment: [:]
         )
 
+        #expect(cfg.audioURLs.map(\.lastPathComponent) == ["a.caf", "b.caf"])
         #expect(cfg.iterations == 2)
+        #expect(cfg.warmupIterations == 0)
+        #expect(cfg.lane == .codepath)
         #expect(cfg.commitSHA == "abc123")
         #expect(cfg.pullRequestNumber == 42)
         #expect(cfg.runLabel == "ci")
@@ -54,6 +62,26 @@ struct PerfAuditConfigTests {
     func test_init_helpThrows() {
         #expect(throws: PerfAuditError.helpRequested) {
             _ = try PerfAuditConfig(arguments: ["--help"], environment: [:])
+        }
+    }
+
+    @Test("Invalid lane yields clear error")
+    func test_init_invalidLaneThrows() {
+        #expect(throws: PerfAuditError.invalidArgument("--lane must be one of provider|codepath")) {
+            _ = try PerfAuditConfig(
+                arguments: ["--audio", "a.caf", "--output", "b.json", "--lane", "network"],
+                environment: [:]
+            )
+        }
+    }
+
+    @Test("Negative warmup yields clear error")
+    func test_init_negativeWarmupThrows() {
+        #expect(throws: PerfAuditError.invalidArgument("--warmup needs an integer >= 0")) {
+            _ = try PerfAuditConfig(
+                arguments: ["--audio", "a.caf", "--output", "b.json", "--warmup", "-1"],
+                environment: [:]
+            )
         }
     }
 }

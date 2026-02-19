@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Format a VoxPerfAudit JSON run (optionally diffed vs a baseline) into a PR-comment markdown report.
+Format Vox perf JSON into a PR comment report.
 
-No deps. Avoids transcript content by design (inputs are timing-only JSON).
+Supports:
+- Provider lane (live network timing)
+- Codepath lane (deterministic mock timing)
+- Legacy v2 runs (single fixture, provider-only)
 """
 
 from __future__ import annotations
@@ -14,6 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+LEVELS = ["raw", "clean", "polish"]
+
 
 @dataclass(frozen=True)
 class Dist:
@@ -23,31 +28,42 @@ class Dist:
     max: float
 
 
+@dataclass(frozen=True)
+class LevelStats:
+    level: str
+    iterations: int
+    providers: dict[str, Any]
+    generation: Dist
+    stt: Dist
+    rewrite: Dist
+    encode: Dist
+
+
+@dataclass(frozen=True)
+class FixtureStats:
+    fixture_id: str
+    audio_file: str
+    audio_bytes: int
+    levels: dict[str, LevelStats]
+
+
+@dataclass(frozen=True)
+class LaneSnapshot:
+    lane: str
+    run: dict[str, Any]
+    levels: dict[str, LevelStats]
+    fixtures: list[FixtureStats]
+    iterations_per_fixture: int
+    warmup_per_fixture: int
+    stt_mode: str
+    stt_policy: str
+    stt_forced: Optional[str]
+    stt_chain: list[dict[str, Any]]
+    rewrite_routing: str
+
+
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def get_level(run: dict[str, Any], level: str) -> dict[str, Any]:
-    for entry in run.get("levels", []):
-        if entry.get("level") == level:
-            return entry
-    raise KeyError(f"missing level '{level}'")
-
-
-def dist(level_entry: dict[str, Any], key: str) -> Dist:
-    d = level_entry["distributions"][key]
-    return Dist(p50=float(d["p50"]), p95=float(d["p95"]), min=float(d["min"]), max=float(d["max"]))
-
-
-def fmt_ms(x: float) -> str:
-    # Stable, easy-to-scan formatting. Round to nearest ms.
-    return f"{int(round(x))}ms"
-
-
-def short_sha(sha: Optional[str]) -> str:
-    if not sha:
-        return "—"
-    return sha[:8]
 
 
 def parse_generated_at(value: Optional[str]) -> Optional[datetime]:
@@ -62,42 +78,14 @@ def parse_generated_at(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def load_history_runs(history_dir: Optional[Path]) -> list[dict[str, Any]]:
-    if history_dir is None:
-        return []
-    if not history_dir.exists() or not history_dir.is_dir():
-        return []
-
-    runs: list[dict[str, Any]] = []
-    for path in sorted(history_dir.glob("*.json")):
-        try:
-            run = load_json(path)
-        except Exception:
-            continue
-        if not isinstance(run, dict):
-            continue
-        if not isinstance(run.get("levels"), list):
-            continue
-        runs.append(run)
-    return runs
+def short_sha(sha: Optional[str]) -> str:
+    if not sha:
+        return "—"
+    return sha[:8]
 
 
-def dedupe_and_sort_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    unique: dict[tuple[str, str], dict[str, Any]] = {}
-    for run in runs:
-        key = (
-            str(run.get("commitSHA") or ""),
-            str(run.get("generatedAt") or ""),
-        )
-        unique[key] = run
-    ordered = list(unique.values())
-    ordered.sort(
-        key=lambda run: (
-            parse_generated_at(run.get("generatedAt")) or datetime.min,
-            str(run.get("commitSHA") or ""),
-        )
-    )
-    return ordered
+def fmt_ms(x: float) -> str:
+    return f"{int(round(x))}ms"
 
 
 def fmt_change(current: float, reference: float) -> str:
@@ -105,17 +93,11 @@ def fmt_change(current: float, reference: float) -> str:
     ms = int(round(abs(delta)))
     if ms == 0:
         return "no change"
-
     direction = "slower" if delta > 0 else "faster"
     if reference > 0:
         pct = abs(delta) / reference * 100
         return f"{ms}ms {direction} ({pct:.1f}%)"
     return f"{ms}ms {direction}"
-
-
-def fmt_rank(current: float, values: list[float]) -> str:
-    better = sum(1 for value in values if value < current)
-    return f"{better + 1}/{len(values)}"
 
 
 def fmt_points(values: list[float]) -> str:
@@ -124,285 +106,534 @@ def fmt_points(values: list[float]) -> str:
     return " -> ".join(fmt_ms(value) for value in values)
 
 
-def dominant_stage(stt_p95: float, rewrite_p95: float, encode_p95: float, generation_p95: float) -> str:
-    candidates = [
-        ("STT", stt_p95),
-        ("Rewrite", rewrite_p95),
-        ("Encode", encode_p95),
-    ]
+def fmt_chain(chain: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for entry in chain:
+        provider = str(entry.get("provider") or "—")
+        model = str(entry.get("model") or "")
+        parts.append(f"{provider}({model})" if model else provider)
+    return " -> ".join(parts) if parts else "—"
+
+
+def fmt_usage(items: list[dict[str, Any]], max_items: int = 2) -> str:
+    if not items:
+        return "—"
+    items_sorted = sorted(
+        items,
+        key=lambda x: (
+            int(x.get("count", 0)),
+            str(x.get("provider", x.get("path", ""))),
+            str(x.get("model", "")),
+        ),
+        reverse=True,
+    )
+    rendered: list[str] = []
+    for item in items_sorted[:max_items]:
+        provider = str(item.get("provider") or item.get("path") or "—")
+        model = str(item.get("model") or "—")
+        count = int(item.get("count", 0))
+        rendered.append(f"{provider}({model}) x{count}")
+    if len(items_sorted) > max_items:
+        rendered.append(f"+{len(items_sorted) - max_items} more")
+    return ", ".join(rendered)
+
+
+def variability(dist: Dist) -> float:
+    return max(0.0, dist.p95 - dist.p50)
+
+
+def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist) -> str:
+    candidates = [("STT", stt.p95), ("Rewrite", rewrite.p95), ("Encode", encode.p95)]
     name, value = max(candidates, key=lambda item: item[1])
-    share = (value / generation_p95 * 100) if generation_p95 > 0 else 0.0
+    share = (value / generation.p95 * 100) if generation.p95 > 0 else 0.0
     return f"{name} ({fmt_ms(value)}, {share:.0f}%)"
+
+
+def change_status(latest: float, previous: float) -> str:
+    if previous <= 0:
+        return "neutral"
+    delta = latest - previous
+    pct = abs(delta) / previous
+    if delta > 200 and pct > 0.10:
+        return "regressed"
+    if delta < -200 and pct > 0.10:
+        return "improved"
+    return "neutral"
+
+
+def confidence_label(samples: int, spread: float, p95: float) -> str:
+    if p95 <= 0:
+        return "low"
+    spread_ratio = spread / p95
+    if samples >= 10 and spread_ratio <= 0.20:
+        return "high"
+    if samples >= 6 and spread_ratio <= 0.40:
+        return "medium"
+    return "low"
+
+
+def lane_name_for_run(run: dict[str, Any]) -> str:
+    lane = str(run.get("lane") or "").strip().lower()
+    if lane in {"provider", "codepath"}:
+        return lane
+    return "provider"
+
+
+def dist_from_level(level_entry: dict[str, Any], key: str) -> Dist:
+    d = level_entry.get("distributions", {}).get(key) or {}
+    return Dist(
+        p50=float(d.get("p50", 0.0)),
+        p95=float(d.get("p95", 0.0)),
+        min=float(d.get("min", 0.0)),
+        max=float(d.get("max", 0.0)),
+    )
+
+
+def level_stats_from_entry(level_entry: dict[str, Any]) -> LevelStats:
+    return LevelStats(
+        level=str(level_entry.get("level", "")),
+        iterations=int(level_entry.get("iterations", 0)),
+        providers=level_entry.get("providers") or {},
+        generation=dist_from_level(level_entry, "generationMs"),
+        stt=dist_from_level(level_entry, "sttMs"),
+        rewrite=dist_from_level(level_entry, "rewriteMs"),
+        encode=dist_from_level(level_entry, "encodeMs"),
+    )
+
+
+def weighted_avg(values: list[float], weights: list[float]) -> float:
+    if not values:
+        return 0.0
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        return sum(values) / len(values)
+    return sum(value * weight for value, weight in zip(values, weights)) / total_weight
+
+
+def weighted_dist(dists: list[Dist], weights: list[float]) -> Dist:
+    if not dists:
+        return Dist(0.0, 0.0, 0.0, 0.0)
+    return Dist(
+        p50=weighted_avg([d.p50 for d in dists], weights),
+        p95=weighted_avg([d.p95 for d in dists], weights),
+        min=min(d.min for d in dists),
+        max=max(d.max for d in dists),
+    )
+
+
+def build_snapshot(run: dict[str, Any]) -> Optional[LaneSnapshot]:
+    if not isinstance(run, dict):
+        return None
+
+    lane = lane_name_for_run(run)
+    top_levels_raw = run.get("levels")
+    if not isinstance(top_levels_raw, list):
+        return None
+
+    top_level_map: dict[str, LevelStats] = {}
+    for entry in top_levels_raw:
+        if not isinstance(entry, dict):
+            continue
+        stats = level_stats_from_entry(entry)
+        if stats.level:
+            top_level_map[stats.level] = stats
+
+    fixture_results_raw = run.get("fixtureResults")
+    fixtures: list[FixtureStats] = []
+    if isinstance(fixture_results_raw, list) and fixture_results_raw:
+        for index, fixture in enumerate(fixture_results_raw):
+            if not isinstance(fixture, dict):
+                continue
+            fixture_levels_raw = fixture.get("levels")
+            if not isinstance(fixture_levels_raw, list):
+                continue
+            level_map: dict[str, LevelStats] = {}
+            for entry in fixture_levels_raw:
+                if not isinstance(entry, dict):
+                    continue
+                stats = level_stats_from_entry(entry)
+                if stats.level:
+                    level_map[stats.level] = stats
+
+            fixture_id = str(fixture.get("fixtureID") or f"fixture-{index + 1}")
+            audio_file = str(fixture.get("audioFile") or fixture_id)
+            audio_bytes = int(fixture.get("audioBytes") or 0)
+            fixtures.append(
+                FixtureStats(
+                    fixture_id=fixture_id,
+                    audio_file=audio_file,
+                    audio_bytes=audio_bytes,
+                    levels=level_map,
+                )
+            )
+    else:
+        audio_file = str(run.get("audioFile") or "fixture")
+        audio_bytes = int(run.get("audioBytes") or 0)
+        fixtures.append(
+            FixtureStats(
+                fixture_id=audio_file,
+                audio_file=audio_file,
+                audio_bytes=audio_bytes,
+                levels=top_level_map,
+            )
+        )
+
+    # Weighted aggregate for v3 runs; fallback to top-level for legacy runs.
+    aggregated_levels: dict[str, LevelStats] = {}
+    if fixtures and isinstance(fixture_results_raw, list) and fixture_results_raw:
+        for level in LEVELS:
+            level_rows = [fixture.levels[level] for fixture in fixtures if level in fixture.levels]
+            if not level_rows:
+                continue
+            weights = [float(max(1, fixture.audio_bytes)) for fixture in fixtures if level in fixture.levels]
+            providers = top_level_map.get(level).providers if level in top_level_map else level_rows[0].providers
+            aggregated_levels[level] = LevelStats(
+                level=level,
+                iterations=sum(row.iterations for row in level_rows),
+                providers=providers,
+                generation=weighted_dist([row.generation for row in level_rows], weights),
+                stt=weighted_dist([row.stt for row in level_rows], weights),
+                rewrite=weighted_dist([row.rewrite for row in level_rows], weights),
+                encode=weighted_dist([row.encode for row in level_rows], weights),
+            )
+    else:
+        aggregated_levels = top_level_map
+
+    return LaneSnapshot(
+        lane=lane,
+        run=run,
+        levels=aggregated_levels,
+        fixtures=fixtures,
+        iterations_per_fixture=int(run.get("iterationsPerLevel") or 0),
+        warmup_per_fixture=int(run.get("warmupIterationsPerLevel") or 0),
+        stt_mode=str(run.get("sttMode") or "—"),
+        stt_policy=str(run.get("sttSelectionPolicy") or "—"),
+        stt_forced=run.get("sttForcedProvider"),
+        stt_chain=run.get("sttChain") or [],
+        rewrite_routing=str(run.get("rewriteRouting") or run.get("rewriteProvider") or "—"),
+    )
+
+
+def load_history_runs(history_dir: Optional[Path]) -> list[dict[str, Any]]:
+    if history_dir is None or not history_dir.exists() or not history_dir.is_dir():
+        return []
+    runs: list[dict[str, Any]] = []
+    for path in sorted(history_dir.glob("*.json")):
+        try:
+            run = load_json(path)
+        except Exception:
+            continue
+        if isinstance(run, dict):
+            runs.append(run)
+    return runs
+
+
+def dedupe_and_sort_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for run in runs:
+        key = (
+            str(run.get("commitSHA") or ""),
+            str(run.get("generatedAt") or ""),
+            lane_name_for_run(run),
+        )
+        unique[key] = run
+    ordered = list(unique.values())
+    ordered.sort(
+        key=lambda run: (
+            parse_generated_at(run.get("generatedAt")) or datetime.min,
+            str(run.get("commitSHA") or ""),
+            lane_name_for_run(run),
+        )
+    )
+    return ordered
+
+
+def trend_series(
+    snapshots: list[LaneSnapshot],
+    lane: str,
+    level: str,
+    metric: str,
+    max_points: int,
+) -> list[float]:
+    values: list[float] = []
+    for snapshot in snapshots:
+        if snapshot.lane != lane:
+            continue
+        row = snapshot.levels.get(level)
+        if row is None:
+            continue
+        if metric == "generation":
+            values.append(row.generation.p95)
+        elif metric == "stt":
+            values.append(row.stt.p95)
+        elif metric == "rewrite":
+            values.append(row.rewrite.p95)
+        elif metric == "encode":
+            values.append(row.encode.p95)
+    return values[-max_points:]
+
+
+def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
+    if not snapshot.fixtures:
+        return
+    total_bytes = sum(max(0, fixture.audio_bytes) for fixture in snapshot.fixtures)
+    lines.append("#### Fixture Breakdown")
+    lines.append("")
+    lines.append("| Fixture | Bytes | Weight | raw p95 | clean p95 | polish p95 |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+    for fixture in snapshot.fixtures:
+        weight = (fixture.audio_bytes / total_bytes * 100) if total_bytes > 0 else 0.0
+        raw = fixture.levels.get("raw")
+        clean = fixture.levels.get("clean")
+        polish = fixture.levels.get("polish")
+        lines.append(
+            f"| {fixture.audio_file} | {fixture.audio_bytes} | {weight:.1f}% | "
+            f"{fmt_ms(raw.generation.p95) if raw else '—'} | "
+            f"{fmt_ms(clean.generation.p95) if clean else '—'} | "
+            f"{fmt_ms(polish.generation.p95) if polish else '—'} |"
+        )
+    lines.append("")
+
+
+def render_lane_section(
+    lines: list[str],
+    title: str,
+    snapshot: LaneSnapshot,
+    history_snapshots: list[LaneSnapshot],
+    history_max: int,
+    base_snapshot: Optional[LaneSnapshot] = None,
+) -> None:
+    lines.append(f"### {title}")
+    lines.append("")
+    fixture_count = len(snapshot.fixtures)
+    lines.append(
+        f"Weighted aggregate across {fixture_count} fixture(s) by audio bytes; "
+        f"{snapshot.iterations_per_fixture} measured + {snapshot.warmup_per_fixture} warmup iteration(s) per level+fixture."
+    )
+    lines.append("")
+
+    lines.append("| Level | Latest p95 | Status vs prev | Change vs prev | Confidence |")
+    lines.append("| --- | ---: | --- | --- | --- |")
+    for level in LEVELS:
+        row = snapshot.levels.get(level)
+        if row is None:
+            lines.append(f"| {level} | — | n/a | n/a | low |")
+            continue
+        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
+        if len(series) >= 2:
+            prev = series[-2]
+            status = change_status(series[-1], prev)
+            change = fmt_change(series[-1], prev)
+        else:
+            status = "n/a"
+            change = "n/a"
+        confidence = confidence_label(row.iterations, variability(row.generation), row.generation.p95)
+        lines.append(f"| {level} | {fmt_ms(row.generation.p95)} | {status} | {change} | {confidence} |")
+    lines.append("")
+
+    lines.append("| Level | Gen p50 | Gen p95 | Gen var (p95-p50) | STT p95 (var) | Rewrite p95 (var) | Encode p95 (var) | Dominant stage |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    for level in LEVELS:
+        row = snapshot.levels.get(level)
+        if row is None:
+            lines.append(f"| {level} | — | — | — | — | — | — | — |")
+            continue
+        lines.append(
+            f"| {level} | {fmt_ms(row.generation.p50)} | {fmt_ms(row.generation.p95)} | {fmt_ms(variability(row.generation))} | "
+            f"{fmt_ms(row.stt.p95)} ({fmt_ms(variability(row.stt))}) | "
+            f"{fmt_ms(row.rewrite.p95)} ({fmt_ms(variability(row.rewrite))}) | "
+            f"{fmt_ms(row.encode.p95)} ({fmt_ms(variability(row.encode))}) | "
+            f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode)} |"
+        )
+    lines.append("")
+
+    lines.append("| Level | Runs | Latest | Vs mean | Vs best | Vs worst |")
+    lines.append("| --- | ---: | ---: | --- | --- | --- |")
+    for level in LEVELS:
+        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
+        if not series:
+            lines.append(f"| {level} | 0 | — | n/a | n/a | n/a |")
+            continue
+        latest = series[-1]
+        mean = sum(series) / len(series)
+        best = min(series)
+        worst = max(series)
+        vs_best = "best in window" if int(round(latest - best)) == 0 else fmt_change(latest, best)
+        vs_worst = "worst in window" if int(round(latest - worst)) == 0 else fmt_change(latest, worst)
+        lines.append(
+            f"| {level} | {len(series)} | {fmt_ms(latest)} | {fmt_change(latest, mean)} | {vs_best} | {vs_worst} |"
+        )
+    lines.append("")
+
+    lines.append("<details>")
+    lines.append(f"<summary>{title}: trend points (generation p95, oldest to newest)</summary>")
+    lines.append("")
+    lines.append("| Level | Points |")
+    lines.append("| --- | --- |")
+    for level in LEVELS:
+        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
+        lines.append(f"| {level} | {fmt_points(series)} |")
+    lines.append("")
+    lines.append("</details>")
+    lines.append("")
+
+    render_fixture_table(lines, snapshot)
+
+    if base_snapshot and base_snapshot.lane == snapshot.lane:
+        lines.append("#### Base Branch Comparison (weighted)")
+        lines.append("")
+        lines.append("| Level | p50 change | p95 change | Status |")
+        lines.append("| --- | --- | --- | --- |")
+        for level in LEVELS:
+            current_row = snapshot.levels.get(level)
+            base_row = base_snapshot.levels.get(level)
+            if not current_row or not base_row:
+                lines.append(f"| {level} | n/a | n/a | n/a |")
+                continue
+            status = change_status(current_row.generation.p95, base_row.generation.p95)
+            lines.append(
+                f"| {level} | {fmt_change(current_row.generation.p50, base_row.generation.p50)} | "
+                f"{fmt_change(current_row.generation.p95, base_row.generation.p95)} | {status} |"
+            )
+        lines.append("")
+
+    lines.append("<details>")
+    lines.append(f"<summary>{title}: routing + provider observations</summary>")
+    lines.append("")
+    lines.append("| Field | Value |")
+    lines.append("| --- | --- |")
+    lines.append(f"| Lane | {snapshot.lane} |")
+    lines.append(f"| STT routing | mode={snapshot.stt_mode}, policy={snapshot.stt_policy}" + (f", forced={snapshot.stt_forced}" if snapshot.stt_forced else "") + f", chain={fmt_chain(snapshot.stt_chain)} |")
+    lines.append(f"| Rewrite routing | {snapshot.rewrite_routing} |")
+    lines.append("")
+    lines.append("| Level | STT observed | Rewrite observed |")
+    lines.append("| --- | --- | --- |")
+    for level in LEVELS:
+        row = snapshot.levels.get(level)
+        providers = row.providers if row else {}
+        stt_obs = providers.get("sttObserved") if isinstance(providers, dict) else []
+        rw_obs = providers.get("rewriteObserved") if isinstance(providers, dict) else []
+        lines.append(f"| {level} | {fmt_usage(stt_obs or [])} | {'—' if level == 'raw' else fmt_usage(rw_obs or [])} |")
+    lines.append("")
+    lines.append("</details>")
+    lines.append("")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--head", required=True, help="Head perf JSON path")
+    ap.add_argument("--head", required=True, help="Primary head perf JSON path")
+    ap.add_argument("--codepath-head", required=False, help="Optional codepath lane perf JSON path")
     ap.add_argument("--base", required=False, help="Base perf JSON path (optional)")
     ap.add_argument("--out", required=False, help="Output markdown path (optional; else stdout)")
-    ap.add_argument("--base-sha", required=False, help="Base SHA display override")
+    ap.add_argument("--base-sha", required=False, help="Resolved base SHA")
+    ap.add_argument("--requested-base-sha", required=False, help="Requested base SHA")
+    ap.add_argument("--base-mode", required=False, default="missing", help="exact|nearest_ancestor|missing")
     ap.add_argument("--head-sha", required=False, help="Head SHA display override")
     ap.add_argument("--history-dir", required=False, help="Directory containing prior PR perf JSON files")
     ap.add_argument("--history-max", required=False, type=int, default=10, help="Max points per trend series")
     args = ap.parse_args()
 
-    head_path = Path(args.head)
-    head = load_json(head_path)
+    head = load_json(Path(args.head))
+    codepath_head = load_json(Path(args.codepath_head)) if args.codepath_head else None
     base = load_json(Path(args.base)) if args.base else None
 
-    base_sha = args.base_sha or (base.get("commitSHA") if base else None)
     head_sha = args.head_sha or head.get("commitSHA")
+    requested_base_sha = args.requested_base_sha or args.base_sha
+    resolved_base_sha = args.base_sha or (base.get("commitSHA") if base else None)
+    base_mode = str(args.base_mode or "missing")
 
-    iters = head.get("iterationsPerLevel", "?")
-    audio_file = head.get("audioFile", "—")
-    audio_bytes = head.get("audioBytes", 0)
-    stt_mode = head.get("sttMode") or "—"
-    stt_policy = head.get("sttSelectionPolicy") or "—"
-    stt_forced = head.get("sttForcedProvider")
-    stt_chain = head.get("sttChain") or []
-    rewrite_routing = head.get("rewriteRouting") or head.get("rewriteProvider") or "—"
+    snapshots: dict[str, LaneSnapshot] = {}
+    head_snapshot = build_snapshot(head)
+    if head_snapshot:
+        snapshots[head_snapshot.lane] = head_snapshot
 
-    def fmt_chain(chain: list[dict[str, Any]]) -> str:
-        parts: list[str] = []
-        for entry in chain:
-            provider = str(entry.get("provider") or "—")
-            model = str(entry.get("model") or "")
-            if model:
-                parts.append(f"{provider}({model})")
-            else:
-                parts.append(provider)
-        return " -> ".join(parts) if parts else "—"
+    if codepath_head:
+        cp_snapshot = build_snapshot(codepath_head)
+        if cp_snapshot:
+            snapshots[cp_snapshot.lane] = cp_snapshot
 
-    def fmt_usage(items: list[dict[str, Any]], max_items: int = 2) -> str:
-        if not items:
-            return "—"
-        # Prefer highest-count entries.
-        items_sorted = sorted(items, key=lambda x: (int(x.get("count", 0)), str(x.get("provider", "")), str(x.get("model", ""))), reverse=True)
-        rendered: list[str] = []
-        for it in items_sorted[:max_items]:
-            provider = str(it.get("provider") or it.get("path") or "—")
-            model = str(it.get("model") or "—")
-            count = int(it.get("count", 0))
-            rendered.append(f"{provider}({model}) x{count}")
-        if len(items_sorted) > max_items:
-            rendered.append(f"+{len(items_sorted) - max_items} more")
-        return ", ".join(rendered)
+    if not snapshots:
+        raise SystemExit("no valid lane snapshots found")
 
-    levels = ["raw", "clean", "polish"]
-    head_rows: dict[str, dict[str, Any]] = {}
-    provider_rows: dict[str, tuple[str, str]] = {}
-    for lvl in levels:
-        level_entry = get_level(head, lvl)
-        providers = level_entry.get("providers") or {}
-        stt_obs = providers.get("sttObserved") or []
-        rw_obs = providers.get("rewriteObserved") or []
+    base_snapshot = build_snapshot(base) if base else None
 
-        if not providers:
-            # schema v1 back-compat
-            stt_text = head.get("sttProvider", "—")
-            rw_text = "—" if lvl == "raw" else head.get("rewriteProvider", "—")
-        else:
-            stt_text = fmt_usage(stt_obs)
-            rw_text = "—" if lvl == "raw" else fmt_usage(rw_obs)
-
-        gen = dist(level_entry, "generationMs")
-        stt = dist(level_entry, "sttMs")
-        rw = dist(level_entry, "rewriteMs")
-        enc = dist(level_entry, "encodeMs")
-
-        head_rows[lvl] = {
-            "gen": gen,
-            "stt": stt,
-            "rw": rw,
-            "enc": enc,
-            "dominant": dominant_stage(stt.p95, rw.p95, enc.p95, gen.p95),
-        }
-        provider_rows[lvl] = (stt_text, rw_text)
-
-    history_dir = Path(args.history_dir) if args.history_dir else None
-    history_runs = load_history_runs(history_dir)
-    trend_runs = dedupe_and_sort_runs(history_runs + [head])
+    history_runs = load_history_runs(Path(args.history_dir)) if args.history_dir else []
+    current_runs: list[dict[str, Any]] = [head]
+    if codepath_head:
+        current_runs.append(codepath_head)
+    trend_runs = dedupe_and_sort_runs(history_runs + current_runs)
+    history_snapshots = [snapshot for run in trend_runs if (snapshot := build_snapshot(run)) is not None]
     history_max = max(2, args.history_max)
-
-    metric_keys = {
-        "generation": "generationMs",
-        "stt": "sttMs",
-        "rewrite": "rewriteMs",
-        "encode": "encodeMs",
-    }
-    trend_metrics: dict[str, dict[str, list[float]]] = {}
-    for lvl in levels:
-        metric_series: dict[str, list[float]] = {key: [] for key in metric_keys}
-        for run in trend_runs:
-            try:
-                entry = get_level(run, lvl)
-            except KeyError:
-                continue
-            for metric, metric_key in metric_keys.items():
-                metric_series[metric].append(dist(entry, metric_key).p95)
-        trend_metrics[lvl] = {metric: values[-history_max:] for metric, values in metric_series.items()}
 
     lines: list[str] = []
     lines.append("<!-- vox-perf-audit -->")
     lines.append("## Performance Report")
     lines.append("")
-    lines.append("> Lower latency is better for every number in this report.")
-    lines.append("> Generation = encode + STT + rewrite. Raw level intentionally has no rewrite stage.")
-    lines.append("> CI paste timings are no-op and excluded from decision-making.")
+    lines.append("> Lower latency is better for every metric in this report.")
+    lines.append("> Generation = encode + STT + rewrite (paste is excluded from decisions in CI).")
+    lines.append("> Regression status rule: `regressed` means slower by both >200ms and >10% vs previous run.")
     lines.append("")
-
-    lines.append("### Executive Summary (Generation p95)")
-    lines.append("")
-    lines.append("| Level | Latest | Vs previous run | Vs best run | Rank in PR window |")
-    lines.append("| --- | ---: | --- | --- | ---: |")
-    for lvl in levels:
-        series = trend_metrics.get(lvl, {}).get("generation", [])
-        latest = head_rows[lvl]["gen"].p95
-
-        if len(series) >= 2:
-            prev = series[-2]
-            best = min(series)
-            vs_prev = fmt_change(latest, prev)
-            best_delta = int(round(latest - best))
-            vs_best = "best in window" if best_delta == 0 else fmt_change(latest, best)
-            rank = fmt_rank(latest, series)
-        else:
-            vs_prev = "n/a (first run)"
-            vs_best = "n/a (first run)"
-            rank = f"1/{max(1, len(series))}"
-
-        lines.append(f"| {lvl} | {fmt_ms(latest)} | {vs_prev} | {vs_best} | {rank} |")
-    lines.append("")
-
-    lines.append("### Current Run Snapshot")
-    lines.append("")
-    lines.append("| Level | Generation p50 | Generation p95 | STT p95 | Rewrite p95 | Encode p95 | Dominant stage |")
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | --- |")
-    for lvl in levels:
-        gen = head_rows[lvl]["gen"]
-        stt = head_rows[lvl]["stt"]
-        rw = head_rows[lvl]["rw"]
-        enc = head_rows[lvl]["enc"]
-        dominant = head_rows[lvl]["dominant"]
-        lines.append(
-            f"| {lvl} | {fmt_ms(gen.p50)} | {fmt_ms(gen.p95)} | {fmt_ms(stt.p95)} | {fmt_ms(rw.p95)} | {fmt_ms(enc.p95)} | {dominant} |"
-        )
-    lines.append("")
-
-    lines.append("### Stage Changes Vs Previous Run (p95)")
-    lines.append("")
-    lines.append("| Level | STT | Rewrite | Encode |")
-    lines.append("| --- | --- | --- | --- |")
-    for lvl in levels:
-        stt_series = trend_metrics.get(lvl, {}).get("stt", [])
-        rewrite_series = trend_metrics.get(lvl, {}).get("rewrite", [])
-        encode_series = trend_metrics.get(lvl, {}).get("encode", [])
-        if len(stt_series) < 2:
-            lines.append(f"| {lvl} | n/a | n/a | n/a |")
-            continue
-
-        stt_change = fmt_change(stt_series[-1], stt_series[-2])
-        rewrite_change = "n/a (raw level)" if lvl == "raw" else fmt_change(rewrite_series[-1], rewrite_series[-2])
-        encode_change = fmt_change(encode_series[-1], encode_series[-2])
-        lines.append(f"| {lvl} | {stt_change} | {rewrite_change} | {encode_change} |")
-    lines.append("")
-
-    lines.append("### PR Trend Window (Generation p95)")
-    lines.append("")
-    lines.append(f"Window includes persisted runs for this PR plus current head (max {history_max} points per level).")
-    lines.append("")
-    lines.append("| Level | Runs | Latest | Change vs previous | Vs mean | Vs best | Vs worst |")
-    lines.append("| --- | ---: | ---: | --- | --- | --- | --- |")
-    for lvl in levels:
-        series = trend_metrics.get(lvl, {}).get("generation", [])
-        if len(series) < 2:
-            latest = head_rows[lvl]["gen"].p95
-            lines.append(f"| {lvl} | {len(series)} | {fmt_ms(latest)} | n/a | n/a | n/a | n/a |")
-            continue
-
-        latest = series[-1]
-        prev = series[-2]
-        mean = sum(series) / len(series)
-        best = min(series)
-        worst = max(series)
-
-        best_delta = int(round(latest - best))
-        worst_delta = int(round(latest - worst))
-        vs_best = "best in window" if best_delta == 0 else fmt_change(latest, best)
-        vs_worst = "worst in window" if worst_delta == 0 else fmt_change(latest, worst)
-
-        lines.append(
-            f"| {lvl} | {len(series)} | {fmt_ms(latest)} | {fmt_change(latest, prev)} | {fmt_change(latest, mean)} | {vs_best} | {vs_worst} |"
-        )
-    lines.append("")
-
-    lines.append("<details>")
-    lines.append("<summary>Trend points (generation p95, oldest to newest)</summary>")
-    lines.append("")
-    lines.append("| Level | Points |")
-    lines.append("| --- | --- |")
-    for lvl in levels:
-        lines.append(f"| {lvl} | {fmt_points(trend_metrics.get(lvl, {}).get('generation', []))} |")
-    lines.append("")
-    lines.append("</details>")
-    lines.append("")
-
+    lines.append(f"- Head: `{short_sha(head_sha)}`")
     if base:
-        lines.append("### Base Branch Comparison (Generation)")
-        lines.append("")
-        lines.append("| Level | p50 change | p95 change |")
-        lines.append("| --- | --- | --- |")
-        for lvl in levels:
-            b = get_level(base, lvl)
-            bgen = dist(b, "generationMs")
-            hgen = head_rows[lvl]["gen"]
-            lines.append(f"| {lvl} | {fmt_change(hgen.p50, bgen.p50)} | {fmt_change(hgen.p95, bgen.p95)} |")
-        lines.append("")
-    elif base_sha:
-        lines.append("### Base Branch Comparison (Generation)")
-        lines.append("")
-        lines.append(f"Unavailable for this run: base commit `{short_sha(base_sha)}` is not in the perf baseline store.")
-        lines.append("")
-
-    lines.append("<details>")
-    lines.append("<summary>Run context and provider observations</summary>")
+        base_detail = f"`{short_sha(resolved_base_sha)}`"
+        if base_mode == "nearest_ancestor" and requested_base_sha and resolved_base_sha:
+            base_detail += f" (nearest ancestor of requested `{short_sha(requested_base_sha)}`)"
+        lines.append(f"- Base: {base_detail}")
+    elif requested_base_sha:
+        lines.append(f"- Base: `{short_sha(requested_base_sha)}` (not available in baseline store)")
     lines.append("")
-    lines.append("| Field | Value |")
-    lines.append("| --- | --- |")
-    lines.append(f"| Head | `{short_sha(head_sha)}` |")
-    if base:
-        lines.append(f"| Base | `{short_sha(base_sha)}` |")
-    elif base_sha:
-        lines.append(f"| Base | `{short_sha(base_sha)}` (missing in baseline store) |")
-    if stt_chain:
-        forced = f", forced={stt_forced}" if stt_forced else ""
-        lines.append(f"| STT routing | mode={stt_mode}, policy={stt_policy}{forced}, chain={fmt_chain(stt_chain)} |")
+
+    provider_snapshot = snapshots.get("provider")
+    codepath_snapshot = snapshots.get("codepath")
+
+    if provider_snapshot:
+        render_lane_section(
+            lines,
+            "Provider Perf (Live Network)",
+            provider_snapshot,
+            history_snapshots,
+            history_max,
+            base_snapshot=base_snapshot,
+        )
     else:
-        # Back-compat for schema v1.
-        lines.append(f"| STT routing | {head.get('sttProvider', '—')} |")
-    lines.append(f"| Rewrite routing | {rewrite_routing} |")
-    lines.append(f"| Fixture | `{audio_file}` ({audio_bytes} bytes) |")
-    lines.append(f"| Iterations | {iters} per level |")
-    lines.append("")
-    lines.append("| Level | STT observed | Rewrite observed |")
-    lines.append("| --- | --- | --- |")
-    for lvl in levels:
-        stt_text, rw_text = provider_rows[lvl]
-        lines.append(f"| {lvl} | {stt_text} | {rw_text} |")
-    lines.append("")
-    lines.append("</details>")
-    lines.append("")
+        lines.append("### Provider Perf (Live Network)")
+        lines.append("")
+        lines.append("Provider lane unavailable in this run (likely missing CI secrets).")
+        lines.append("")
 
-    # Durable JSON artifact, stored right in the PR comment.
-    head_json = json.dumps(head, indent=2, sort_keys=True)
+    if codepath_snapshot:
+        render_lane_section(
+            lines,
+            "Codepath Perf (Deterministic)",
+            codepath_snapshot,
+            history_snapshots,
+            history_max,
+            base_snapshot=None,
+        )
+    else:
+        lines.append("### Codepath Perf (Deterministic)")
+        lines.append("")
+        lines.append("Codepath lane unavailable in this run.")
+        lines.append("")
+
     lines.append("<details>")
-    lines.append("<summary>Head JSON</summary>")
+    lines.append("<summary>Head JSON (primary lane)</summary>")
     lines.append("")
     lines.append("```json")
-    lines.append(head_json)
+    lines.append(json.dumps(head, indent=2, sort_keys=True))
     lines.append("```")
     lines.append("</details>")
     lines.append("")
+
+    if codepath_head:
+        lines.append("<details>")
+        lines.append("<summary>Head JSON (codepath lane)</summary>")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(codepath_head, indent=2, sort_keys=True))
+        lines.append("```")
+        lines.append("</details>")
+        lines.append("")
 
     out = "\n".join(lines)
     if args.out:
