@@ -23,6 +23,7 @@ python3 scripts/perf/format-perf-report.py --head /tmp/vox-perf.json
 Workflow: `.github/workflows/perf-audit.yml`
 
 - Posts a PR comment report on every PR (skips cleanly if secrets are unavailable).
+- Includes generation p95 trend stats over prior persisted runs for the same PR when available.
 - On `master` pushes, writes a durable JSON artifact to `perf-audit` branch: `audit/<commit>.json`.
 - On PR runs, persists `head.json` to `perf-audit` via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
 

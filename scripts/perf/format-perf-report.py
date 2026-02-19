@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -57,6 +58,78 @@ def short_sha(sha: Optional[str]) -> str:
     return sha[:8]
 
 
+def parse_generated_at(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def load_history_runs(history_dir: Optional[Path]) -> list[dict[str, Any]]:
+    if history_dir is None:
+        return []
+    if not history_dir.exists() or not history_dir.is_dir():
+        return []
+
+    runs: list[dict[str, Any]] = []
+    for path in sorted(history_dir.glob("*.json")):
+        try:
+            run = load_json(path)
+        except Exception:
+            continue
+        if not isinstance(run, dict):
+            continue
+        if not isinstance(run.get("levels"), list):
+            continue
+        runs.append(run)
+    return runs
+
+
+def dedupe_and_sort_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    for run in runs:
+        key = (
+            str(run.get("commitSHA") or ""),
+            str(run.get("generatedAt") or ""),
+        )
+        unique[key] = run
+    ordered = list(unique.values())
+    ordered.sort(
+        key=lambda run: (
+            parse_generated_at(run.get("generatedAt")) or datetime.min,
+            str(run.get("commitSHA") or ""),
+        )
+    )
+    return ordered
+
+
+def as_ascii_trend(values: list[float]) -> str:
+    if not values:
+        return "—"
+    if len(values) == 1:
+        return "="
+
+    palette = " .:-=+*#%@"
+    low = min(values)
+    high = max(values)
+    if high == low:
+        return "=" * len(values)
+
+    chars: list[str] = []
+    span = high - low
+    for value in values:
+        normalized = (value - low) / span
+        idx = int(round(normalized * (len(palette) - 1)))
+        idx = max(0, min(idx, len(palette) - 1))
+        chars.append(palette[idx])
+    return "".join(chars)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--head", required=True, help="Head perf JSON path")
@@ -64,6 +137,8 @@ def main() -> None:
     ap.add_argument("--out", required=False, help="Output markdown path (optional; else stdout)")
     ap.add_argument("--base-sha", required=False, help="Base SHA display override")
     ap.add_argument("--head-sha", required=False, help="Head SHA display override")
+    ap.add_argument("--history-dir", required=False, help="Directory containing prior PR perf JSON files")
+    ap.add_argument("--history-max", required=False, type=int, default=10, help="Max points per trend series")
     args = ap.parse_args()
 
     head_path = Path(args.head)
@@ -115,6 +190,8 @@ def main() -> None:
     lines.append(f"- Head: `{short_sha(head_sha)}`")
     if base:
         lines.append(f"- Base: `{short_sha(base_sha)}`")
+    elif base_sha:
+        lines.append(f"- Base: `{short_sha(base_sha)}` (not available in perf baseline store)")
     if stt_chain:
         forced = f", forced={stt_forced}" if stt_forced else ""
         lines.append(f"- STT: mode={stt_mode}, policy={stt_policy}{forced}, chain={fmt_chain(stt_chain)}")
@@ -170,6 +247,50 @@ def main() -> None:
             bgen = dist(b, "generationMs")
             hgen = dist(h, "generationMs")
             lines.append(f"| {lvl} | {fmt_delta_ms(hgen.p50 - bgen.p50)} | {fmt_delta_ms(hgen.p95 - bgen.p95)} |")
+        lines.append("")
+
+    history_dir = Path(args.history_dir) if args.history_dir else None
+    history_runs = load_history_runs(history_dir)
+    trend_runs = dedupe_and_sort_runs(history_runs + [head])
+    history_max = max(2, args.history_max)
+
+    lines.append("### Trend (Generation p95)")
+    lines.append("")
+    if len(trend_runs) < 2:
+        lines.append("Need at least 2 runs to compute trend statistics.")
+        lines.append("")
+    else:
+        lines.append(
+            f"Recent history includes persisted PR runs plus current head (up to {history_max} points per level)."
+        )
+        lines.append("")
+        lines.append("| Level | Runs | Latest | Δ vs prev | Δ vs first | Mean | Min | Max | Trend |")
+        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+        for lvl in levels:
+            series: list[float] = []
+            for run in trend_runs:
+                try:
+                    entry = get_level(run, lvl)
+                except KeyError:
+                    continue
+                series.append(dist(entry, "generationMs").p95)
+            if len(series) < 2:
+                lines.append(f"| {lvl} | {len(series)} | — | — | — | — | — | — | — |")
+                continue
+
+            clipped = series[-history_max:]
+            latest = clipped[-1]
+            prev = clipped[-2]
+            first = clipped[0]
+            mean = sum(clipped) / len(clipped)
+            low = min(clipped)
+            high = max(clipped)
+            trend = as_ascii_trend(clipped)
+
+            lines.append(
+                f"| {lvl} | {len(clipped)} | {fmt_ms(latest)} | {fmt_delta_ms(latest - prev)} | "
+                f"{fmt_delta_ms(latest - first)} | {fmt_ms(mean)} | {fmt_ms(low)} | {fmt_ms(high)} | `{trend}` |"
+            )
         lines.append("")
 
     # Durable JSON artifact, stored right in the PR comment.

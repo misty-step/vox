@@ -56,15 +56,24 @@ jobs:
             --pr "$PR_NUMBER" \
             --label "ci"
 
+          HISTORY_DIR="$OUT_DIR/history/pr"
+          mkdir -p "$HISTORY_DIR"
+
           # Optional baseline: pulled from perf-audit branch if present.
           git fetch origin perf-audit || true
           if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              git show "origin/perf-audit:${path}" > "$HISTORY_DIR/$(basename "$path")" 2>/dev/null || true
+            done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 50)
+
             if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$OUT_DIR/base.json" 2>/dev/null; then
               python3 scripts/perf/format-perf-report.py \
                 --base "$OUT_DIR/base.json" \
                 --head "$OUT_DIR/head.json" \
                 --base-sha "$BASE_SHA" \
                 --head-sha "$GITHUB_SHA" \
+                --history-dir "$HISTORY_DIR" \
                 --out "$OUT_DIR/report.md"
             fi
           fi
@@ -72,7 +81,9 @@ jobs:
           if [ ! -f "$OUT_DIR/report.md" ]; then
             python3 scripts/perf/format-perf-report.py \
               --head "$OUT_DIR/head.json" \
+              --base-sha "$BASE_SHA" \
               --head-sha "$GITHUB_SHA" \
+              --history-dir "$HISTORY_DIR" \
               --out "$OUT_DIR/report.md"
           fi
 
