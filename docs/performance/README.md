@@ -9,7 +9,7 @@ Two complementary lanes:
 
 Notes:
 - Measures **batch STT** (file upload), not streaming STT.
-- To force the batch STT provider in a run: `VOX_PERF_STT_PROVIDER=auto|elevenlabs|deepgram|whisper`.
+- To force the batch STT provider in a run: `VOX_PERF_STT_PROVIDER=auto|elevenlabs|deepgram`.
 
 ```bash
 bash scripts/perf/make-fixture-audio.sh /tmp/vox-perf-fixture.caf

@@ -74,6 +74,56 @@ struct OpenRouterClientTests {
         #expect(reasoning["enabled"] as? Bool == false)
     }
 
+    @Test("Model usage callback reports served model from response")
+    func modelUsageReportsServedModel() async throws {
+        let usage = Capture<[(model: String, isFallback: Bool)]>([])
+        URLProtocolStub.requestHandler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"anthropic/claude-sonnet-4.5","choices":[{"message":{"content":"rewritten"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onModelUsed: { model, isFallback in
+                usage.mutate { $0.append((model: model, isFallback: isFallback)) }
+            }
+        )
+        _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
+
+        #expect(usage.value.count == 1)
+        #expect(usage.value[0].model == "anthropic/claude-sonnet-4.5")
+        #expect(usage.value[0].isFallback == false)
+    }
+
+    @Test("Model usage callback falls back to requested model when response omits model")
+    func modelUsageFallsBackToRequestedModel() async throws {
+        let usage = Capture<[String]>([])
+        URLProtocolStub.requestHandler = { request in
+            (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"rewritten"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onModelUsed: { model, _ in
+                usage.mutate { $0.append(model) }
+            }
+        )
+        _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "gemini-2.5-flash-lite")
+
+        #expect(usage.value == ["google/gemini-2.5-flash-lite"])
+    }
+
     // MARK: - Fallback Model Chain
 
     @Test("Falls back to next model on throttled error")

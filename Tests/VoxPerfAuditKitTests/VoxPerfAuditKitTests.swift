@@ -61,7 +61,7 @@ struct PerfAuditConfigTests {
 @Suite("StageDistribution")
 struct StageDistributionTests {
     @Test("Empty samples")
-    func test_init_empty() {
+    func test_init_returnsZerosWhenSamplesAreEmpty() {
         let d = StageDistribution(samples: [])
         #expect(d.min == 0)
         #expect(d.max == 0)
@@ -70,7 +70,7 @@ struct StageDistributionTests {
     }
 
     @Test("Single sample")
-    func test_init_single() {
+    func test_init_returnsSampleValueWhenSingleSampleProvided() {
         let d = StageDistribution(samples: [10.0])
         #expect(d.min == 10)
         #expect(d.max == 10)
@@ -79,7 +79,7 @@ struct StageDistributionTests {
     }
 
     @Test("Interpolates percentiles")
-    func test_percentiles_interpolate() {
+    func test_percentiles_interpolatesBetweenBoundsWhenTwoSamplesProvided() {
         let d = StageDistribution(samples: [0.0, 100.0])
         #expect(d.p50 == 50)
         #expect(d.p95 == 95)
