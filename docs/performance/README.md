@@ -10,6 +10,7 @@ Two complementary lanes:
 Notes:
 - Measures **batch STT** (file upload), not streaming STT.
 - To force the batch STT provider in a run: `VOX_PERF_STT_PROVIDER=auto|elevenlabs|deepgram`.
+- `auto` keeps preference order (`ElevenLabs -> Deepgram`); forcing sets `sttSelectionPolicy=forced` in the JSON output.
 
 ```bash
 bash scripts/perf/make-fixture-audio.sh /tmp/vox-perf-fixture.caf
@@ -31,3 +32,30 @@ Set `VOX_PERF_INGEST_URL` to POST `pipeline_timing` events as NDJSON.
 
 - Disabled by default.
 - Payload is privacy-safe (no transcript text, no API keys).
+
+Each NDJSON line is:
+
+```json
+{
+  "schemaVersion": 1,
+  "appVersion": "0.4.0",
+  "appBuild": "123",
+  "osVersion": "macOS ...",
+  "event": {
+    "timestamp": "2026-02-19T02:00:00Z",
+    "name": "pipeline_timing",
+    "sessionID": "uuid",
+    "fields": {
+      "processing_level": "clean",
+      "total_ms": 1234,
+      "total_stage_ms": 1180,
+      "encode_ms": 20,
+      "stt_ms": 680,
+      "rewrite_ms": 430,
+      "paste_ms": 50,
+      "original_bytes": 160000,
+      "encoded_bytes": 42000
+    }
+  }
+}
+```

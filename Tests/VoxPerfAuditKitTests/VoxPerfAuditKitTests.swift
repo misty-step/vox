@@ -143,6 +143,31 @@ struct PerfProviderPlanTests {
         }
     }
 
+    @Test("Unknown forced provider fails with allowed-values hint")
+    func test_resolve_unknownForcedProvider() {
+        #expect(throws: PerfAuditError.invalidArgument("Unknown VOX_PERF_STT_PROVIDER 'whisper'; use auto|elevenlabs|deepgram")) {
+            _ = try PerfProviderPlan.resolve(environment: [
+                "OPENROUTER_API_KEY": "or",
+                "ELEVENLABS_API_KEY": "el",
+                "VOX_PERF_STT_PROVIDER": "whisper",
+            ])
+        }
+    }
+
+    @Test("Forced provider matching is case-insensitive")
+    func test_resolve_forcedProviderCaseInsensitive() throws {
+        let plan = try PerfProviderPlan.resolve(environment: [
+            "OPENROUTER_API_KEY": "or",
+            "ELEVENLABS_API_KEY": "el",
+            "DEEPGRAM_API_KEY": "dg",
+            "VOX_PERF_STT_PROVIDER": "DeepGram",
+        ])
+
+        #expect(plan.stt.selectionPolicy == "forced")
+        #expect(plan.stt.forcedProvider == "deepgram")
+        #expect(plan.stt.chain.map { $0.id } == ["deepgram", "elevenlabs"])
+    }
+
     @Test("Gemini key enables model-routed rewrite")
     func test_resolve_geminiEnablesModelRouted() throws {
         let plan = try PerfProviderPlan.resolve(environment: [

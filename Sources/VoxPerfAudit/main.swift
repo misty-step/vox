@@ -131,13 +131,11 @@ private final class NoopPaster: TextPaster, @unchecked Sendable {
 
 private struct ResolvedProviders {
     let sttProvider: STTProvider
-    let sttName: String
     let sttSelectionPolicy: String
     let sttForcedProvider: String?
     let sttChain: [ProviderDescriptor]
     let sttMode: String
     let rewriteProvider: RewriteProvider
-    let rewriteName: String
     let rewriteRouting: String
     let hasCloudSTT: Bool
 }
@@ -213,7 +211,6 @@ private func resolvedProviders(
     )
 
     let rewriteProvider: RewriteProvider
-    let rewriteName: String
     let rewriteRouting: String
     if plan.rewrite.hasGeminiDirect {
         let gemini = GeminiClient(apiKey: geminiKey)
@@ -227,23 +224,19 @@ private func resolvedProviders(
             openRouter: openRouter,
             fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
         )
-        rewriteName = "Gemini+OpenRouter"
         rewriteRouting = "model-routed (gemini_direct + openrouter)"
     } else {
         rewriteProvider = openRouter
-        rewriteName = "OpenRouter"
         rewriteRouting = "openrouter"
     }
 
     return ResolvedProviders(
         sttProvider: sttProvider,
-        sttName: sttChain.name,
         sttSelectionPolicy: plan.stt.selectionPolicy,
         sttForcedProvider: plan.stt.forcedProvider,
         sttChain: sttEntries.map { ProviderDescriptor(provider: $0.name, model: $0.model) },
         sttMode: plan.stt.mode,
         rewriteProvider: rewriteProvider,
-        rewriteName: rewriteName,
         rewriteRouting: rewriteRouting,
         hasCloudSTT: true
     )

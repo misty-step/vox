@@ -124,6 +124,43 @@ struct OpenRouterClientTests {
         #expect(usage.value == ["google/gemini-2.5-flash-lite"])
     }
 
+    @Test("Model usage callback marks fallback when second model succeeds")
+    func test_modelUsage_marksFallbackWhenFallbackModelSucceeds() async throws {
+        let usage = Capture<[(model: String, isFallback: Bool)]>([])
+        let attempts = Capture(0)
+
+        URLProtocolStub.requestHandler = { request in
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"fallback/served-model","choices":[{"message":{"content":"ok"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"],
+            onModelUsed: { model, isFallback in
+                usage.mutate { $0.append((model: model, isFallback: isFallback)) }
+            }
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "ok")
+        #expect(usage.value.count == 1)
+        #expect(usage.value[0].model == "fallback/served-model")
+        #expect(usage.value[0].isFallback == true)
+    }
+
     // MARK: - Fallback Model Chain
 
     @Test("Falls back to next model on throttled error")
