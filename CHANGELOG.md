@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/misty-step/vox/compare/v1.18.0...v1.19.0) (2026-02-19)
+
+
+### Features
+
+* **perf:** live perf audit + durable performance log ([#268](https://github.com/misty-step/vox/issues/268)) ([7cac192](https://github.com/misty-step/vox/commit/7cac19204e560e5435caf3fa8bb62d79ee7efdca))
+
 # [1.18.0](https://github.com/misty-step/vox/compare/v1.17.0...v1.18.0) (2026-02-17)
 
 
