@@ -91,7 +91,8 @@ jobs:
           if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
             while IFS= read -r path; do
               [ -n "$path" ] || continue
-              git show "origin/perf-audit:${path}" > "$HISTORY_DIR/$(basename "$path")" 2>/dev/null || true
+              dest="$HISTORY_DIR/$(basename "$path")"
+              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
             done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 80)
 
             if [ -f "$PROVIDER_HEAD" ]; then
@@ -123,7 +124,7 @@ jobs:
           if [ -f "$CODEPATH_HEAD" ] && [ -f "$PROVIDER_HEAD" ]; then
             FORMAT_ARGS+=(--codepath-head "$CODEPATH_HEAD")
           fi
-          if [ -f "$BASE_JSON" ]; then
+          if [ -s "$BASE_JSON" ]; then
             FORMAT_ARGS+=(--base "$BASE_JSON")
           fi
 
