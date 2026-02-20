@@ -106,7 +106,7 @@ jobs:
                     BASE_MODE="nearest_ancestor"
                     break
                   fi
-                done < <(git rev-list --max-count=400 "$BASE_SHA")
+                done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
               fi
             fi
           fi
