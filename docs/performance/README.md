@@ -3,7 +3,7 @@
 Two complementary lanes:
 
 1. **Pipeline overhead** (mock providers, deterministic): `./scripts/benchmark.sh`
-2. **Live provider latency** (real STT + rewrite): `swift run VoxPerfAudit ...`
+2. **Live + deterministic lane audit** (real provider lane + deterministic codepath lane): `swift run VoxPerfAudit ...`
 
 ## Live Perf Audit (Local)
 
@@ -13,16 +13,36 @@ Notes:
 - `auto` keeps preference order (`ElevenLabs -> Deepgram`); forcing sets `sttSelectionPolicy=forced` in the JSON output.
 
 ```bash
-bash scripts/perf/make-fixture-audio.sh /tmp/vox-perf-fixture.caf
-swift run VoxPerfAudit --audio /tmp/vox-perf-fixture.caf --output /tmp/vox-perf.json --iterations 2
-python3 scripts/perf/format-perf-report.py --head /tmp/vox-perf.json
+bash scripts/perf/make-fixture-audio.sh --variant short /tmp/vox-perf-short.caf
+bash scripts/perf/make-fixture-audio.sh --variant medium /tmp/vox-perf-medium.caf
+swift run VoxPerfAudit \
+  --lane provider \
+  --audio /tmp/vox-perf-short.caf \
+  --audio /tmp/vox-perf-medium.caf \
+  --output /tmp/vox-perf-provider.json \
+  --iterations 5 \
+  --warmup 1
+swift run VoxPerfAudit \
+  --lane codepath \
+  --audio /tmp/vox-perf-short.caf \
+  --audio /tmp/vox-perf-medium.caf \
+  --output /tmp/vox-perf-codepath.json \
+  --iterations 5 \
+  --warmup 1
+python3 scripts/perf/format-perf-report.py \
+  --head /tmp/vox-perf-provider.json \
+  --codepath-head /tmp/vox-perf-codepath.json
 ```
 
 ## CI
 
 Workflow: `.github/workflows/perf-audit.yml`
 
-- Posts a PR comment report on every PR (skips cleanly if secrets are unavailable).
+- Posts a PR comment report on every PR.
+- Runs both lanes per PR with two fixtures (`short`, `medium`) and warmup exclusion.
+- Uses weighted fixture aggregation (by audio bytes) with per-fixture breakdown.
+- Includes plain-language trend + status semantics (`improved|neutral|regressed`) and confidence labels.
+- Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to `perf-audit` branch: `audit/<commit>.json`.
 - On PR runs, persists `head.json` to `perf-audit` via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
 

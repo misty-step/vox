@@ -38,43 +38,97 @@ jobs:
 
           PR_NUMBER="${{ github.event.pull_request.number }}"
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          PROVIDER_HEAD="$OUT_DIR/head-provider.json"
+          CODEPATH_HEAD="$OUT_DIR/head-codepath.json"
+          PRIMARY_HEAD="$OUT_DIR/head.json"
 
-          # Secrets are unavailable to fork PRs. Keep this non-failing and still comment.
-          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ]; }; then
-            bash scripts/perf/write-skip-report.sh "$OUT_DIR/report.md" "missing OPENROUTER_API_KEY and/or STT API key in CI"
-            bash scripts/perf/post-pr-comment.sh "$PR_NUMBER" "$OUT_DIR/report.md"
-            exit 0
-          fi
+          SHORT_FIXTURE="$OUT_DIR/fixture-short.caf"
+          MEDIUM_FIXTURE="$OUT_DIR/fixture-medium.caf"
+          bash scripts/perf/make-fixture-audio.sh --variant short "$SHORT_FIXTURE"
+          bash scripts/perf/make-fixture-audio.sh --variant medium "$MEDIUM_FIXTURE"
 
-          bash scripts/perf/make-fixture-audio.sh "$OUT_DIR/fixture.caf"
-
+          # Deterministic lane always runs (no external API dependence).
           swift run VoxPerfAudit \
-            --audio "$OUT_DIR/fixture.caf" \
-            --output "$OUT_DIR/head.json" \
-            --iterations 2 \
+            --lane codepath \
+            --audio "$SHORT_FIXTURE" \
+            --audio "$MEDIUM_FIXTURE" \
+            --output "$CODEPATH_HEAD" \
+            --iterations 5 \
+            --warmup 1 \
             --commit "${GITHUB_SHA}" \
             --pr "$PR_NUMBER" \
-            --label "ci"
+            --label "ci-codepath"
+
+          if [ -z "${OPENROUTER_API_KEY:-}" ] || { [ -z "${ELEVENLABS_API_KEY:-}" ] && [ -z "${DEEPGRAM_API_KEY:-}" ]; }; then
+            echo "Provider lane skipped: missing OPENROUTER_API_KEY and/or STT API key in CI."
+          else
+            swift run VoxPerfAudit \
+              --lane provider \
+              --audio "$SHORT_FIXTURE" \
+              --audio "$MEDIUM_FIXTURE" \
+              --output "$PROVIDER_HEAD" \
+              --iterations 5 \
+              --warmup 1 \
+              --commit "${GITHUB_SHA}" \
+              --pr "$PR_NUMBER" \
+              --label "ci-provider"
+          fi
+
+          if [ -f "$PROVIDER_HEAD" ]; then
+            cp "$PROVIDER_HEAD" "$PRIMARY_HEAD"
+          else
+            cp "$CODEPATH_HEAD" "$PRIMARY_HEAD"
+          fi
+
+          HISTORY_DIR="$OUT_DIR/history/pr"
+          mkdir -p "$HISTORY_DIR"
+          BASE_JSON="$OUT_DIR/base.json"
+          BASE_SHA_USED="$BASE_SHA"
+          BASE_MODE="missing"
 
           # Optional baseline: pulled from perf-audit branch if present.
           git fetch origin perf-audit || true
           if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$OUT_DIR/base.json" 2>/dev/null; then
-              python3 scripts/perf/format-perf-report.py \
-                --base "$OUT_DIR/base.json" \
-                --head "$OUT_DIR/head.json" \
-                --base-sha "$BASE_SHA" \
-                --head-sha "$GITHUB_SHA" \
-                --out "$OUT_DIR/report.md"
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              dest="$HISTORY_DIR/$(basename "$path")"
+              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
+            done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 80)
+
+            if [ -f "$PROVIDER_HEAD" ]; then
+              if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$BASE_JSON" 2>/dev/null; then
+                BASE_SHA_USED="$BASE_SHA"
+                BASE_MODE="exact"
+              else
+                while IFS= read -r candidate; do
+                  [ -n "$candidate" ] || continue
+                  if git show "origin/perf-audit:audit/${candidate}.json" >"$BASE_JSON" 2>/dev/null; then
+                    BASE_SHA_USED="$candidate"
+                    BASE_MODE="nearest_ancestor"
+                    break
+                  fi
+                done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
+              fi
             fi
           fi
 
-          if [ ! -f "$OUT_DIR/report.md" ]; then
-            python3 scripts/perf/format-perf-report.py \
-              --head "$OUT_DIR/head.json" \
-              --head-sha "$GITHUB_SHA" \
-              --out "$OUT_DIR/report.md"
+          FORMAT_ARGS=(
+            --head "$PRIMARY_HEAD"
+            --head-sha "$GITHUB_SHA"
+            --history-dir "$HISTORY_DIR"
+            --requested-base-sha "$BASE_SHA"
+            --base-sha "$BASE_SHA_USED"
+            --base-mode "$BASE_MODE"
+            --out "$OUT_DIR/report.md"
+          )
+          if [ -f "$CODEPATH_HEAD" ] && [ -f "$PROVIDER_HEAD" ]; then
+            FORMAT_ARGS+=(--codepath-head "$CODEPATH_HEAD")
           fi
+          if [ -s "$BASE_JSON" ]; then
+            FORMAT_ARGS+=(--base "$BASE_JSON")
+          fi
+
+          python3 scripts/perf/format-perf-report.py "${FORMAT_ARGS[@]}"
 
           bash scripts/perf/post-pr-comment.sh "$PR_NUMBER" "$OUT_DIR/report.md"
 
@@ -118,14 +172,30 @@ jobs:
             exit 0
           fi
 
-          bash scripts/perf/make-fixture-audio.sh "$OUT_DIR/fixture.caf"
+          SHORT_FIXTURE="$OUT_DIR/fixture-short.caf"
+          MEDIUM_FIXTURE="$OUT_DIR/fixture-medium.caf"
+          bash scripts/perf/make-fixture-audio.sh --variant short "$SHORT_FIXTURE"
+          bash scripts/perf/make-fixture-audio.sh --variant medium "$MEDIUM_FIXTURE"
 
           swift run VoxPerfAudit \
-            --audio "$OUT_DIR/fixture.caf" \
+            --lane provider \
+            --audio "$SHORT_FIXTURE" \
+            --audio "$MEDIUM_FIXTURE" \
             --output "$OUT_DIR/head.json" \
-            --iterations 3 \
+            --iterations 10 \
+            --warmup 1 \
             --commit "${GITHUB_SHA}" \
-            --label "ci-master"
+            --label "ci-master-provider"
+
+          swift run VoxPerfAudit \
+            --lane codepath \
+            --audio "$SHORT_FIXTURE" \
+            --audio "$MEDIUM_FIXTURE" \
+            --output "$OUT_DIR/head-codepath.json" \
+            --iterations 10 \
+            --warmup 1 \
+            --commit "${GITHUB_SHA}" \
+            --label "ci-master-codepath"
 
       - name: Persist To perf-audit Branch
         if: always() && hashFiles('perf-out/head.json') != ''

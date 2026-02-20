@@ -42,12 +42,17 @@ jobs:
           unzip -q artifact.zip -d artifact
 
           HEAD_JSON="$(find artifact -name head.json | head -1 || true)"
-          if [ -z "$HEAD_JSON" ]; then
-            echo "No head.json in artifact (audit likely skipped)."
+          HEAD_CODEPATH_JSON="$(find artifact -name head-codepath.json | head -1 || true)"
+          META_JSON="${HEAD_JSON:-$HEAD_CODEPATH_JSON}"
+
+          if [ -z "$META_JSON" ]; then
+            echo "No perf head JSON in artifact (audit likely skipped)."
             exit 0
           fi
 
           echo "HEAD_JSON=$HEAD_JSON" >> "$GITHUB_ENV"
+          echo "HEAD_CODEPATH_JSON=$HEAD_CODEPATH_JSON" >> "$GITHUB_ENV"
+          echo "META_JSON=$META_JSON" >> "$GITHUB_ENV"
 
       - name: Persist To perf-audit Branch
         env:
@@ -55,14 +60,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${HEAD_JSON:-}" ]; then
-            echo "HEAD_JSON unset; skipping."
+          if [ -z "${META_JSON:-}" ]; then
+            echo "META_JSON unset; skipping."
             exit 0
           fi
 
           python3 - > meta.env <<'PY'
           import json, os, sys
-          path = os.environ["HEAD_JSON"]
+          path = os.environ["META_JSON"]
           data = json.load(open(path, "r", encoding="utf-8"))
           pr = data.get("pullRequestNumber")
           sha = data.get("commitSHA")
@@ -92,10 +97,32 @@ jobs:
 
           cd "$WORKTREE_DIR"
           mkdir -p "audit/pr/${PR_NUMBER}"
-          cp "${GITHUB_WORKSPACE}/${HEAD_JSON}" "audit/pr/${PR_NUMBER}/${SHA}.json"
+          ADDED=0
 
-          git add "audit/pr/${PR_NUMBER}/${SHA}.json"
+          if [ -n "${HEAD_JSON:-}" ]; then
+            cp "${GITHUB_WORKSPACE}/${HEAD_JSON}" "audit/pr/${PR_NUMBER}/${SHA}.json"
+            git add "audit/pr/${PR_NUMBER}/${SHA}.json"
+            ADDED=1
+          fi
+
+          if [ -n "${HEAD_CODEPATH_JSON:-}" ]; then
+            SHOULD_COPY=1
+            if [ -n "${HEAD_JSON:-}" ] && cmp -s "${GITHUB_WORKSPACE}/${HEAD_CODEPATH_JSON}" "${GITHUB_WORKSPACE}/${HEAD_JSON}"; then
+              SHOULD_COPY=0
+            fi
+            if [ "$SHOULD_COPY" -eq 1 ]; then
+              cp "${GITHUB_WORKSPACE}/${HEAD_CODEPATH_JSON}" "audit/pr/${PR_NUMBER}/${SHA}-codepath.json"
+              git add "audit/pr/${PR_NUMBER}/${SHA}-codepath.json"
+              ADDED=1
+            fi
+          fi
+
+          if [ "$ADDED" -eq 0 ]; then
+            echo "No new perf JSON files to persist."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "perf(audit): pr#${PR_NUMBER} ${SHA}" || exit 0
+          git commit -m "perf(audit): pr#${PR_NUMBER} ${SHA} lanes" || exit 0
           git push origin HEAD:perf-audit

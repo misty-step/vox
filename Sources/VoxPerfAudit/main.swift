@@ -43,15 +43,32 @@ private struct PerfLevelResult: Codable {
     let distributions: PerfLevelDistributions
 }
 
+private struct PerfFixtureDescriptor: Codable {
+    let id: String
+    let audioFile: String
+    let audioBytes: Int
+}
+
+private struct PerfFixtureResult: Codable {
+    let fixtureID: String
+    let audioFile: String
+    let audioBytes: Int
+    let levels: [PerfLevelResult]
+}
+
 private struct PerfAuditResult: Codable {
     let schemaVersion: Int
     let generatedAt: String
+    let lane: String
     let commitSHA: String?
     let pullRequestNumber: Int?
     let label: String?
     let iterationsPerLevel: Int
+    let warmupIterationsPerLevel: Int
     let audioFile: String
     let audioBytes: Int
+    let fixtures: [PerfFixtureDescriptor]
+    let fixtureResults: [PerfFixtureResult]
     let sttMode: String
     let sttSelectionPolicy: String
     let sttForcedProvider: String?
@@ -129,6 +146,39 @@ private final class NoopPaster: TextPaster, @unchecked Sendable {
     func paste(text: String) async throws {}
 }
 
+private func clampedNanoseconds(for delaySeconds: TimeInterval) -> UInt64 {
+    let nanoseconds = delaySeconds * 1_000_000_000
+    guard nanoseconds.isFinite, nanoseconds > 0 else { return 0 }
+    if nanoseconds >= Double(UInt64.max) { return UInt64.max }
+    return UInt64(nanoseconds)
+}
+
+private final class FixedDelaySTTProvider: STTProvider, @unchecked Sendable {
+    private let delaySeconds: TimeInterval
+
+    init(delaySeconds: TimeInterval) {
+        self.delaySeconds = delaySeconds
+    }
+
+    func transcribe(audioURL: URL) async throws -> String {
+        try await Task.sleep(nanoseconds: clampedNanoseconds(for: delaySeconds))
+        return "Deterministic benchmark transcript."
+    }
+}
+
+private final class FixedDelayRewriteProvider: RewriteProvider, @unchecked Sendable {
+    private let delaySeconds: TimeInterval
+
+    init(delaySeconds: TimeInterval) {
+        self.delaySeconds = delaySeconds
+    }
+
+    func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
+        try await Task.sleep(nanoseconds: clampedNanoseconds(for: delaySeconds))
+        return "Deterministic benchmark transcript."
+    }
+}
+
 private struct ResolvedProviders {
     let sttProvider: STTProvider
     let sttSelectionPolicy: String
@@ -140,7 +190,7 @@ private struct ResolvedProviders {
     let hasCloudSTT: Bool
 }
 
-private func resolvedProviders(
+private func resolvedProviderLane(
     environment: [String: String],
     usageRecorder: ProviderUsageRecorder
 ) throws -> ResolvedProviders {
@@ -242,6 +292,59 @@ private func resolvedProviders(
     )
 }
 
+private func resolvedCodepathLane(
+    level: ProcessingLevel,
+    usageRecorder: ProviderUsageRecorder
+) -> ResolvedProviders {
+    let sttDelay: TimeInterval = 0.06
+    let rewriteDelay: TimeInterval
+    switch level {
+    case .raw:
+        rewriteDelay = 0
+    case .clean:
+        rewriteDelay = 0.10
+    case .polish:
+        rewriteDelay = 0.16
+    }
+
+    let sttProvider = InstrumentedSTTProvider(
+        provider: FixedDelaySTTProvider(delaySeconds: sttDelay),
+        providerName: "DeterministicSTT",
+        model: "fixed-delay-v1",
+        recorder: usageRecorder
+    )
+    let rewriteProvider = InstrumentedRewriteProvider(
+        provider: FixedDelayRewriteProvider(delaySeconds: rewriteDelay),
+        path: "deterministic",
+        recorder: usageRecorder
+    )
+
+    return ResolvedProviders(
+        sttProvider: sttProvider,
+        sttSelectionPolicy: "fixed",
+        sttForcedProvider: "deterministic",
+        sttChain: [ProviderDescriptor(provider: "DeterministicSTT", model: "fixed-delay-v1")],
+        sttMode: "mock",
+        rewriteProvider: rewriteProvider,
+        rewriteRouting: "deterministic",
+        hasCloudSTT: false
+    )
+}
+
+private func resolvedProviders(
+    lane: PerfAuditLane,
+    level: ProcessingLevel,
+    environment: [String: String],
+    usageRecorder: ProviderUsageRecorder
+) throws -> ResolvedProviders {
+    switch lane {
+    case .provider:
+        return try resolvedProviderLane(environment: environment, usageRecorder: usageRecorder)
+    case .codepath:
+        return resolvedCodepathLane(level: level, usageRecorder: usageRecorder)
+    }
+}
+
 private final class ProviderUsageRecorder: @unchecked Sendable {
     // NSLock-protected counters to avoid any actor hops on hot paths.
     private let lock = NSLock()
@@ -320,6 +423,69 @@ private final class TimingCollector: @unchecked Sendable {
     }
 }
 
+private struct TimingSamples {
+    var encodeMs: [Double] = []
+    var sttMs: [Double] = []
+    var rewriteMs: [Double] = []
+    var pasteMs: [Double] = []
+    var generationMs: [Double] = []
+    var totalStageMs: [Double] = []
+
+    mutating func append(_ timings: [PipelineTiming]) {
+        encodeMs.append(contentsOf: timings.map { $0.encodeTime * 1000 })
+        sttMs.append(contentsOf: timings.map { $0.sttTime * 1000 })
+        rewriteMs.append(contentsOf: timings.map { $0.rewriteTime * 1000 })
+        pasteMs.append(contentsOf: timings.map { $0.pasteTime * 1000 })
+        generationMs.append(contentsOf: timings.map { ($0.encodeTime + $0.sttTime + $0.rewriteTime) * 1000 })
+        totalStageMs.append(contentsOf: timings.map { ($0.encodeTime + $0.sttTime + $0.rewriteTime + $0.pasteTime) * 1000 })
+    }
+}
+
+private struct FixtureInput {
+    let id: String
+    let audioURL: URL
+    let audioBytes: Int
+}
+
+private func distributions(from samples: TimingSamples) -> PerfLevelDistributions {
+    PerfLevelDistributions(
+        encodeMs: StageDistribution(samples: samples.encodeMs),
+        sttMs: StageDistribution(samples: samples.sttMs),
+        rewriteMs: StageDistribution(samples: samples.rewriteMs),
+        pasteMs: StageDistribution(samples: samples.pasteMs),
+        generationMs: StageDistribution(samples: samples.generationMs),
+        totalStageMs: StageDistribution(samples: samples.totalStageMs)
+    )
+}
+
+private func mergeSTTUsage(_ entries: [ProviderUsage]) -> [ProviderUsage] {
+    var counts: [String: Int] = [:]
+    for entry in entries {
+        let key = "\(entry.provider)\u{001F}\(entry.model)"
+        counts[key, default: 0] += entry.count
+    }
+    return counts
+        .map { key, count in
+            let parts = key.split(separator: "\u{001F}", maxSplits: 1).map(String.init)
+            return ProviderUsage(provider: parts[0], model: parts.count > 1 ? parts[1] : "", count: count)
+        }
+        .sorted { ($0.count, $0.provider, $0.model) > ($1.count, $1.provider, $1.model) }
+}
+
+private func mergeRewriteUsage(_ entries: [RewriteUsage]) -> [RewriteUsage] {
+    var counts: [String: Int] = [:]
+    for entry in entries {
+        let key = "\(entry.path)\u{001F}\(entry.model)"
+        counts[key, default: 0] += entry.count
+    }
+    return counts
+        .map { key, count in
+            let parts = key.split(separator: "\u{001F}", maxSplits: 1).map(String.init)
+            return RewriteUsage(path: parts[0], model: parts.count > 1 ? parts[1] : "", count: count)
+        }
+        .sorted { ($0.count, $0.path, $0.model) > ($1.count, $1.path, $1.model) }
+}
+
 @main
 struct VoxPerfAudit {
     static func main() async {
@@ -332,90 +498,191 @@ struct VoxPerfAudit {
             let dotenv = loadDotEnv(from: cwd.appendingPathComponent(".env.local"))
             let mergedEnv = mergedEnvironment(config.environment, dotenv: dotenv)
 
-            let audioAttrs = try? fm.attributesOfItem(atPath: config.audioURL.path)
-            let audioBytes = audioAttrs?[.size] as? Int ?? 0
+            var seenFixtureIDs: Set<String> = []
+            var fixtures: [FixtureInput] = []
+            for (index, audioURL) in config.audioURLs.enumerated() {
+                let attrs = try? fm.attributesOfItem(atPath: audioURL.path)
+                let audioBytes = attrs?[.size] as? Int ?? 0
+                let baseFixtureID = {
+                    let raw = audioURL.deletingPathExtension().lastPathComponent
+                    return raw.isEmpty ? "fixture-\(index + 1)" : raw
+                }()
+
+                var fixtureID = baseFixtureID
+                var suffix = 2
+                while seenFixtureIDs.contains(fixtureID) {
+                    fixtureID = "\(baseFixtureID)-\(suffix)"
+                    suffix += 1
+                }
+                seenFixtureIDs.insert(fixtureID)
+                fixtures.append(FixtureInput(id: fixtureID, audioURL: audioURL, audioBytes: audioBytes))
+            }
 
             let iso = ISO8601DateFormatter()
             let generatedAt = iso.string(from: Date())
 
-            var levelResults: [PerfLevelResult] = []
+            var fixtureLevelResults = Array(repeating: [PerfLevelResult](), count: fixtures.count)
+            var aggregatedLevelResults: [PerfLevelResult] = []
+            var reportProviders: ResolvedProviders?
 
             for level in ProcessingLevel.allCases {
-                let prefs = await MainActor.run { PerfPreferences(level: level, environment: mergedEnv) }
+                var aggregateSamples = TimingSamples()
+                var aggregateSTTUsage: [ProviderUsage] = []
+                var aggregateRewriteUsage: [RewriteUsage] = []
 
-                let paster = NoopPaster()
-                let collector = TimingCollector()
-                let usageRecorder = ProviderUsageRecorder()
+                for (fixtureIndex, fixture) in fixtures.enumerated() {
+                    let prefs = await MainActor.run { PerfPreferences(level: level, environment: mergedEnv) }
 
-                let providers = try resolvedProviders(environment: mergedEnv, usageRecorder: usageRecorder)
+                    if config.warmupIterations > 0 {
+                        let warmupCollector = TimingCollector()
+                        let warmupUsageRecorder = ProviderUsageRecorder()
+                        let warmupProviders = try resolvedProviders(
+                            lane: config.lane,
+                            level: level,
+                            environment: mergedEnv,
+                            usageRecorder: warmupUsageRecorder
+                        )
 
-                let pipeline = await MainActor.run {
-                    DictationPipeline(
-                        stt: providers.sttProvider,
-                        rewriter: providers.rewriteProvider,
-                        paster: paster,
-                        prefs: prefs,
-                        enableRewriteCache: false,
-                        enableOpus: providers.hasCloudSTT,
-                        pipelineTimeout: 180,
-                        timingHandler: { timing in
-                            collector.append(timing)
+                        let warmupPipeline = await MainActor.run {
+                            DictationPipeline(
+                                stt: warmupProviders.sttProvider,
+                                rewriter: warmupProviders.rewriteProvider,
+                                paster: NoopPaster(),
+                                prefs: prefs,
+                                enableRewriteCache: false,
+                                enableOpus: warmupProviders.hasCloudSTT,
+                                pipelineTimeout: 180,
+                                timingHandler: { timing in
+                                    warmupCollector.append(timing)
+                                }
+                            )
                         }
+
+                        for _ in 0..<config.warmupIterations {
+                            _ = try await warmupPipeline.process(audioURL: fixture.audioURL)
+                        }
+                    }
+
+                    let collector = TimingCollector()
+                    let usageRecorder = ProviderUsageRecorder()
+                    let providers = try resolvedProviders(
+                        lane: config.lane,
+                        level: level,
+                        environment: mergedEnv,
+                        usageRecorder: usageRecorder
+                    )
+                    reportProviders = reportProviders ?? providers
+
+                    let pipeline = await MainActor.run {
+                        DictationPipeline(
+                            stt: providers.sttProvider,
+                            rewriter: providers.rewriteProvider,
+                            paster: NoopPaster(),
+                            prefs: prefs,
+                            enableRewriteCache: false,
+                            enableOpus: providers.hasCloudSTT,
+                            pipelineTimeout: 180,
+                            timingHandler: { timing in
+                                collector.append(timing)
+                            }
+                        )
+                    }
+
+                    for _ in 0..<config.iterations {
+                        _ = try await pipeline.process(audioURL: fixture.audioURL)
+                    }
+
+                    let timings = collector.timings
+                    var fixtureSamples = TimingSamples()
+                    fixtureSamples.append(timings)
+                    aggregateSamples.append(timings)
+
+                    let fixtureSTTUsage = usageRecorder.snapshotSTT()
+                    aggregateSTTUsage.append(contentsOf: fixtureSTTUsage)
+
+                    let fixtureRewriteUsage = usageRecorder.snapshotRewrite()
+                    if level != .raw {
+                        aggregateRewriteUsage.append(contentsOf: fixtureRewriteUsage)
+                    }
+
+                    fixtureLevelResults[fixtureIndex].append(
+                        PerfLevelResult(
+                            level: level.rawValue,
+                            iterations: timings.count,
+                            providers: PerfLevelProviders(
+                                sttMode: providers.sttMode,
+                                sttObserved: fixtureSTTUsage,
+                                rewriteObserved: level == .raw ? nil : fixtureRewriteUsage
+                            ),
+                            distributions: distributions(from: fixtureSamples)
+                        )
                     )
                 }
 
-                for _ in 0..<config.iterations {
-                    _ = try await pipeline.process(audioURL: config.audioURL)
-                }
-
-                let timings = collector.timings
-                let encodeMs = timings.map { $0.encodeTime * 1000 }
-                let sttMs = timings.map { $0.sttTime * 1000 }
-                let rewriteMs = timings.map { $0.rewriteTime * 1000 }
-                let pasteMs = timings.map { $0.pasteTime * 1000 }
-                let generationMs = timings.map { ($0.encodeTime + $0.sttTime + $0.rewriteTime) * 1000 }
-                let totalStageMs = timings.map { ($0.encodeTime + $0.sttTime + $0.rewriteTime + $0.pasteTime) * 1000 }
-
-                let distributions = PerfLevelDistributions(
-                    encodeMs: StageDistribution(samples: encodeMs),
-                    sttMs: StageDistribution(samples: sttMs),
-                    rewriteMs: StageDistribution(samples: rewriteMs),
-                    pasteMs: StageDistribution(samples: pasteMs),
-                    generationMs: StageDistribution(samples: generationMs),
-                    totalStageMs: StageDistribution(samples: totalStageMs)
+                let providerMetadata = reportProviders
+                let aggregatedRewriteObserved = level == .raw ? nil : mergeRewriteUsage(aggregateRewriteUsage)
+                aggregatedLevelResults.append(
+                    PerfLevelResult(
+                        level: level.rawValue,
+                        iterations: aggregateSamples.generationMs.count,
+                        providers: PerfLevelProviders(
+                            sttMode: providerMetadata?.sttMode ?? "—",
+                            sttObserved: mergeSTTUsage(aggregateSTTUsage),
+                            rewriteObserved: aggregatedRewriteObserved
+                        ),
+                        distributions: distributions(from: aggregateSamples)
+                    )
                 )
-
-                let rewriteObserved = level == .raw ? nil : usageRecorder.snapshotRewrite()
-                levelResults.append(PerfLevelResult(
-                    level: level.rawValue,
-                    iterations: config.iterations,
-                    providers: PerfLevelProviders(
-                        sttMode: providers.sttMode,
-                        sttObserved: usageRecorder.snapshotSTT(),
-                        rewriteObserved: rewriteObserved
-                    ),
-                    distributions: distributions
-                ))
             }
 
-            let usageRecorder = ProviderUsageRecorder()
-            let providers = try resolvedProviders(environment: mergedEnv, usageRecorder: usageRecorder)
+            let providers: ResolvedProviders
+            if let reportProviders {
+                providers = reportProviders
+            } else {
+                providers = try resolvedProviders(
+                    lane: config.lane,
+                    level: .clean,
+                    environment: mergedEnv,
+                    usageRecorder: ProviderUsageRecorder()
+                )
+            }
+
+            let fixtureDescriptors = fixtures.map {
+                PerfFixtureDescriptor(id: $0.id, audioFile: $0.audioURL.lastPathComponent, audioBytes: $0.audioBytes)
+            }
+            let renderedFixtureResults = fixtures.enumerated().map { index, fixture in
+                PerfFixtureResult(
+                    fixtureID: fixture.id,
+                    audioFile: fixture.audioURL.lastPathComponent,
+                    audioBytes: fixture.audioBytes,
+                    levels: fixtureLevelResults[index]
+                )
+            }
+
+            let totalAudioBytes = fixtures.reduce(into: 0) { partialResult, fixture in
+                partialResult += fixture.audioBytes
+            }
+            let audioFileSummary = fixtures.count == 1 ? fixtures[0].audioURL.lastPathComponent : "\(fixtures.count) fixtures"
 
             let result = PerfAuditResult(
-                schemaVersion: 2,
+                schemaVersion: 3,
                 generatedAt: generatedAt,
+                lane: config.lane.rawValue,
                 commitSHA: config.commitSHA,
                 pullRequestNumber: config.pullRequestNumber,
                 label: config.runLabel,
                 iterationsPerLevel: config.iterations,
-                audioFile: config.audioURL.lastPathComponent,
-                audioBytes: audioBytes,
+                warmupIterationsPerLevel: config.warmupIterations,
+                audioFile: audioFileSummary,
+                audioBytes: totalAudioBytes,
+                fixtures: fixtureDescriptors,
+                fixtureResults: renderedFixtureResults,
                 sttMode: providers.sttMode,
                 sttSelectionPolicy: providers.sttSelectionPolicy,
                 sttForcedProvider: providers.sttForcedProvider,
                 sttChain: providers.sttChain,
                 rewriteRouting: providers.rewriteRouting,
-                levels: levelResults
+                levels: aggregatedLevelResults
             )
 
             let encoder = JSONEncoder()

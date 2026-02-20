@@ -26,6 +26,8 @@ public final class VoxSession: ObservableObject {
     private let sessionExtension: SessionExtension
     private let requestMicrophoneAccess: () async -> Bool
     private let errorPresenter: (String) -> Void
+    private let copyRawTranscriptToClipboard: (String) -> Void
+    private let recoveryStore: LastDictationRecoveryStore
     private let pipeline: DictationProcessing?
     private let streamingSTTProvider: StreamingSTTProvider?
     private var streamingSetupTask: Task<Void, Never>?
@@ -33,8 +35,9 @@ public final class VoxSession: ObservableObject {
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
     private var activeStreamingBridge: StreamingAudioBridge?
+    private static let noRecentDictationError = VoxError.internalError("No recent dictation available.")
 
-    public init(
+    public convenience init(
         recorder: AudioRecording? = nil,
         pipeline: DictationProcessing? = nil,
         hud: HUDDisplaying? = nil,
@@ -42,6 +45,35 @@ public final class VoxSession: ObservableObject {
         sessionExtension: SessionExtension? = nil,
         requestMicrophoneAccess: (() async -> Bool)? = nil,
         errorPresenter: ((String) -> Void)? = nil,
+        copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
+        streamingSTTProvider: StreamingSTTProvider? = nil,
+        streamingSetupTimeout: TimeInterval = 3.0
+    ) {
+        self.init(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: hud,
+            prefs: prefs,
+            sessionExtension: sessionExtension,
+            requestMicrophoneAccess: requestMicrophoneAccess,
+            errorPresenter: errorPresenter,
+            copyRawTranscriptToClipboard: copyRawTranscriptToClipboard,
+            recoveryStore: .shared,
+            streamingSTTProvider: streamingSTTProvider,
+            streamingSetupTimeout: streamingSetupTimeout
+        )
+    }
+
+    init(
+        recorder: AudioRecording? = nil,
+        pipeline: DictationProcessing? = nil,
+        hud: HUDDisplaying? = nil,
+        prefs: PreferencesReading? = nil,
+        sessionExtension: SessionExtension? = nil,
+        requestMicrophoneAccess: (() async -> Bool)? = nil,
+        errorPresenter: ((String) -> Void)? = nil,
+        copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
+        recoveryStore: LastDictationRecoveryStore,
         streamingSTTProvider: StreamingSTTProvider? = nil,
         streamingSetupTimeout: TimeInterval = 3.0
     ) {
@@ -60,6 +92,10 @@ public final class VoxSession: ObservableObject {
             alert.alertStyle = .warning
             alert.runModal()
         }
+        self.copyRawTranscriptToClipboard = copyRawTranscriptToClipboard ?? { text in
+            ClipboardPaster().copy(text: text, restoreAfter: nil)
+        }
+        self.recoveryStore = recoveryStore
         self.streamingSTTProvider = streamingSTTProvider
         self.streamingSetupTimeout = streamingSetupTimeout
     }
@@ -77,7 +113,8 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makePipeline(dictationID: String) -> DictationProcessing {
-        DictationPipeline(
+        let recoveryStore = self.recoveryStore
+        return DictationPipeline(
             stt: makeSTTProvider(),
             rewriter: makeRewriteProvider(),
             paster: ClipboardPaster(),
@@ -102,6 +139,15 @@ public final class VoxSession: ObservableObject {
                         "encoded_bytes": .int(timing.encodedSizeBytes),
                     ]
                 )
+            },
+            onProcessedTranscript: { rawTranscript, outputText, processingLevel in
+                Task {
+                    await recoveryStore.store(
+                        rawTranscript: rawTranscript,
+                        finalText: outputText,
+                        processingLevel: processingLevel
+                    )
+                }
             }
         )
     }
@@ -268,6 +314,25 @@ public final class VoxSession: ObservableObject {
         case .idle: await startRecording()
         case .recording: await stopRecording()
         case .processing: break
+        }
+    }
+
+    public func copyLastRawTranscript() async {
+        do {
+            let rawTranscript = try await latestRawTranscriptForRecovery()
+            copyRawTranscriptToClipboard(rawTranscript)
+        } catch {
+            presentError(error.localizedDescription)
+        }
+    }
+
+    public func retryLastRewrite() async {
+        do {
+            try await retryLastRewriteOrThrow()
+        } catch {
+            presentError(error.localizedDescription)
+            state = .idle
+            hud.hide()
         }
     }
 
@@ -725,6 +790,44 @@ public final class VoxSession: ObservableObject {
         setupTask.cancel()
         await setupTask.value
         streamingSetupTask = nil
+    }
+
+    private func latestRawTranscriptForRecovery() async throws -> String {
+        guard let rawTranscript = await recoveryStore.latestRawTranscript() else {
+            throw Self.noRecentDictationError
+        }
+        let normalized = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            throw Self.noRecentDictationError
+        }
+        return normalized
+    }
+
+    private func retryLastRewriteOrThrow() async throws {
+        guard state == .idle else {
+            throw VoxError.internalError("Retry rewrite is unavailable while dictation is active.")
+        }
+        guard let snapshot = await recoveryStore.latestSnapshot() else {
+            throw Self.noRecentDictationError
+        }
+        let normalizedRaw = snapshot.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedRaw.isEmpty else {
+            throw Self.noRecentDictationError
+        }
+
+        state = .processing
+        hud.showProcessing(message: "Retrying rewrite")
+        let active = pipeline ?? makePipeline(dictationID: UUID().uuidString)
+        guard let recoveryPipeline = active as? TranscriptRecoveryProcessing else {
+            throw VoxError.internalError("Retry rewrite is unavailable with the current pipeline.")
+        }
+        _ = try await recoveryPipeline.process(
+            transcript: normalizedRaw,
+            processingLevel: snapshot.processingLevel,
+            bypassRewriteCache: true
+        )
+        state = .idle
+        hud.showSuccess()
     }
 
     private func presentError(_ message: String) {

@@ -172,6 +172,7 @@ Behavior:
 - `HUDDisplaying`: recording + processing + completion HUD updates
 - `DictationProcessing`: pipeline abstraction for processing captured audio
 - `TranscriptProcessing`: rewrite/paste abstraction for precomputed transcripts
+- `TranscriptRecoveryProcessing`: transcript replay with explicit processing level + cache bypass controls
 - `PreferencesReading`: read-only app settings + API key access for DI
 
 App wires concrete providers in `DictationPipeline`. Swap implementations without touching flow logic.
