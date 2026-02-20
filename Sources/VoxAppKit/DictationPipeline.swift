@@ -300,6 +300,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     if trimmedCandidate.isEmpty {
                         print("[Pipeline] Rewrite returned empty, using raw transcript")
                         output = transcript
+                    } else if isRewriteContractViolation(raw: transcript, candidate: trimmedCandidate, level: level) {
+                        let ratio = Double(trimmedCandidate.count) / Double(max(transcript.count, 1))
+                        print("[Pipeline] Rewrite contract violation: \(String(format: "%.1f", ratio))x expansion on clean, using raw transcript")
+                        output = transcript
                     } else {
                         output = candidate
                         if enableRewriteCache {
@@ -426,6 +430,16 @@ struct RewriteStageTimeouts: Sendable {
             return nil
         }
     }
+}
+
+/// Returns true if the rewrite candidate is implausibly long relative to the raw transcript,
+/// indicating the model answered the content instead of cleaning it. Only enforced for clean
+/// mode — polish can legitimately expand text. The 4x threshold catches answer-generation
+/// without rejecting legitimate rewrites (filler removal alone cannot multiply length).
+private func isRewriteContractViolation(raw: String, candidate: String, level: ProcessingLevel) -> Bool {
+    guard level == .clean, raw.count >= 20 else { return false }
+    let ratio = Double(candidate.count) / Double(raw.count)
+    return ratio > 4.0
 }
 
 private func rewriteFailureSummary(_ error: Error) -> String {

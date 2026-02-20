@@ -1082,6 +1082,113 @@ struct DictationPipelineTests {
         #expect(result == "hello world")
     }
 
+    // Regression test for https://github.com/misty-step/vox/issues/277
+    // When the model answers a question-shaped transcript instead of cleaning it,
+    // the 4x expansion is detected and the pipeline falls back to raw transcript.
+    @Test("Clean rewrite that answers question falls back to raw transcript")
+    func process_cleanRewrite_answerInsteadOfRewrite_fallsBackToRaw() async throws {
+        let rawTranscript = "help me understand, how to, engage in and celebrate Fat Tuesday, Ash Wednesday and Eucharistic adoration"
+        // Simulate a model that answered the question instead of cleaning the transcript.
+        // The answer is ~5x longer than the input, with completely new content.
+        let modelAnswer = """
+        Fat Tuesday, also known as Mardi Gras, is celebrated the day before Ash Wednesday and marks the final day of feasting before Lent begins. \
+        To engage in Fat Tuesday, you might attend parades, enjoy traditional foods like king cake, or participate in festive gatherings. \
+        Ash Wednesday is the first day of Lent, when Christians receive ashes on their foreheads as a sign of mortality and repentance. \
+        To observe Ash Wednesday, attend a church service where ashes are distributed. \
+        Eucharistic adoration is the Catholic practice of worshipping the consecrated Eucharist, typically in a monstrance. \
+        To participate, visit a church that offers adoration hours and spend time in silent prayer before the Blessed Sacrament.
+        """
+
+        let stt = MockSTTProvider()
+        stt.results = [.success(rawTranscript)]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success(modelAnswer)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        // Should fall back to raw — the model answered instead of cleaning.
+        #expect(result == rawTranscript)
+        #expect(paster.callCount == 1)
+    }
+
+    @Test("Clean rewrite shorter than raw uses candidate directly")
+    func process_cleanRewrite_shorterCandidate_usesCandidateDirectly() async throws {
+        let rawTranscript = "help me understand, how to, engage in and celebrate Fat Tuesday, Ash Wednesday and Eucharistic adoration"
+        // Correct clean rewrite: slightly shorter (removed comma pauses), same content
+        let cleanedTranscript = "Help me understand how to engage in and celebrate Fat Tuesday, Ash Wednesday, and Eucharistic adoration."
+
+        let stt = MockSTTProvider()
+        stt.results = [.success(rawTranscript)]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success(cleanedTranscript)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        // Correct rewrite is within bounds — use it.
+        #expect(result == cleanedTranscript)
+    }
+
+    @Test("Polish rewrite that expands significantly is accepted")
+    func process_polishRewrite_4xExpansion_accepted() async throws {
+        let rawTranscript = "need to think about the auth flow for new users who come in through the oauth path"
+        // Polish can legitimately expand significantly — no ratio cap.
+        let expanded = """
+        We need to carefully consider the authentication flow for new users who arrive via OAuth. \
+        This includes handling edge cases such as account linking, first-time consent screens, \
+        and ensuring the redirect URI validation is airtight. The user experience at this entry \
+        point is critical — a smooth OAuth flow sets the tone for the entire onboarding experience.
+        """
+
+        let stt = MockSTTProvider()
+        stt.results = [.success(rawTranscript)]
+
+        let rewriter = MockRewriteProvider()
+        rewriter.results = [.success(expanded)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .polish
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        // Polish is not subject to the max-ratio check.
+        #expect(result == expanded)
+    }
+
     @Test("Rewrite cache hit skips second rewrite call")
     func process_rewriteCacheHit_skipsSecondRewriteCall() async throws {
         let stt = MockSTTProvider()
