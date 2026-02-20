@@ -1188,7 +1188,6 @@ struct DictationPipelineTests {
         stt.results = [.success("um so the cache phrase two is ready"), .success("um so the cache phrase two is ready")]
 
         let rewriter = MockRewriteProvider()
-        // Rewrites must pass quality gate: keep content words, just clean up
         rewriter.results = [.success("The cache phrase two is ready."), .success("Cache phrase two is ready.")]
 
         let paster = MockTextPaster()
@@ -1216,7 +1215,6 @@ struct DictationPipelineTests {
 
     @Test("Rewrite cache skips long transcripts")
     func process_rewriteCache_longTranscript_skipsCache() async throws {
-        // Keep output text derived from the transcript so future quality gates won't break this test.
         let transcript = String(repeating: "alpha ", count: 300).trimmingCharacters(in: .whitespacesAndNewlines)
         let rewrittenOne = transcript + "\n\nDone."
         let rewrittenTwo = transcript + "\n\nFinished."

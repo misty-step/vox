@@ -61,10 +61,6 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     // Invoked when a transcript is successfully processed and pasted.
     private let onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)?
 
-    #if DEBUG
-    private nonisolated(unsafe) var gateAccepts = 0
-    #endif
-
     @MainActor
     public convenience init(
         stt: STTProvider,
@@ -314,11 +310,6 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                                 model: model
                             )
                         }
-                        #if DEBUG
-                        let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                        gateAccepts += 1
-                        print("\(ANSIColor.green)[Rewrite]\(ANSIColor.reset) level=\(level) | ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? "")) [\(gateAccepts) rewrites]")
-                        #endif
                     }
                 }
             } catch is CancellationError {
