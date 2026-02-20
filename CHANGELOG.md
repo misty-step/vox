@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/misty-step/vox/compare/v1.19.0...v1.20.0) (2026-02-20)
+
+
+### Features
+
+* **recovery:** add last dictation raw/retry actions ([#281](https://github.com/misty-step/vox/issues/281)) ([8bf4d90](https://github.com/misty-step/vox/commit/8bf4d9053539d823d6883da7a53fd00acef0c74e))
+
 # [1.19.0](https://github.com/misty-step/vox/compare/v1.18.0...v1.19.0) (2026-02-19)
 
 
