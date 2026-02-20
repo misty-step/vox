@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -73,7 +74,10 @@ def parse_generated_at(value: Optional[str]) -> Optional[datetime]:
     if text.endswith("Z"):
         text = f"{text[:-1]}+00:00"
     try:
-        return datetime.fromisoformat(text)
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
         return None
 
@@ -321,7 +325,8 @@ def load_history_runs(history_dir: Optional[Path]) -> list[dict[str, Any]]:
     for path in sorted(history_dir.glob("*.json")):
         try:
             run = load_json(path)
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[perf-report] skipped history file {path}: {exc}", file=sys.stderr)
             continue
         if isinstance(run, dict):
             runs.append(run)
@@ -340,7 +345,7 @@ def dedupe_and_sort_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ordered = list(unique.values())
     ordered.sort(
         key=lambda run: (
-            parse_generated_at(run.get("generatedAt")) or datetime.min,
+            parse_generated_at(run.get("generatedAt")) or datetime.min.replace(tzinfo=timezone.utc),
             str(run.get("commitSHA") or ""),
             lane_name_for_run(run),
         )

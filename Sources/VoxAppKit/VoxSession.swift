@@ -35,6 +35,7 @@ public final class VoxSession: ObservableObject {
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
     private var activeStreamingBridge: StreamingAudioBridge?
+    private static let noRecentDictationError = VoxError.internalError("No recent dictation available.")
 
     public convenience init(
         recorder: AudioRecording? = nil,
@@ -793,11 +794,11 @@ public final class VoxSession: ObservableObject {
 
     private func latestRawTranscriptForRecovery() async throws -> String {
         guard let rawTranscript = await recoveryStore.latestRawTranscript() else {
-            throw VoxError.internalError("No recent dictation available.")
+            throw Self.noRecentDictationError
         }
         let normalized = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
-            throw VoxError.internalError("No recent dictation available.")
+            throw Self.noRecentDictationError
         }
         return normalized
     }
@@ -807,11 +808,11 @@ public final class VoxSession: ObservableObject {
             throw VoxError.internalError("Retry rewrite is unavailable while dictation is active.")
         }
         guard let snapshot = await recoveryStore.latestSnapshot() else {
-            throw VoxError.internalError("No recent dictation available.")
+            throw Self.noRecentDictationError
         }
         let normalizedRaw = snapshot.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedRaw.isEmpty else {
-            throw VoxError.internalError("No recent dictation available.")
+            throw Self.noRecentDictationError
         }
 
         state = .processing

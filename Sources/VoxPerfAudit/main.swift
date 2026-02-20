@@ -503,12 +503,16 @@ struct VoxPerfAudit {
             for (index, audioURL) in config.audioURLs.enumerated() {
                 let attrs = try? fm.attributesOfItem(atPath: audioURL.path)
                 let audioBytes = attrs?[.size] as? Int ?? 0
-                var fixtureID = audioURL.deletingPathExtension().lastPathComponent
-                if fixtureID.isEmpty {
-                    fixtureID = "fixture-\(index + 1)"
-                }
-                if seenFixtureIDs.contains(fixtureID) {
-                    fixtureID = "\(fixtureID)-\(index + 1)"
+                let baseFixtureID = {
+                    let raw = audioURL.deletingPathExtension().lastPathComponent
+                    return raw.isEmpty ? "fixture-\(index + 1)" : raw
+                }()
+
+                var fixtureID = baseFixtureID
+                var suffix = 2
+                while seenFixtureIDs.contains(fixtureID) {
+                    fixtureID = "\(baseFixtureID)-\(suffix)"
+                    suffix += 1
                 }
                 seenFixtureIDs.insert(fixtureID)
                 fixtures.append(FixtureInput(id: fixtureID, audioURL: audioURL, audioBytes: audioBytes))

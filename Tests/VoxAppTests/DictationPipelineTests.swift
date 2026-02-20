@@ -1115,7 +1115,7 @@ struct DictationPipelineTests {
     }
 
     @Test("Recovery replay bypasses cache and re-runs rewrite")
-    func process_transcriptReplay_bypassCache_rerunsRewrite() async throws {
+    func test_processTranscriptReplay_rerunsRewriteWhenCacheBypassed() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("unused")]
 
@@ -1154,7 +1154,7 @@ struct DictationPipelineTests {
     }
 
     @Test("Recovery replay uses explicit processing level model")
-    func process_transcriptReplay_usesExplicitProcessingLevel() async throws {
+    func test_processTranscriptReplay_usesExplicitProcessingLevelWhenProvided() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("unused")]
 

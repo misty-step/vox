@@ -66,7 +66,7 @@ struct PerfAuditConfigTests {
     }
 
     @Test("Invalid lane yields clear error")
-    func test_init_invalidLaneThrows() {
+    func test_init_throwsWhenLaneIsInvalid() {
         #expect(throws: PerfAuditError.invalidArgument("--lane must be one of provider|codepath")) {
             _ = try PerfAuditConfig(
                 arguments: ["--audio", "a.caf", "--output", "b.json", "--lane", "network"],
@@ -76,7 +76,7 @@ struct PerfAuditConfigTests {
     }
 
     @Test("Negative warmup yields clear error")
-    func test_init_negativeWarmupThrows() {
+    func test_init_throwsWhenWarmupIsNegative() {
         #expect(throws: PerfAuditError.invalidArgument("--warmup needs an integer >= 0")) {
             _ = try PerfAuditConfig(
                 arguments: ["--audio", "a.caf", "--output", "b.json", "--warmup", "-1"],
