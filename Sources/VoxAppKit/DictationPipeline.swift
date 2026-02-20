@@ -305,19 +305,25 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         print("[Pipeline] Rewrite returned empty, using raw transcript")
                         output = transcript
                     } else {
-                        output = candidate
-                        if enableRewriteCache {
-                            await rewriteCache.store(
-                                candidate,
-                                for: transcript,
-                                level: level,
-                                model: model
-                            )
+                        let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
+                        if decision.isAcceptable {
+                            output = candidate
+                            if enableRewriteCache {
+                                await rewriteCache.store(
+                                    candidate,
+                                    for: transcript,
+                                    level: level,
+                                    model: model
+                                )
+                            }
+                        } else {
+                            print("[Pipeline] Rewrite quality gate rejected candidate (\(transcript.count) raw → \(trimmedCandidate.count) chars), using raw transcript")
+                            output = transcript
                         }
                         #if DEBUG
-                        let decision = RewriteQualityGate.evaluate(raw: transcript, candidate: candidate, level: level)
-                        gateAccepts += 1
-                        print("\(ANSIColor.green)[Rewrite]\(ANSIColor.reset) level=\(level) | ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? "")) [\(gateAccepts) rewrites]")
+                        if decision.isAcceptable { gateAccepts += 1 }
+                        let gateColor = decision.isAcceptable ? ANSIColor.green : ANSIColor.red
+                        print("\(gateColor)[Rewrite]\(ANSIColor.reset) level=\(level) accepted=\(decision.isAcceptable) | ratio: \(String(format: "%.2f", decision.ratio))\(decision.levenshteinSimilarity.map { String(format: ", lev: %.2f", $0) } ?? "")\(decision.contentOverlap.map { String(format: ", overlap: %.2f", $0) } ?? "")) [\(gateAccepts) rewrites]")
                         #endif
                     }
                 }

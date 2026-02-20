@@ -663,12 +663,13 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 1)
     }
 
-    @Test("Rewrite candidate is used even when significantly shorter than raw")
-    func process_rewriteShorterCandidate_usesCandidateDirectly() async throws {
+    @Test("Quality gate rejects wildly divergent rewrite, uses raw transcript")
+    func process_rewriteQualityGateRejectsWildlyDifferentCandidate_usesRaw() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
         let rewriter = MockRewriteProvider()
+        // "hi" is unrelated — fails ratio (0.18 < 0.6) and content overlap (0 < 0.4)
         rewriter.results = [.success("hi")]
 
         let paster = MockTextPaster()
@@ -685,10 +686,39 @@ struct DictationPipelineTests {
 
         let result = try await pipeline.process(audioURL: audioURL)
 
-        #expect(result == "hi")
+        #expect(result == "hello world")
         #expect(stt.callCount == 1)
         #expect(rewriter.callCount == 1)
-        #expect(paster.callCount == 1)
+        #expect(paster.lastText == "hello world")
+    }
+
+    @Test("Quality gate rejects hallucinated long output for short transcript")
+    func process_rewriteQualityGateRejectsHallucination_usesRaw() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("go ahead")]
+
+        let rewriter = MockRewriteProvider()
+        // Simulates the exact p0 bug: short transcript → long unrelated hallucination
+        let cybersecurityEssay = "Okay, so my presentation is about the importance of cybersecurity in the modern age. Cybersecurity is critical in today's digital landscape because organizations face increasingly sophisticated threats from malicious actors who seek to exploit vulnerabilities in systems and networks."
+        rewriter.results = [.success(cybersecurityEssay)]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "go ahead")
+        #expect(rewriter.callCount == 1)
+        #expect(paster.lastText == "go ahead")
     }
 
     @Test("Paster failure propagates error")
