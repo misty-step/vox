@@ -57,7 +57,7 @@ final class MockRecorder: AudioChunkStreaming {
 }
 
 @MainActor
-final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording {
+final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording, AudioChunkStreaming {
     var startCallCount = 0
     var stopCallCount = 0
     var levelCallCount = 0
@@ -66,6 +66,7 @@ final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording {
     var stopError: Error?
     private var currentEncryptionKey: Data?
     private(set) var recordingURL: URL
+    private var audioChunkHandler: (@Sendable (AudioChunk) -> Void)?
     var consumeEncryptionKeyCallCount = 0
     var discardEncryptionKeyCallCount = 0
 
@@ -95,6 +96,14 @@ final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording {
             throw VoxError.internalError("Mock stop failure")
         }
         return recordingURL
+    }
+
+    func setAudioChunkHandler(_ handler: (@Sendable (AudioChunk) -> Void)?) {
+        audioChunkHandler = handler
+    }
+
+    func emitChunk(_ chunk: AudioChunk) {
+        audioChunkHandler?(chunk)
     }
 
     func consumeRecordingEncryptionKey() -> Data? {
@@ -1002,6 +1011,152 @@ struct VoxSessionDITests {
         #expect(!FileManager.default.fileExists(atPath: encryptedURL.path))
         #expect(recorder.ensureKeyCleared())
         #expect(recorder.consumeEncryptionKeyCallCount == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Batch processing failure zeroizes encryption key")
+    @MainActor func test_batchProcessingFailure_zeroizesEncryptionKey() async throws {
+        let plainURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-session-failure-\(UUID().uuidString).caf")
+        let encryptionKey = Data(repeating: 0xB2, count: 32)
+        let encryptedURL = plainURL.appendingPathExtension(AudioFileEncryption.encryptedFileExtension)
+
+        defer {
+            try? FileManager.default.removeItem(at: plainURL)
+            try? FileManager.default.removeItem(at: encryptedURL)
+        }
+
+        try Data([0x10, 0x11, 0x12]).write(to: plainURL)
+        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try? FileManager.default.removeItem(at: plainURL)
+
+        let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
+        let pipeline = MockPipeline()
+        pipeline.errorToThrow = VoxError.internalError("stt failed")
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(recorder.ensureKeyCleared())
+        #expect(recorder.consumeEncryptionKeyCallCount == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming fallback decrypts encrypted recording before batch transcription")
+    @MainActor func test_streamingFallback_decryptsEncryptedRecordingBeforeBatchTranscription() async throws {
+        let plainURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-session-streaming-fallback-\(UUID().uuidString).caf")
+        let encryptionKey = Data(repeating: 0xC3, count: 32)
+        let encryptedURL = plainURL.appendingPathExtension(AudioFileEncryption.encryptedFileExtension)
+
+        defer {
+            try? FileManager.default.removeItem(at: plainURL)
+            try? FileManager.default.removeItem(at: encryptedURL)
+        }
+
+        try Data([0x21, 0x22, 0x23]).write(to: plainURL)
+        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try? FileManager.default.removeItem(at: plainURL)
+
+        let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
+        let pipeline = MockPipeline()
+        pipeline.result = "batch fallback transcript"
+        let streamingSession = MockStreamingSession()
+        streamingSession.finishResult = .failure(StreamingSTTError.finalizationTimeout)
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.lastAudioURL == plainURL)
+        #expect(streamingSession.cancelCallCount == 1)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Batch processing with missing decryption key throws error")
+    @MainActor func test_batchProcessingMissingKey_handlesErrorWithoutRunningPipeline() async throws {
+        let plainURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-session-missing-key-\(UUID().uuidString).caf")
+        let encryptionKey = Data(repeating: 0xD4, count: 32)
+        let encryptedURL = plainURL.appendingPathExtension(AudioFileEncryption.encryptedFileExtension)
+
+        defer {
+            try? FileManager.default.removeItem(at: plainURL)
+            try? FileManager.default.removeItem(at: encryptedURL)
+        }
+
+        try Data([0x31, 0x32, 0x33]).write(to: plainURL)
+        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try? FileManager.default.removeItem(at: plainURL)
+
+        let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
+        recorder.discardRecordingEncryptionKey()
+        let pipeline = MockPipeline()
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(session.state == .idle)
+        #expect(pipeline.processCallCount == 0)
+    }
+
+    @Test("Encrypted recorder stop failure discards encryption key")
+    @MainActor func test_encryptedRecorderStopFailure_discardsEncryptionKey() async throws {
+        let encryptedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vox-stop-fail-\(UUID().uuidString).caf.enc")
+        FileManager.default.createFile(atPath: encryptedURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: encryptedURL) }
+
+        let recorder = MockEncryptedRecorder(
+            recordingURL: encryptedURL,
+            encryptionKey: AudioFileEncryption.randomKey()
+        )
+        recorder.stopError = VoxError.internalError("stop failed")
+        var errors: [String] = []
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { errors.append($0) }
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(recorder.discardEncryptionKeyCallCount == 1)
+        #expect(recorder.consumeEncryptionKeyCallCount == 0)
+        #expect(recorder.ensureKeyCleared())
+        #expect(errors.count == 1)
         #expect(session.state == .idle)
     }
 
