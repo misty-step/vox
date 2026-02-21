@@ -16,20 +16,60 @@ public struct SettingsView: View {
         self.onRetryHotkey = onRetryHotkey
     }
 
+    private var content: SettingsViewContent {
+        SettingsViewContent.make(productInfo: productInfo, hotkeyAvailable: hotkeyAvailable)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(hotkeyAvailable ? "Press Option+Space to dictate" : "Press menu bar icon to dictate")
-                    .font(.title3.weight(.semibold))
-                Text("Pick a microphone. Add cloud keys only if you want faster transcription and rewriting.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 12) {
+                ZStack(alignment: .bottomTrailing) {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.16))
+
+                    Image(systemName: "waveform")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+
+                    ZStack {
+                        Circle()
+                            .fill(Color(nsColor: .windowBackgroundColor))
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .frame(width: 15, height: 15)
+                    .offset(x: 3, y: 3)
+                }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(content.headerTitle)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                    Text(content.headerSubtitle)
+                        .font(.headline)
+                    Text("Pick a microphone. Add cloud keys only if you want faster transcription and rewriting.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.accentColor.opacity(0.08),
+                        Color.clear,
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
 
             Divider()
 
@@ -38,15 +78,106 @@ public struct SettingsView: View {
                     BasicsSection(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey)
                     CloudProvidersSection(onManageKeys: { showingCloudKeys = true })
                 }
-                .padding(16)
+                .padding(20)
             }
 
-            ProductStandardsFooter(productInfo: productInfo)
+            ProductStandardsFooter(productInfo: productInfo, versionText: content.versionText)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 560, minHeight: 420)
         .sheet(isPresented: $showingCloudKeys) {
             CloudKeysSheet()
                 .frame(minWidth: 640, minHeight: 520)
         }
+    }
+}
+
+enum SettingsSectionProminence {
+    case primary
+    case secondary
+
+    var fillColor: Color {
+        switch self {
+        case .primary:
+            return Color(nsColor: .controlBackgroundColor)
+        case .secondary:
+            return Color(nsColor: .windowBackgroundColor)
+        }
+    }
+
+    var borderColor: Color {
+        switch self {
+        case .primary:
+            return Color.accentColor.opacity(0.25)
+        case .secondary:
+            return Color.primary.opacity(0.10)
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .primary:
+            return Color.accentColor
+        case .secondary:
+            return Color.secondary
+        }
+    }
+
+    var iconBackgroundColor: Color {
+        switch self {
+        case .primary:
+            return Color.accentColor.opacity(0.14)
+        case .secondary:
+            return Color.primary.opacity(0.07)
+        }
+    }
+}
+
+struct SettingsSection<Content: View>: View {
+    private let title: String
+    private let systemImage: String
+    private let prominence: SettingsSectionProminence
+    private let content: Content
+
+    init(
+        title: String,
+        systemImage: String,
+        prominence: SettingsSectionProminence = .secondary,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.prominence = prominence
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(prominence.iconColor)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(prominence.iconBackgroundColor)
+                    )
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(prominence.fillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(prominence.borderColor, lineWidth: 1)
+        )
     }
 }
