@@ -180,6 +180,7 @@ public final class VoxSession: ObservableObject {
 
         // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
         // Falls through to cloud if unavailable or on error.
+        #if canImport(FoundationModels)
         if #available(macOS 26.0, *), AppleFoundationModelsClient.isAvailable {
             let cloudFallback = makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
             return FallbackRewriteProvider(entries: [
@@ -187,6 +188,7 @@ public final class VoxSession: ObservableObject {
                 .init(provider: cloudFallback, label: "Cloud"),
             ])
         }
+        #endif
 
         return makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
     }

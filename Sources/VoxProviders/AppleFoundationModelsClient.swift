@@ -1,3 +1,4 @@
+#if canImport(FoundationModels)
 import Foundation
 import FoundationModels
 import VoxCore
@@ -48,3 +49,4 @@ public final class AppleFoundationModelsClient: RewriteProvider {
         }
     }
 }
+#endif
