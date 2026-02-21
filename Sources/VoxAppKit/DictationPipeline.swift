@@ -68,7 +68,8 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     // Invoked once per process call. On failures it receives partial stage timings.
     private let timingHandler: (@Sendable (PipelineTiming) -> Void)?
     // Invoked when a transcript is successfully processed and pasted.
-    private let onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)?
+    // Async so callers can persist state (e.g. recovery snapshot) before process() returns.
+    private let onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)?
 
     @MainActor
     public convenience init(
@@ -84,7 +85,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
-        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)? = nil
+        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)? = nil
     ) {
         self.init(
             stt: stt,
@@ -118,7 +119,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         pipelineTimeout: TimeInterval = 120,
         rewriteStageTimeouts: RewriteStageTimeouts = .default,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
-        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) -> Void)? = nil,
+        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)? = nil,
         audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { url in
             try CapturedAudioInspector.ensureHasAudioFrames(at: url)
         }
@@ -218,7 +219,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             level: level,
             bypassRewriteCache: false
         )
-        onProcessedTranscript?(transcript, processed.text, level)
+        await onProcessedTranscript?(transcript, processed.text, level)
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
 
@@ -286,7 +287,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             level: processingLevel,
             bypassRewriteCache: bypassRewriteCache
         )
-        onProcessedTranscript?(transcript, processed.text, processingLevel)
+        await onProcessedTranscript?(transcript, processed.text, processingLevel)
 
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime

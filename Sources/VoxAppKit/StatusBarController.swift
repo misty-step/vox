@@ -36,8 +36,16 @@ struct StatusBarMenuSnapshot: Equatable {
     let toggleEnabled: Bool
     let hotkeyTitle: String
     let hotkeyNeedsAction: Bool
+    let copyRawEnabled: Bool
+    let retryEnabled: Bool
 
-    static func make(state: StatusBarState, hasCloudSTT: Bool, hasRewrite: Bool, hotkeyAvailable: Bool) -> StatusBarMenuSnapshot {
+    static func make(
+        state: StatusBarState,
+        hasCloudSTT: Bool,
+        hasRewrite: Bool,
+        hotkeyAvailable: Bool,
+        hasRecoverySnapshot: Bool = false
+    ) -> StatusBarMenuSnapshot {
         let statusTitle: String
         let toggleTitle: String
         let toggleEnabled: Bool
@@ -64,6 +72,14 @@ struct StatusBarMenuSnapshot: Equatable {
         )
 
         let hotkeyStatus = HotkeyStatus.forAvailability(hotkeyAvailable)
+        // Copy raw is safe during any state — read-only clipboard operation, no pipeline contention.
+        let copyRawEnabled = hasRecoverySnapshot
+        let retryEnabled: Bool
+        if case .idle = state {
+            retryEnabled = hasRecoverySnapshot
+        } else {
+            retryEnabled = false
+        }
 
         return StatusBarMenuSnapshot(
             statusTitle: statusTitle,
@@ -73,7 +89,9 @@ struct StatusBarMenuSnapshot: Equatable {
             toggleTitle: toggleTitle,
             toggleEnabled: toggleEnabled,
             hotkeyTitle: hotkeyStatus.title,
-            hotkeyNeedsAction: hotkeyStatus.needsAction
+            hotkeyNeedsAction: hotkeyStatus.needsAction,
+            copyRawEnabled: copyRawEnabled,
+            retryEnabled: retryEnabled
         )
     }
 }
@@ -155,6 +173,7 @@ public final class StatusBarController: NSObject {
 
     private var prefsObserver: AnyCancellable?
     private var hotkeyAvailable: Bool = true
+    private var recoveryAvailable: Bool = false
 
     private var currentState: StatusBarState = .idle(processingLevel: .raw)
 
@@ -194,6 +213,12 @@ public final class StatusBarController: NSObject {
         updateIcon(for: currentState)
     }
 
+    public func setRecoveryAvailable(_ available: Bool) {
+        guard recoveryAvailable != available else { return }
+        recoveryAvailable = available
+        rebuildMenu()
+    }
+
     private func applyState(_ state: StatusBarState) {
         let stateChanged = state != currentState
         currentState = state
@@ -226,7 +251,8 @@ public final class StatusBarController: NSObject {
             state: currentState,
             hasCloudSTT: cloudReadiness.hasCloudSTT,
             hasRewrite: cloudReadiness.hasRewrite,
-            hotkeyAvailable: hotkeyAvailable
+            hotkeyAvailable: hotkeyAvailable,
+            hasRecoverySnapshot: recoveryAvailable
         )
 
         let menu = NSMenu()
@@ -284,6 +310,7 @@ public final class StatusBarController: NSObject {
             keyEquivalent: ""
         )
         copyRawItem.target = self
+        copyRawItem.isEnabled = snapshot.copyRawEnabled
         menu.addItem(copyRawItem)
 
         let retryRewriteItem = NSMenuItem(
@@ -292,11 +319,7 @@ public final class StatusBarController: NSObject {
             keyEquivalent: ""
         )
         retryRewriteItem.target = self
-        if case .idle = currentState {
-            retryRewriteItem.isEnabled = true
-        } else {
-            retryRewriteItem.isEnabled = false
-        }
+        retryRewriteItem.isEnabled = snapshot.retryEnabled
         menu.addItem(retryRewriteItem)
         menu.addItem(.separator())
 

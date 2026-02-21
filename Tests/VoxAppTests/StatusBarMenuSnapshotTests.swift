@@ -146,4 +146,88 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.hotkeyTitle == "Hotkey: unavailable (use menu)")
         #expect(snapshot.hotkeyNeedsAction == true)
     }
+
+    @Test("Recovery items enabled when snapshot available in idle state")
+    func recoveryEnabledWithSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: true
+        )
+
+        #expect(snapshot.copyRawEnabled == true)
+        #expect(snapshot.retryEnabled == true)
+    }
+
+    @Test("Recovery items disabled when no snapshot")
+    func recoveryDisabledWithoutSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .idle(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: false
+        )
+
+        #expect(snapshot.copyRawEnabled == false)
+        #expect(snapshot.retryEnabled == false)
+    }
+
+    @Test("Recovery items disabled during processing even if snapshot available")
+    func recoveryDisabledDuringProcessing() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .processing(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: true
+        )
+
+        #expect(snapshot.copyRawEnabled == true)
+        #expect(snapshot.retryEnabled == false)
+    }
+
+    @Test("Recovery items disabled when processing and no snapshot")
+    func recoveryDisabledDuringProcessingNoSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .processing(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: false
+        )
+
+        #expect(snapshot.copyRawEnabled == false)
+        #expect(snapshot.retryEnabled == false)
+    }
+
+    @Test("Recording state: copy raw enabled with snapshot, retry disabled")
+    func recoveryDuringRecordingWithSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .recording(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: true
+        )
+
+        #expect(snapshot.copyRawEnabled == true)
+        #expect(snapshot.retryEnabled == false)
+    }
+
+    @Test("Recording state: both recovery items disabled without snapshot")
+    func recoveryDuringRecordingNoSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .recording(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: false
+        )
+
+        #expect(snapshot.copyRawEnabled == false)
+        #expect(snapshot.retryEnabled == false)
+    }
 }
