@@ -1,3 +1,4 @@
+#if canImport(FoundationModels)
 import Foundation
 import Testing
 @testable import VoxCore
@@ -35,3 +36,4 @@ struct SpeechTranscriberClientTests {
         }
     }
 }
+#endif

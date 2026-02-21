@@ -223,8 +223,11 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeSTTProvider() -> STTProvider {
-        // macOS 26+: SpeechTranscriber (on-device, newer API) with AppleSpeechClient fallback
+        // macOS 26+: SpeechTranscriber (on-device, newer API) with AppleSpeechClient fallback.
+        // SpeechTranscriber requires the macOS 26 SDK (Xcode 26+); gate with canImport(FoundationModels)
+        // as a proxy for that SDK being present.
         let appleSTT: STTProvider
+        #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             appleSTT = FallbackSTTProvider(
                 primary: SpeechTranscriberClient(),
@@ -234,6 +237,9 @@ public final class VoxSession: ObservableObject {
         } else {
             appleSTT = AppleSpeechClient()
         }
+        #else
+        appleSTT = AppleSpeechClient()
+        #endif
 
         // Build decorated cloud providers in preference order
         var cloudProviders: [(name: String, provider: STTProvider)] = []

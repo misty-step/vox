@@ -1,3 +1,6 @@
+// SpeechTranscriber and SpeechAnalyzer are macOS 26+ APIs introduced alongside FoundationModels.
+// Gate on FoundationModels availability as a proxy for the full macOS 26 SDK being present.
+#if canImport(FoundationModels)
 import AVFoundation
 import Speech
 import VoxCore
@@ -61,3 +64,4 @@ public final class SpeechTranscriberClient: STTProvider {
         return transcript
     }
 }
+#endif
