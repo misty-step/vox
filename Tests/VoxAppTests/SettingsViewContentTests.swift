@@ -56,4 +56,29 @@ struct SettingsViewContentTests {
         )
         #expect(summary == "Gemini → OpenRouter")
     }
+
+    @Test("Rewrite summary falls back to raw transcript when no providers configured")
+    @MainActor
+    func cloudSummaryRewriteWithoutKeys() {
+        let summary = CloudProviderCatalog.rewriteSummary(configuredProviderTitles: [])
+        #expect(summary == "Raw transcript")
+    }
+
+    @Test("Transcription summary preserves full chain order with multiple providers")
+    @MainActor
+    func cloudSummaryTranscriptionChainOrder() {
+        let summary = CloudProviderCatalog.transcriptionSummary(
+            configuredProviderTitles: ["ElevenLabs", "Deepgram"]
+        )
+        #expect(summary == "ElevenLabs → Deepgram → Apple Speech")
+    }
+
+    @Test("Version text handles empty version and build gracefully")
+    func versionTextEmptyFields() {
+        let content = SettingsViewContent.make(
+            productInfo: ProductInfo(version: "", build: ""),
+            hotkeyAvailable: true
+        )
+        #expect(content.versionText == "Version  ()")
+    }
 }
