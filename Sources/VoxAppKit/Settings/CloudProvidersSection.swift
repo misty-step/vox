@@ -9,26 +9,53 @@ struct CloudProvidersSection: View {
     }
 
     var body: some View {
-        GroupBox("Cloud Providers (Optional)") {
+        SettingsSection(
+            title: "Cloud Providers (Optional)",
+            systemImage: "cloud.fill",
+            prominence: .secondary
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Cloud keys can improve transcription speed and rewrite quality. Without keys, Vox uses Apple Speech on-device.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                LabeledContent("Transcription") {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Transcription")
+                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 8) {
+                        ForEach(CloudProviderCatalog.transcriptionKeys) { key in
+                            ProviderStatusBadge(
+                                title: key.title,
+                                configured: !prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            )
+                        }
+                    }
                     Text(CloudProviderCatalog.transcriptionSummary(prefs: prefs))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                LabeledContent("Rewrite") {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Rewrite")
+                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 8) {
+                        ForEach(CloudProviderCatalog.rewriteKeys) { key in
+                            ProviderStatusBadge(
+                                title: key.title,
+                                configured: !prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            )
+                        }
+                    }
                     Text(CloudProviderCatalog.rewriteSummary(prefs: prefs))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack {
                     Spacer(minLength: 0)
                     Button("Manage Keys…", action: onManageKeys)
+                        .buttonStyle(.borderedProminent)
                 }
 
                 Text("Keys are stored securely in macOS Keychain.")
@@ -43,8 +70,33 @@ struct CloudProvidersSection: View {
                     .fixedSize(horizontal: false, vertical: true)
 #endif
             }
-            .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ProviderStatusBadge: View {
+    let title: String
+    let configured: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(configured ? Color.green : Color.gray.opacity(0.6))
+                .frame(width: 7, height: 7)
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(configured ? Color.primary : Color.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
     }
 }

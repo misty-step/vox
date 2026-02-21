@@ -5,32 +5,48 @@ struct CloudKeysSheet: View {
     @ObservedObject private var prefs = PreferencesStore.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Cloud Provider Keys")
-                    .font(.title3.weight(.semibold))
-                Text("Optional. Keys are stored securely in macOS Keychain.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.16))
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: 36, height: 36)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Cloud Provider Keys")
+                        .font(.title2.weight(.bold))
+                    Text("Optional. Keys are stored securely in macOS Keychain.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
 #if DEBUG
-                Text("Development: env vars override Keychain.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text("Development: env vars override Keychain.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 #endif
+                }
+
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 14)
 
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    GroupBox("Transcription (Speech-to-Text)") {
+                    SettingsSection(
+                        title: "Transcription (Speech-to-Text)",
+                        systemImage: "waveform",
+                        prominence: .primary
+                    ) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Configured providers are tried in order, then Vox falls back to Apple Speech.")
                                 .font(.caption)
@@ -45,11 +61,13 @@ struct CloudKeysSheet: View {
                                 )
                             }
                         }
-                        .padding(12)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    GroupBox("Rewrite") {
+                    SettingsSection(
+                        title: "Rewrite",
+                        systemImage: "sparkles",
+                        prominence: .secondary
+                    ) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Used for Clean/Polish processing levels.")
                                 .font(.caption)
@@ -64,15 +82,16 @@ struct CloudKeysSheet: View {
                                 )
                             }
                         }
-                        .padding(12)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Link("Setup guide", destination: CloudProviderCatalog.setupGuideURL)
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.top, 6)
+                    HStack {
+                        Link("Setup guide", destination: CloudProviderCatalog.setupGuideURL)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(16)
+                .padding(20)
             }
 
             Divider()
@@ -80,10 +99,12 @@ struct CloudKeysSheet: View {
             HStack {
                 Spacer(minLength: 0)
                 Button("Close") { dismiss() }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(16)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private func binding(for keyPath: ReferenceWritableKeyPath<PreferencesStore, String>) -> Binding<String> {
@@ -99,10 +120,31 @@ private struct KeyField: View {
     let detail: String
     let text: Binding<String>
 
+    private var isConfigured: Bool {
+        !text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(isConfigured ? Color.green : Color.gray.opacity(0.6))
+                        .frame(width: 6, height: 6)
+                    Text(isConfigured ? "Configured" : "Not configured")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
+                Spacer(minLength: 0)
+            }
 
             SecureField("API key", text: text)
                 .textContentType(.password)
@@ -113,5 +155,14 @@ private struct KeyField: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor).opacity(0.65))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
+        )
     }
 }

@@ -2,31 +2,23 @@ import SwiftUI
 
 struct ProductStandardsFooter: View {
     let productInfo: ProductInfo
-
-    private var versionText: String {
-        "Version \(productInfo.version) (\(productInfo.build))"
-    }
+    let versionText: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 0) {
             Divider()
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(versionText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(productInfo.attribution)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("\(versionText)  ·  \(productInfo.attribution)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
-
                 Link("Contact / Help", destination: productInfo.supportURL)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.medium))
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }

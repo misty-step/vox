@@ -8,12 +8,18 @@ struct BasicsSection: View {
     @ObservedObject private var deviceObserver = AudioDeviceObserver.shared
 
     var body: some View {
-        GroupBox("Basics") {
-            VStack(alignment: .leading, spacing: 12) {
-                LabeledContent("Hotkey") {
+        SettingsSection(
+            title: "Basics",
+            systemImage: "keyboard",
+            prominence: .primary
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Hotkey")
+                        .font(.subheadline.weight(.semibold))
+
                     HStack(spacing: 8) {
-                        Text("Option + Space")
-                            .font(.system(.body, design: .monospaced))
+                        KeyboardShortcutBadge(text: "⌥ Space")
 
                         if !hotkeyAvailable {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -24,9 +30,9 @@ struct BasicsSection: View {
                 }
 
                 if !hotkeyAvailable {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 7) {
                         Text("Hotkey unavailable")
-                            .font(.subheadline.weight(.medium))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.orange)
 
                         Text("Another app may be using Option+Space. You can still start dictation from the menu bar menu, or click Retry to attempt registration again.")
@@ -34,24 +40,35 @@ struct BasicsSection: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Button("Retry Hotkey Registration") {
-                            onRetryHotkey()
-                        }
-                        .controlSize(.small)
+                        Button("Retry Hotkey Registration") { onRetryHotkey() }
+                            .controlSize(.small)
                     }
-                    .padding(8)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(6)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.orange.opacity(0.10))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.orange.opacity(0.30), lineWidth: 1)
+                    )
                 }
 
-                LabeledContent("Microphone") {
-                    Picker("", selection: $prefs.selectedInputDeviceUID) {
-                        Text("System Default").tag(nil as String?)
-                        ForEach(deviceObserver.devices) { device in
-                            Text(device.name).tag(device.id as String?)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Microphone")
+                        .font(.subheadline.weight(.semibold))
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "mic.fill")
+                            .foregroundStyle(.secondary)
+                        Picker("", selection: $prefs.selectedInputDeviceUID) {
+                            Text("System Default").tag(nil as String?)
+                            ForEach(deviceObserver.devices) { device in
+                                Text(device.name).tag(device.id as String?)
+                            }
                         }
+                        .labelsHidden()
                     }
-                    .labelsHidden()
                 }
 
                 if deviceObserver.selectedDeviceUnavailable {
@@ -71,7 +88,6 @@ struct BasicsSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
@@ -84,5 +100,24 @@ struct BasicsSection: View {
         .onChange(of: prefs.selectedInputDeviceUID) { _, newUID in
             deviceObserver.setSelectedDeviceUID(newUID)
         }
+    }
+}
+
+private struct KeyboardShortcutBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color(nsColor: .textBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 1)
+            )
     }
 }
