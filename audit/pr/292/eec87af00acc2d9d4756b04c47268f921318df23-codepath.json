@@ -1,0 +1,562 @@
+{
+  "audioBytes" : 558044,
+  "audioFile" : "2 fixtures",
+  "commitSHA" : "eec87af00acc2d9d4756b04c47268f921318df23",
+  "fixtureResults" : [
+    {
+      "audioBytes" : 130414,
+      "audioFile" : "fixture-short.caf",
+      "fixtureID" : "fixture-short",
+      "levels" : [
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 207.66103267669678,
+              "min" : 66.72108173370361,
+              "p50" : 101.72605514526367,
+              "p95" : 186.50662899017334
+            },
+            "pasteMs" : {
+              "max" : 0.10907649993896484,
+              "min" : 0.01895427703857422,
+              "p50" : 0.05602836608886719,
+              "p95" : 0.10666847229003906
+            },
+            "rewriteMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "sttMs" : {
+              "max" : 207.66103267669678,
+              "min" : 66.72108173370361,
+              "p50" : 101.72605514526367,
+              "p95" : 186.50662899017334
+            },
+            "totalStageMs" : {
+              "max" : 207.7580690383911,
+              "min" : 66.74003601074219,
+              "p50" : 101.76002979278564,
+              "p95" : 186.6060733795166
+            }
+          },
+          "iterations" : 5,
+          "level" : "raw",
+          "providers" : {
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 409.2860221862793,
+              "min" : 161.25094890594482,
+              "p50" : 177.96802520751953,
+              "p95" : 383.5494041442871
+            },
+            "pasteMs" : {
+              "max" : 0.2579689025878906,
+              "min" : 0.049948692321777344,
+              "p50" : 0.0699758529663086,
+              "p95" : 0.22237300872802732
+            },
+            "rewriteMs" : {
+              "max" : 239.85803127288818,
+              "min" : 100.227952003479,
+              "p50" : 103.6829948425293,
+              "p95" : 235.30681133270264
+            },
+            "sttMs" : {
+              "max" : 169.4279909133911,
+              "min" : 61.02299690246582,
+              "p50" : 63.50100040435791,
+              "p95" : 150.39939880371094
+            },
+            "totalStageMs" : {
+              "max" : 409.3419313430786,
+              "min" : 161.3008975982666,
+              "p50" : 178.0480146408081,
+              "p95" : 383.6081266403198
+            }
+          },
+          "iterations" : 5,
+          "level" : "clean",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "gemini-2.5-flash-lite",
+                "path" : "deterministic"
+              }
+            ],
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 435.9259605407715,
+              "min" : 288.32101821899414,
+              "p50" : 330.582857131958,
+              "p95" : 434.06317234039307
+            },
+            "pasteMs" : {
+              "max" : 0.19407272338867188,
+              "min" : 0.09202957153320312,
+              "p50" : 0.15401840209960938,
+              "p95" : 0.1872539520263672
+            },
+            "rewriteMs" : {
+              "max" : 312.3849630355835,
+              "min" : 174.30198192596436,
+              "p50" : 247.1170425415039,
+              "p95" : 301.9193649291992
+            },
+            "sttMs" : {
+              "max" : 179.4949769973755,
+              "min" : 70.5258846282959,
+              "p50" : 123.54099750518799,
+              "p95" : 172.42999076843262
+            },
+            "totalStageMs" : {
+              "max" : 436.0799789428711,
+              "min" : 288.44010829925537,
+              "p50" : 330.6748867034912,
+              "p95" : 434.2183828353882
+            }
+          },
+          "iterations" : 5,
+          "level" : "polish",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "x-ai/grok-4.1-fast",
+                "path" : "deterministic"
+              }
+            ],
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "audioBytes" : 427630,
+      "audioFile" : "fixture-medium.caf",
+      "fixtureID" : "fixture-medium",
+      "levels" : [
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 186.86997890472412,
+              "min" : 75.72400569915771,
+              "p50" : 138.18907737731934,
+              "p95" : 181.34679794311523
+            },
+            "pasteMs" : {
+              "max" : 0.02396106719970703,
+              "min" : 0.013947486877441406,
+              "p50" : 0.01895427703857422,
+              "p95" : 0.02315044403076172
+            },
+            "rewriteMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "sttMs" : {
+              "max" : 186.86997890472412,
+              "min" : 75.72400569915771,
+              "p50" : 138.18907737731934,
+              "p95" : 181.34679794311523
+            },
+            "totalStageMs" : {
+              "max" : 186.89393997192383,
+              "min" : 75.73795318603516,
+              "p50" : 138.20898532867432,
+              "p95" : 181.36975765228271
+            }
+          },
+          "iterations" : 5,
+          "level" : "raw",
+          "providers" : {
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 341.78900718688965,
+              "min" : 215.71803092956543,
+              "p50" : 300.9068965911865,
+              "p95" : 334.80238914489746
+            },
+            "pasteMs" : {
+              "max" : 0.1100301742553711,
+              "min" : 0.03993511199951172,
+              "p50" : 0.06711483001708984,
+              "p95" : 0.10683536529541016
+            },
+            "rewriteMs" : {
+              "max" : 232.24294185638428,
+              "min" : 104.34901714324951,
+              "p50" : 160.91299057006836,
+              "p95" : 224.9605417251587
+            },
+            "sttMs" : {
+              "max" : 192.06595420837402,
+              "min" : 68.66395473480225,
+              "p50" : 111.02497577667236,
+              "p95" : 189.82796669006348
+            },
+            "totalStageMs" : {
+              "max" : 341.8830633163452,
+              "min" : 215.75796604156494,
+              "p50" : 300.9740114212036,
+              "p95" : 334.899640083313
+            }
+          },
+          "iterations" : 5,
+          "level" : "clean",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "gemini-2.5-flash-lite",
+                "path" : "deterministic"
+              }
+            ],
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 413.95103931427,
+              "min" : 377.8560161590576,
+              "p50" : 398.1921672821045,
+              "p95" : 412.63065338134766
+            },
+            "pasteMs" : {
+              "max" : 0.8939504623413086,
+              "min" : 0.04398822784423828,
+              "p50" : 0.1989603042602539,
+              "p95" : 0.762343406677246
+            },
+            "rewriteMs" : {
+              "max" : 292.773962020874,
+              "min" : 214.23709392547607,
+              "p50" : 259.0380907058716,
+              "p95" : 288.9857769012451
+            },
+            "sttMs" : {
+              "max" : 183.95507335662842,
+              "min" : 103.424072265625,
+              "p50" : 148.31101894378662,
+              "p95" : 179.4938564300537
+            },
+            "totalStageMs" : {
+              "max" : 414.186954498291,
+              "min" : 377.9500722885132,
+              "p50" : 398.39112758636475,
+              "p95" : 412.8281831741333
+            }
+          },
+          "iterations" : 5,
+          "level" : "polish",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "x-ai/grok-4.1-fast",
+                "path" : "deterministic"
+              }
+            ],
+            "sttMode" : "mock",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "fixed-delay-v1",
+                "provider" : "DeterministicSTT"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "fixtures" : [
+    {
+      "audioBytes" : 130414,
+      "audioFile" : "fixture-short.caf",
+      "id" : "fixture-short"
+    },
+    {
+      "audioBytes" : 427630,
+      "audioFile" : "fixture-medium.caf",
+      "id" : "fixture-medium"
+    }
+  ],
+  "generatedAt" : "2026-02-21T07:20:31Z",
+  "iterationsPerLevel" : 5,
+  "label" : "ci-codepath",
+  "lane" : "codepath",
+  "levels" : [
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 0,
+          "min" : 0,
+          "p50" : 0,
+          "p95" : 0
+        },
+        "generationMs" : {
+          "max" : 207.66103267669678,
+          "min" : 66.72108173370361,
+          "p50" : 101.80753469467163,
+          "p95" : 198.30505847930905
+        },
+        "pasteMs" : {
+          "max" : 0.10907649993896484,
+          "min" : 0.013947486877441406,
+          "p50" : 0.02193450927734375,
+          "p95" : 0.10365843772888182
+        },
+        "rewriteMs" : {
+          "max" : 0,
+          "min" : 0,
+          "p50" : 0,
+          "p95" : 0
+        },
+        "sttMs" : {
+          "max" : 207.66103267669678,
+          "min" : 66.72108173370361,
+          "p50" : 101.80753469467163,
+          "p95" : 198.30505847930905
+        },
+        "totalStageMs" : {
+          "max" : 207.7580690383911,
+          "min" : 66.74003601074219,
+          "p50" : 101.8790602684021,
+          "p95" : 198.3692109584808
+        }
+      },
+      "iterations" : 10,
+      "level" : "raw",
+      "providers" : {
+        "sttMode" : "mock",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "fixed-delay-v1",
+            "provider" : "DeterministicSTT"
+          }
+        ]
+      }
+    },
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 0,
+          "min" : 0,
+          "p50" : 0,
+          "p95" : 0
+        },
+        "generationMs" : {
+          "max" : 409.2860221862793,
+          "min" : 161.25094890594482,
+          "p50" : 288.50895166397095,
+          "p95" : 378.9123654365539
+        },
+        "pasteMs" : {
+          "max" : 0.2579689025878906,
+          "min" : 0.03993511199951172,
+          "p50" : 0.06854534149169922,
+          "p95" : 0.19139647483825667
+        },
+        "rewriteMs" : {
+          "max" : 239.85803127288818,
+          "min" : 100.227952003479,
+          "p50" : 136.71952486038208,
+          "p95" : 236.43124103546143
+        },
+        "sttMs" : {
+          "max" : 192.06595420837402,
+          "min" : 61.02299690246582,
+          "p50" : 88.73850107192993,
+          "p95" : 187.0304822921753
+        },
+        "totalStageMs" : {
+          "max" : 409.3419313430786,
+          "min" : 161.3008975982666,
+          "p50" : 288.57290744781494,
+          "p95" : 378.9854407310485
+        }
+      },
+      "iterations" : 10,
+      "level" : "clean",
+      "providers" : {
+        "rewriteObserved" : [
+          {
+            "count" : 10,
+            "model" : "gemini-2.5-flash-lite",
+            "path" : "deterministic"
+          }
+        ],
+        "sttMode" : "mock",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "fixed-delay-v1",
+            "provider" : "DeterministicSTT"
+          }
+        ]
+      }
+    },
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 0,
+          "min" : 0,
+          "p50" : 0,
+          "p95" : 0
+        },
+        "generationMs" : {
+          "max" : 435.9259605407715,
+          "min" : 288.32101821899414,
+          "p50" : 397.19510078430176,
+          "p95" : 431.73468708992004
+        },
+        "pasteMs" : {
+          "max" : 0.8939504623413086,
+          "min" : 0.04398822784423828,
+          "p50" : 0.1569986343383789,
+          "p95" : 0.5978345870971673
+        },
+        "rewriteMs" : {
+          "max" : 312.3849630355835,
+          "min" : 174.30198192596436,
+          "p50" : 255.67007064819336,
+          "p95" : 303.56001257896423
+        },
+        "sttMs" : {
+          "max" : 183.95507335662842,
+          "min" : 70.5258846282959,
+          "p50" : 133.85552167892456,
+          "p95" : 181.9480299949646
+        },
+        "totalStageMs" : {
+          "max" : 436.0799789428711,
+          "min" : 288.44010829925537,
+          "p50" : 397.74155616760254,
+          "p95" : 431.89138770103455
+        }
+      },
+      "iterations" : 10,
+      "level" : "polish",
+      "providers" : {
+        "rewriteObserved" : [
+          {
+            "count" : 10,
+            "model" : "x-ai/grok-4.1-fast",
+            "path" : "deterministic"
+          }
+        ],
+        "sttMode" : "mock",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "fixed-delay-v1",
+            "provider" : "DeterministicSTT"
+          }
+        ]
+      }
+    }
+  ],
+  "pullRequestNumber" : 292,
+  "rewriteRouting" : "deterministic",
+  "schemaVersion" : 3,
+  "sttChain" : [
+    {
+      "model" : "fixed-delay-v1",
+      "provider" : "DeterministicSTT"
+    }
+  ],
+  "sttForcedProvider" : "deterministic",
+  "sttMode" : "mock",
+  "sttSelectionPolicy" : "fixed",
+  "warmupIterationsPerLevel" : 1
+}
