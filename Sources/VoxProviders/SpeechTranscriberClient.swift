@@ -47,6 +47,7 @@ public final class SpeechTranscriberClient: STTProvider {
         do {
             try await analysisTask.value
         } catch is CancellationError {
+            analysisTask.cancel()
             throw CancellationError()
         } catch {
             // Analysis error after results collection - map it
