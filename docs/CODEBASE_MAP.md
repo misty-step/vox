@@ -59,8 +59,7 @@ Foundation layer. No dependencies on other Vox modules.
 | File | Purpose |
 |------|---------|
 | `Protocols.swift` | `STTProvider`, `StreamingSTTProvider`, `RewriteProvider`, `TextPaster`, `AudioRecording`, `EncryptedAudioRecording`, `AudioChunkStreaming`, `HUDDisplaying`, `DictationProcessing`, `TranscriptProcessing`, `PreferencesReading` |
-| `STTError.swift` | Classified STT errors: `.isRetryable`, `.isFallbackEligible`, `.isTransientForHealthScoring` |
-| `VoxError.swift` | App-level errors: `emptyCapture`, `permissionDenied`, `pipelineTimeout`, etc. |
+| `Errors.swift` | All error types: `STTError` (`.isRetryable`, `.isFallbackEligible`, `.isTransientForHealthScoring`), `VoxError` (`emptyCapture`, `permissionDenied`, `pipelineTimeout`), `RewriteError`, `StreamingSTTError` |
 | `TimeoutSTTProvider.swift` | Dynamic deadline: `baseTimeout + fileSizeMB * secondsPerMB` |
 | `RetryingSTTProvider.swift` | Exponential backoff + jitter on `STTError.isRetryable`; catch-all for non-STTError |
 | `FallbackSTTProvider.swift` | Sequential primary → fallback on `.isFallbackEligible`; catch-all for non-STTError |
@@ -75,7 +74,6 @@ Foundation layer. No dependencies on other Vox modules.
 | `FallbackRewriteProvider.swift` | Sequential fallback across `RewriteProvider` implementations |
 | `ModelRoutedRewriteProvider.swift` | Routes to Gemini direct or OpenRouter based on model ID prefix |
 | `BrandIdentity.swift` | Accent color, icon dimensions, per-level stroke width |
-| `RewritePrompts.swift` | System prompts per level; includes prompt-injection defenses |
 
 ### VoxProviders
 
@@ -91,6 +89,7 @@ STT and rewrite API clients. Depends only on VoxCore.
 | `OpenRouterClient.swift` | LLM rewrite via `/v1/chat/completions`; fallback model chain; reasoning disabled |
 | `GeminiClient.swift` | LLM rewrite via Gemini `generateContent` API directly; 15s timeout |
 | `AudioConverter.swift` | `afconvert` wrapper for CAF→Opus and CAF→WAV; async `terminationHandler` |
+| `RewritePrompts.swift` | System prompts per processing level; includes prompt-injection defenses |
 | `StreamingFinalizationTimeoutPolicy.swift` | Dynamic finalization timeout scaled by streamed audio duration |
 | `URLSession+PhaseAwareSTTTimeout.swift` | Two-phase stall detection: upload stall vs processing hang |
 
@@ -253,7 +252,7 @@ ModelRoutedRewriteProvider
 
 **To add a new rewrite provider**: Create client in `Sources/VoxProviders/`, conform to `RewriteProvider`, update `ModelRoutedRewriteProvider` or `FallbackRewriteProvider`, update `VoxSession.makeRewriteProvider()`.
 
-**To change processing levels**: Edit `Sources/VoxCore/ProcessingLevel.swift` (model IDs), `Sources/VoxCore/RewritePrompts.swift` (system prompts), run eval suite.
+**To change processing levels**: Edit `Sources/VoxCore/ProcessingLevel.swift` (model IDs), `Sources/VoxProviders/RewritePrompts.swift` (system prompts), run eval suite.
 
 **To add a settings control**: Edit `Sources/VoxAppKit/Settings/`, back with `PreferencesStore`. Check [ADR-0001](docs/adr/0001-simplicity-first-design.md) simplicity gate.
 
