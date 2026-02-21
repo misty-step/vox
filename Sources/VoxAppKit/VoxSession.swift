@@ -32,6 +32,7 @@ public final class VoxSession: ObservableObject {
     private let streamingSTTProvider: StreamingSTTProvider?
     private var streamingSetupTask: Task<Void, Never>?
     private let streamingSetupTimeout: TimeInterval
+    private let streamingFinalizeTimeout: TimeInterval
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
     private var activeStreamingBridge: StreamingAudioBridge?
@@ -47,7 +48,8 @@ public final class VoxSession: ObservableObject {
         errorPresenter: ((String) -> Void)? = nil,
         copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingSetupTimeout: TimeInterval = 3.0
+        streamingSetupTimeout: TimeInterval = 3.0,
+        streamingFinalizeTimeout: TimeInterval = 90.0
     ) {
         self.init(
             recorder: recorder,
@@ -60,7 +62,8 @@ public final class VoxSession: ObservableObject {
             copyRawTranscriptToClipboard: copyRawTranscriptToClipboard,
             recoveryStore: .shared,
             streamingSTTProvider: streamingSTTProvider,
-            streamingSetupTimeout: streamingSetupTimeout
+            streamingSetupTimeout: streamingSetupTimeout,
+            streamingFinalizeTimeout: streamingFinalizeTimeout
         )
     }
 
@@ -75,7 +78,8 @@ public final class VoxSession: ObservableObject {
         copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
         recoveryStore: LastDictationRecoveryStore,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingSetupTimeout: TimeInterval = 3.0
+        streamingSetupTimeout: TimeInterval = 3.0,
+        streamingFinalizeTimeout: TimeInterval = 90.0
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
@@ -98,6 +102,7 @@ public final class VoxSession: ObservableObject {
         self.recoveryStore = recoveryStore
         self.streamingSTTProvider = streamingSTTProvider
         self.streamingSetupTimeout = streamingSetupTimeout
+        self.streamingFinalizeTimeout = streamingFinalizeTimeout
     }
 
     private var hasCloudProviders: Bool {
@@ -668,7 +673,10 @@ public final class VoxSession: ObservableObject {
             return "unknown"
         }
         do {
-            let transcript = try await bridge.finish()
+            let finalizeTimeout = streamingFinalizeTimeout
+            let transcript = try await withStreamingFinalizeTimeout(seconds: finalizeTimeout) {
+                try await bridge.finish()
+            }
             let normalizedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedTranscript.isEmpty else {
                 throw VoxError.noTranscript
@@ -1056,6 +1064,32 @@ private func withStreamingSetupTimeout<T: Sendable>(
         }
         guard let result = try await group.next() else {
             throw StreamingSTTError.connectionFailed("Streaming setup timed out")
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
+private func withStreamingFinalizeTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let timeoutNanoseconds: UInt64
+    do {
+        timeoutNanoseconds = try validatedStreamingTimeoutNanoseconds(seconds: seconds)
+    } catch {
+        throw StreamingSTTError.finalizationTimeout
+    }
+    return try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            throw StreamingSTTError.finalizationTimeout
+        }
+        guard let result = try await group.next() else {
+            throw StreamingSTTError.finalizationTimeout
         }
         group.cancelAll()
         return result
