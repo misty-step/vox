@@ -21,8 +21,13 @@ public struct ProviderAssemblyConfig: Sendable {
 
     /// Optional hook called for rewrite providers before returning.
     /// Parameter: (routingPath, provider) → wrappedProvider.
-    /// Perf-audit uses this to inject `InstrumentedRewriteProvider`.
+    /// Perf-audit uses this to inject `InstrumentedRewriteProvider` for Gemini.
     public let rewriteInstrument: @Sendable (String, any RewriteProvider) -> any RewriteProvider
+
+    /// Optional callback forwarded to `OpenRouterClient.onModelUsed`.
+    /// Fires with the actual served model + whether it was a fallback selection.
+    /// Perf-audit uses this to record per-call model usage.
+    public let openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)?
 
     public init(
         elevenLabsAPIKey: String,
@@ -30,7 +35,8 @@ public struct ProviderAssemblyConfig: Sendable {
         geminiAPIKey: String,
         openRouterAPIKey: String,
         sttInstrument: @escaping @Sendable (String, String, any STTProvider) -> any STTProvider = { _, _, p in p },
-        rewriteInstrument: @escaping @Sendable (String, any RewriteProvider) -> any RewriteProvider = { _, p in p }
+        rewriteInstrument: @escaping @Sendable (String, any RewriteProvider) -> any RewriteProvider = { _, p in p },
+        openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)? = nil
     ) {
         func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
         self.elevenLabsAPIKey = trimmed(elevenLabsAPIKey)
@@ -39,6 +45,7 @@ public struct ProviderAssemblyConfig: Sendable {
         self.openRouterAPIKey = trimmed(openRouterAPIKey)
         self.sttInstrument = sttInstrument
         self.rewriteInstrument = rewriteInstrument
+        self.openRouterOnModelUsed = openRouterOnModelUsed
     }
 }
 
@@ -154,7 +161,11 @@ public enum ProviderAssembly {
 
         let openRouter: OpenRouterClient? = config.openRouterAPIKey.isEmpty
             ? nil
-            : OpenRouterClient(apiKey: config.openRouterAPIKey, fallbackModels: openRouterFallbackModels)
+            : OpenRouterClient(
+                apiKey: config.openRouterAPIKey,
+                fallbackModels: openRouterFallbackModels,
+                onModelUsed: config.openRouterOnModelUsed
+            )
 
         guard gemini != nil || openRouter != nil else {
             return OpenRouterClient(apiKey: "")

@@ -200,91 +200,61 @@ private func resolvedProviderLane(
 
     let plan = try PerfProviderPlan.resolve(environment: environment)
 
-    struct STTEntry {
-        let name: String
-        let model: String
-        let provider: STTProvider
-    }
-
-    var sttEntries: [STTEntry] = []
-    for entry in plan.stt.chain {
-        let apiKey = key(entry.apiKeyEnv)
-        switch entry.id {
-        case "elevenlabs":
-            let eleven = ElevenLabsClient(apiKey: apiKey)
-            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: entry.displayName)
-            sttEntries.append(.init(
-                name: entry.displayName,
-                model: entry.model,
-                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
-            ))
-        case "deepgram":
-            let deepgram = DeepgramClient(apiKey: apiKey)
-            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: entry.displayName)
-            sttEntries.append(.init(
-                name: entry.displayName,
-                model: entry.model,
-                provider: InstrumentedSTTProvider(provider: retried, providerName: entry.displayName, model: entry.model, recorder: usageRecorder)
-            ))
-        default:
-            throw PerfAuditError.invalidArgument("Unknown STT provider id '\(entry.id)'")
-        }
-    }
-
-    let sttChain = sttEntries.dropFirst().reduce((name: sttEntries[0].name, provider: sttEntries[0].provider as STTProvider)) { accumulated, next in
-        let wrapper = FallbackSTTProvider(
-            primary: accumulated.provider,
-            fallback: next.provider,
-            primaryName: accumulated.name
-        )
-        return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
-    }
-
-    let maxConcurrent = Int(key("VOX_MAX_CONCURRENT_STT")) ?? 8
-    let sttProvider = ConcurrencyLimitedSTTProvider(
-        provider: sttChain.provider,
-        maxConcurrent: max(1, maxConcurrent)
-    )
-
-    let openRouterKey = key("OPENROUTER_API_KEY")
-    let geminiKey = key("GEMINI_API_KEY")
-
-    let openRouter = OpenRouterClient(
-        apiKey: openRouterKey,
-        fallbackModels: [
-            "google/gemini-2.5-flash",
-            "google/gemini-2.0-flash-001",
-        ],
-        onModelUsed: { model, _ in
+    let assemblyConfig = ProviderAssemblyConfig(
+        elevenLabsAPIKey: key("ELEVENLABS_API_KEY"),
+        deepgramAPIKey: key("DEEPGRAM_API_KEY"),
+        geminiAPIKey: key("GEMINI_API_KEY"),
+        openRouterAPIKey: key("OPENROUTER_API_KEY"),
+        sttInstrument: { name, model, provider in
+            InstrumentedSTTProvider(provider: provider, providerName: name, model: model, recorder: usageRecorder)
+        },
+        rewriteInstrument: { path, provider in
+            InstrumentedRewriteProvider(provider: provider, path: path, recorder: usageRecorder)
+        },
+        openRouterOnModelUsed: { model, _ in
             usageRecorder.recordRewrite(path: "openrouter", model: model)
         }
     )
 
-    let rewriteProvider: RewriteProvider
-    let rewriteRouting: String
-    if plan.rewrite.hasGeminiDirect {
-        let gemini = GeminiClient(apiKey: geminiKey)
-        let instrumentedGemini = InstrumentedRewriteProvider(
-            provider: gemini,
-            path: "gemini_direct",
-            recorder: usageRecorder
-        )
-        rewriteProvider = ModelRoutedRewriteProvider(
-            gemini: instrumentedGemini,
-            openRouter: openRouter,
-            fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
-        )
-        rewriteRouting = "model-routed (gemini_direct + openrouter)"
-    } else {
-        rewriteProvider = openRouter
-        rewriteRouting = "openrouter"
+    let cloudResult = ProviderAssembly.makeCloudSTTProvider(config: assemblyConfig)
+
+    // Apply forced-provider reordering from plan (perf-audit specific).
+    // PerfProviderPlan validates that the forced provider key exists; entries are pre-built here.
+    var entries = cloudResult.entries
+    if let forced = plan.stt.forcedProvider,
+       let idx = entries.firstIndex(where: { $0.name.lowercased() == forced }) {
+        let first = entries.remove(at: idx)
+        entries.insert(first, at: 0)
     }
+
+    // PerfProviderPlan.resolve() guarantees at least one key exists, but guard defensively.
+    guard !entries.isEmpty else {
+        throw PerfAuditError.missingRequiredKey("ELEVENLABS_API_KEY (or DEEPGRAM_API_KEY)")
+    }
+
+    // Rebuild sequential fallback chain from (potentially reordered) entries.
+    let chainProvider = entries.dropFirst().reduce((name: entries[0].name, provider: entries[0].provider)) { acc, next in
+        let wrapper: any STTProvider = FallbackSTTProvider(
+            primary: acc.provider,
+            fallback: next.provider,
+            primaryName: acc.name
+        )
+        return (name: "\(acc.name) + \(next.name)", provider: wrapper)
+    }.provider
+
+    let maxConcurrent = max(1, Int(key("VOX_MAX_CONCURRENT_STT")) ?? 8)
+    let sttProvider = ConcurrencyLimitedSTTProvider(provider: chainProvider, maxConcurrent: maxConcurrent)
+
+    let rewriteProvider = ProviderAssembly.makeRewriteProvider(config: assemblyConfig)
+    let rewriteRouting = plan.rewrite.hasGeminiDirect
+        ? "model-routed (gemini_direct + openrouter)"
+        : "openrouter"
 
     return ResolvedProviders(
         sttProvider: sttProvider,
         sttSelectionPolicy: plan.stt.selectionPolicy,
         sttForcedProvider: plan.stt.forcedProvider,
-        sttChain: sttEntries.map { ProviderDescriptor(provider: $0.name, model: $0.model) },
+        sttChain: entries.map { ProviderDescriptor(provider: $0.name, model: $0.model) },
         sttMode: plan.stt.mode,
         rewriteProvider: rewriteProvider,
         rewriteRouting: rewriteRouting,
