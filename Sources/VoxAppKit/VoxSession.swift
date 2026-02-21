@@ -151,13 +151,11 @@ public final class VoxSession: ObservableObject {
                 )
             },
             onProcessedTranscript: { rawTranscript, outputText, processingLevel in
-                Task {
-                    await recoveryStore.store(
-                        rawTranscript: rawTranscript,
-                        finalText: outputText,
-                        processingLevel: processingLevel
-                    )
-                }
+                await recoveryStore.store(
+                    rawTranscript: rawTranscript,
+                    finalText: outputText,
+                    processingLevel: processingLevel
+                )
             }
         )
     }
