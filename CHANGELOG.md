@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/misty-step/vox/compare/v1.24.0...v1.25.0) (2026-02-21)
+
+
+### Features
+
+* **settings:** branded settings window redesign ([#295](https://github.com/misty-step/vox/issues/295)) ([1693f9a](https://github.com/misty-step/vox/commit/1693f9a53a59be8c2e8010feae284be1611773c0)), closes [#286](https://github.com/misty-step/vox/issues/286) [#286](https://github.com/misty-step/vox/issues/286)
+
 # [1.24.0](https://github.com/misty-step/vox/compare/v1.23.0...v1.24.0) (2026-02-21)
 
 
