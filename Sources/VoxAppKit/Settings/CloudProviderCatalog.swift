@@ -1,4 +1,5 @@
 import Foundation
+import VoxMac
 
 @MainActor
 struct CloudProviderKey: Identifiable {
@@ -6,6 +7,7 @@ struct CloudProviderKey: Identifiable {
     let title: String
     let detail: String
     let keyPath: ReferenceWritableKeyPath<PreferencesStore, String>
+    let keychainKey: KeychainHelper.Key
 }
 
 @MainActor
@@ -17,13 +19,15 @@ enum CloudProviderCatalog {
             id: "elevenlabs",
             title: "ElevenLabs",
             detail: "Primary cloud transcription.",
-            keyPath: \.elevenLabsAPIKey
+            keyPath: \.elevenLabsAPIKey,
+            keychainKey: .elevenLabsAPIKey
         ),
         CloudProviderKey(
             id: "deepgram",
             title: "Deepgram",
             detail: "Optional fallback transcription.",
-            keyPath: \.deepgramAPIKey
+            keyPath: \.deepgramAPIKey,
+            keychainKey: .deepgramAPIKey
         ),
     ]
 
@@ -32,18 +36,20 @@ enum CloudProviderCatalog {
             id: "gemini",
             title: "Gemini",
             detail: "Primary rewrite provider.",
-            keyPath: \.geminiAPIKey
+            keyPath: \.geminiAPIKey,
+            keychainKey: .geminiAPIKey
         ),
         CloudProviderKey(
             id: "openrouter",
             title: "OpenRouter",
             detail: "Fallback rewrite provider.",
-            keyPath: \.openRouterAPIKey
+            keyPath: \.openRouterAPIKey,
+            keychainKey: .openRouterAPIKey
         ),
     ]
 
     static func transcriptionSummary(prefs: PreferencesStore) -> String {
-        let configured = configuredTitles(from: transcriptionKeys, prefs: prefs)
+        let configured = configuredTitles(from: transcriptionKeys, cache: prefs.keyStatusCache)
         return transcriptionSummary(configuredProviderTitles: configured)
     }
 
@@ -53,7 +59,7 @@ enum CloudProviderCatalog {
     }
 
     static func rewriteSummary(prefs: PreferencesStore) -> String {
-        let configured = configuredTitles(from: rewriteKeys, prefs: prefs)
+        let configured = configuredTitles(from: rewriteKeys, cache: prefs.keyStatusCache)
         return rewriteSummary(configuredProviderTitles: configured)
     }
 
@@ -62,9 +68,12 @@ enum CloudProviderCatalog {
         return configuredProviderTitles.joined(separator: " → ")
     }
 
-    private static func configuredTitles(from keys: [CloudProviderKey], prefs: PreferencesStore) -> [String] {
+    private static func configuredTitles(
+        from keys: [CloudProviderKey],
+        cache: [KeychainHelper.Key: Bool]
+    ) -> [String] {
         keys.compactMap { key in
-            prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : key.title
+            cache[key.keychainKey] == true ? key.title : nil
         }
     }
 }

@@ -28,6 +28,10 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         }
     }
 
+    /// Cached configured-status for each Keychain key. Updated on every write; avoids
+    /// synchronous Keychain reads in SwiftUI `body` during view re-renders.
+    @Published public private(set) var keyStatusCache: [KeychainHelper.Key: Bool] = [:]
+
     private init() {
         let stored = defaults.string(forKey: "processingLevel") ?? "clean"
         processingLevel = ProcessingLevel(rawValue: stored) ?? .clean
@@ -35,6 +39,12 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
             defaults.set(processingLevel.rawValue, forKey: "processingLevel")
         }
         selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
+        keyStatusCache = [
+            .elevenLabsAPIKey: !apiKey(env: "ELEVENLABS_API_KEY", keychain: .elevenLabsAPIKey).isEmpty,
+            .deepgramAPIKey: !apiKey(env: "DEEPGRAM_API_KEY", keychain: .deepgramAPIKey).isEmpty,
+            .openRouterAPIKey: !apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey).isEmpty,
+            .geminiAPIKey: !apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey).isEmpty,
+        ]
     }
 
     public var elevenLabsAPIKey: String {
@@ -75,6 +85,17 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         } else {
             KeychainHelper.save(trimmed, for: key)
         }
+        // Re-evaluate effective status so env-var overrides are respected.
+        keyStatusCache[key] = isEffectivelyConfigured(key)
         objectWillChange.send()
+    }
+
+    private func isEffectivelyConfigured(_ key: KeychainHelper.Key) -> Bool {
+        switch key {
+        case .elevenLabsAPIKey: return !elevenLabsAPIKey.isEmpty
+        case .deepgramAPIKey:   return !deepgramAPIKey.isEmpty
+        case .openRouterAPIKey: return !openRouterAPIKey.isEmpty
+        case .geminiAPIKey:     return !geminiAPIKey.isEmpty
+        }
     }
 }
