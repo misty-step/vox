@@ -53,4 +53,7 @@ Examples:
 |-----|-------|--------|
 | [0001](0001-simplicity-first-design.md) | Simplicity-First Design | Accepted |
 | [0002](0002-session-extension-seam.md) | Session Extension Seam for Wrappers | Accepted |
-| [0003](0003-audio-capture-reliability-first-backend-policy.md) | Audio Capture Reliability-First Backend Policy | Accepted |
+| [0003](0003-audio-capture-reliability-first-backend-policy.md) | Audio Capture Reliability-First Backend Policy | Superseded by 0004 |
+| [0004](0004-streaming-first-audio-capture-backend-policy.md) | Streaming-First Audio Capture Backend Policy | Accepted |
+| [0005](0005-sequential-stt-routing-default.md) | Sequential STT Routing Default | Accepted |
+| [0006](0006-quality-gate-eval-only.md) | Quality Gate Restricted to Eval/Benchmarks | Accepted |
