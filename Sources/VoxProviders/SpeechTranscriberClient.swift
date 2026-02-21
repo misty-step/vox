@@ -31,12 +31,12 @@ public final class SpeechTranscriberClient: STTProvider {
             _ = try await analyzer.analyzeSequence(from: audioFile)
         }
 
-        var parts: [String] = []
+        var segments: [String] = []
         do {
             for try await result in transcriber.results {
                 let segment = String(result.text.characters)
                 if !segment.isEmpty {
-                    parts.append(segment)
+                    segments.append(segment)
                 }
             }
         } catch is CancellationError {
@@ -53,11 +53,11 @@ public final class SpeechTranscriberClient: STTProvider {
             analysisTask.cancel()
             throw CancellationError()
         } catch {
-            // Analysis error after results collection - map it
+            // Analysis error after results collection — map it
             throw STTError.unknown(error.localizedDescription)
         }
 
-        let transcript = parts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let transcript = segments.joined(separator: " ").trimmingCharacters(in: .whitespaces)
         guard !transcript.isEmpty else {
             throw STTError.unknown("No speech detected")
         }

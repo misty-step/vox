@@ -14,11 +14,13 @@ public final class AppleFoundationModelsClient: RewriteProvider {
         SystemLanguageModel.default.isAvailable
     }
 
+    /// `model` parameter is ignored — Apple Foundation Models uses the system language model exclusively.
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
         guard SystemLanguageModel.default.isAvailable else {
             throw RewriteError.unknown("Apple Intelligence not available on this device")
         }
 
+        print("[FoundationModels] Rewriting (\(transcript.count) chars)")
         let session = LanguageModelSession(instructions: systemPrompt)
         do {
             let response = try await session.respond(to: transcript)
