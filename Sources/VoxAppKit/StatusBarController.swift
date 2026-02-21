@@ -72,6 +72,7 @@ struct StatusBarMenuSnapshot: Equatable {
         )
 
         let hotkeyStatus = HotkeyStatus.forAvailability(hotkeyAvailable)
+        // Copy raw is safe during any state — read-only clipboard operation, no pipeline contention.
         let copyRawEnabled = hasRecoverySnapshot
         let retryEnabled: Bool
         if case .idle = state {
