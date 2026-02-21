@@ -17,6 +17,7 @@ Option+Space to record. Auto-pastes into any app. No configuration maze.
 git clone https://github.com/misty-step/vox.git
 cd vox
 cp .env.example .env.local   # add your API keys
+swift build
 ./scripts/run.sh
 ```
 
@@ -78,7 +79,7 @@ OPENROUTER_API_KEY=your-key         # optional, rewrite fallback
 
 **Settings window** (persistent): click the menu bar icon → Settings. Keys stored in Keychain.
 
-Advanced env overrides:
+Advanced env overrides — add to `.env.local` (loaded by `run.sh`) or inline-prefix the command:
 ```bash
 VOX_MAX_CONCURRENT_STT=8            # global STT in-flight cap (default 8)
 VOX_DISABLE_STREAMING_STT=1         # force batch-only transcription
@@ -86,6 +87,8 @@ VOX_STT_ROUTING=hedged              # parallel cloud race w/ stagger delays
 VOX_AUDIO_BACKEND=recorder          # legacy file-only audio backend
 VOX_PERF_INGEST_URL=https://...     # pipeline timing upload endpoint
 ```
+
+Example: `VOX_DISABLE_STREAMING_STT=1 ./scripts/run.sh`
 
 ### Permissions
 
