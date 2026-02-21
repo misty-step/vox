@@ -32,6 +32,7 @@ public final class VoxSession: ObservableObject {
     private let streamingSTTProvider: StreamingSTTProvider?
     private var streamingSetupTask: Task<Void, Never>?
     private let streamingSetupTimeout: TimeInterval
+    private let streamingFinalizeTimeout: TimeInterval
     private var levelTimer: Timer?
     private var recordingStartTime: CFAbsoluteTime?
     private var activeStreamingBridge: StreamingAudioBridge?
@@ -47,7 +48,8 @@ public final class VoxSession: ObservableObject {
         errorPresenter: ((String) -> Void)? = nil,
         copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingSetupTimeout: TimeInterval = 3.0
+        streamingSetupTimeout: TimeInterval = 3.0,
+        streamingFinalizeTimeout: TimeInterval = 90.0
     ) {
         self.init(
             recorder: recorder,
@@ -60,7 +62,8 @@ public final class VoxSession: ObservableObject {
             copyRawTranscriptToClipboard: copyRawTranscriptToClipboard,
             recoveryStore: .shared,
             streamingSTTProvider: streamingSTTProvider,
-            streamingSetupTimeout: streamingSetupTimeout
+            streamingSetupTimeout: streamingSetupTimeout,
+            streamingFinalizeTimeout: streamingFinalizeTimeout
         )
     }
 
@@ -75,7 +78,8 @@ public final class VoxSession: ObservableObject {
         copyRawTranscriptToClipboard: ((String) -> Void)? = nil,
         recoveryStore: LastDictationRecoveryStore,
         streamingSTTProvider: StreamingSTTProvider? = nil,
-        streamingSetupTimeout: TimeInterval = 3.0
+        streamingSetupTimeout: TimeInterval = 3.0,
+        streamingFinalizeTimeout: TimeInterval = 90.0
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
@@ -98,6 +102,7 @@ public final class VoxSession: ObservableObject {
         self.recoveryStore = recoveryStore
         self.streamingSTTProvider = streamingSTTProvider
         self.streamingSetupTimeout = streamingSetupTimeout
+        self.streamingFinalizeTimeout = streamingFinalizeTimeout
     }
 
     private var hasCloudProviders: Bool {
@@ -668,7 +673,10 @@ public final class VoxSession: ObservableObject {
             return "unknown"
         }
         do {
-            let transcript = try await bridge.finish()
+            let finalizeTimeout = streamingFinalizeTimeout
+            let transcript = try await withStreamingFinalizeTimeout(seconds: finalizeTimeout) {
+                try await bridge.finish()
+            }
             let normalizedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedTranscript.isEmpty else {
                 throw VoxError.noTranscript
@@ -1059,6 +1067,64 @@ private func withStreamingSetupTimeout<T: Sendable>(
         }
         group.cancelAll()
         return result
+    }
+}
+
+/// Ensures a `CheckedContinuation` is resumed exactly once when racing two tasks.
+private final class _FinalizeOnceState<T: Sendable>: @unchecked Sendable {
+    private let continuation: CheckedContinuation<T, Error>
+    private var done = false
+    private let lock = NSLock()
+
+    init(_ continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(with result: Result<T, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        continuation.resume(with: result)
+    }
+}
+
+private func withStreamingFinalizeTimeout<T: Sendable>(
+    seconds: TimeInterval,
+    operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let timeoutNanoseconds: UInt64
+    do {
+        timeoutNanoseconds = try validatedStreamingTimeoutNanoseconds(seconds: seconds)
+    } catch {
+        throw StreamingSTTError.finalizationTimeout
+    }
+    // Use unstructured Tasks rather than withThrowingTaskGroup. TaskGroup waits for all
+    // children to drain before returning — so if operation() is stuck in non-cancellation-
+    // cooperative I/O (e.g. bridge.finish() blocked on a WebSocket drain), the group would
+    // block indefinitely even after the timeout fires. Unstructured Tasks let us abandon
+    // the hung operation and return control to the caller immediately on timeout.
+    return try await withCheckedThrowingContinuation { continuation in
+        let state = _FinalizeOnceState(continuation)
+        // operationTask may outlive the continuation if operation() is non-cooperative.
+        // The caller's fallback path calls bridge.cancel(), which tears down the
+        // underlying WebSocket and unblocks the hung operation eventually.
+        let operationTask = Task {
+            do {
+                state.resume(with: .success(try await operation()))
+            } catch {
+                state.resume(with: .failure(error))
+            }
+        }
+        Task {
+            defer { operationTask.cancel() }
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                state.resume(with: .failure(StreamingSTTError.finalizationTimeout))
+            } catch {
+                state.resume(with: .failure(error))
+            }
+        }
     }
 }
 

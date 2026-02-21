@@ -88,7 +88,7 @@ Error classification is centralized in `STTError.isRetryable`, `STTError.isFallb
 3) `VoxSession` applies selected input as system default (compatibility path), then `AudioRecorder` starts capture
 4) `AudioRecorder` records 16kHz/16-bit mono CAF via `AVAudioEngine` (default backend) and emits PCM chunks when available
 5) If streaming STT is available (ElevenLabs preferred; Deepgram fallback) and not disabled (`VOX_DISABLE_STREAMING_STT`), `VoxSession` forwards PCM chunks to a `StreamingSTTSession`
-6) On stop, `VoxSession` attempts streaming `finish()` with bounded timeout (scaled by streamed audio duration, capped)
+6) On stop, `VoxSession` attempts streaming `finish()` with two-layer timeout: provider-level (scaled by streamed audio duration, recovers partial transcripts) and session-level safety net (90s default, catches transport-level hangs like stuck WebSocket drains)
 7) If streaming is unavailable, setup fails, or finalize fails/times out, fallback to batch STT router (default sequential; opt-in `VOX_STT_ROUTING=hedged`)
 8) Transcript → rewrite (Gemini, fallback OpenRouter) when `ProcessingLevel` = clean/polish
 9) `RewriteQualityGate` scores rewrite similarity (benchmarks/debug)

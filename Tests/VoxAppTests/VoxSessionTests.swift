@@ -114,6 +114,47 @@ final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording {
 }
 
 @MainActor
+final class MockNonStreamingRecorder: AudioRecording {
+    var startCallCount = 0
+    var stopCallCount = 0
+    var levelCallCount = 0
+    var shouldThrowOnStart = false
+    var shouldThrowOnStop = false
+    var stopError: Error?
+    private var recordingURL: URL?
+
+    func start(inputDeviceUID: String?) throws {
+        startCallCount += 1
+        if shouldThrowOnStart {
+            throw VoxError.internalError("Mock start failure")
+        }
+        recordingURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mock-non-streaming-\(UUID().uuidString).caf")
+        FileManager.default.createFile(atPath: recordingURL!.path, contents: Data())
+    }
+
+    func currentLevel() -> (average: Float, peak: Float) {
+        levelCallCount += 1
+        return (0.5, 0.7)
+    }
+
+    func stop() throws -> URL {
+        stopCallCount += 1
+        if let stopError {
+            throw stopError
+        }
+        if shouldThrowOnStop {
+            throw VoxError.internalError("Mock stop failure")
+        }
+        guard let url = recordingURL else {
+            throw VoxError.internalError("No active recording")
+        }
+        recordingURL = nil
+        return url
+    }
+}
+
+@MainActor
 final class MockHUD: HUDDisplaying {
     var showRecordingCallCount = 0
     var showProcessingCallCount = 0
@@ -248,6 +289,9 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
     var sentChunks: [AudioChunk] { lock.withLock { _sentChunks } }
     var finishResult: Result<String, Error> = .success("streamed transcript")
     var finishDelay: TimeInterval?
+    /// When true, finishDelay uses Thread.sleep (blocks cooperative thread pool, ignores Swift
+    /// task cancellation) to simulate non-cooperative I/O like a hung WebSocket drain.
+    var finishBlockingThread: Bool = false
     private var _expectedChunkCountAtFinish: Int?
     var expectedChunkCountAtFinish: Int? {
         get { lock.withLock { _expectedChunkCountAtFinish } }
@@ -281,7 +325,18 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
             }
         }
         if let finishDelay {
-            try await Task.sleep(nanoseconds: UInt64(finishDelay * 1_000_000_000))
+            if finishBlockingThread {
+                // Simulate non-cooperative I/O: uses DispatchQueue (not Swift concurrency),
+                // so Swift task cancellation is ignored. The delay runs to completion
+                // regardless of whether the calling Task is cancelled.
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + finishDelay) {
+                        continuation.resume()
+                    }
+                }
+            } else {
+                try await Task.sleep(nanoseconds: UInt64(finishDelay * 1_000_000_000))
+            }
         }
         continuation?.finish()
         switch finishResult {
@@ -615,6 +670,33 @@ struct VoxSessionDITests {
         #expect(session.state == .idle)
     }
 
+    @Test("Recorder without chunk streaming uses batch path even with streaming provider")
+    @MainActor func test_nonStreamingRecorder_skipsStreamingAndUsesBatchPath() async {
+        let recorder = MockNonStreamingRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch transcript"
+        let streamingSession = MockStreamingSession()
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider
+        )
+
+        await session.toggleRecording()
+        await session.toggleRecording()
+
+        #expect(streamingProvider.makeSessionCallCount == 0)
+        #expect(pipeline.processCallCount == 1)
+        #expect(pipeline.processTranscriptCallCount == 0)
+        #expect(session.state == .idle)
+    }
+
     @Test("Streaming finalize uses latest partial transcript when final is empty")
     @MainActor func test_streamingFinalizeEmptyFinal_usesLatestPartialTranscript() async {
         let recorder = MockRecorder()
@@ -683,9 +765,10 @@ struct VoxSessionDITests {
         let pipeline = MockPipeline()
         pipeline.result = "batch timeout fallback transcript"
         let streamingSession = MockStreamingSession()
-        // Session handles its own timeout — simulate it throwing finalizationTimeout
-        streamingSession.finishResult = .failure(StreamingSTTError.finalizationTimeout)
+        streamingSession.finishDelay = 5.0
+        streamingSession.finishResult = .success("late streamed transcript")
         let streamingProvider = MockStreamingProvider(session: streamingSession)
+        let startTime = CFAbsoluteTimeGetCurrent()
 
         let session = VoxSession(
             recorder: recorder,
@@ -694,17 +777,55 @@ struct VoxSessionDITests {
             prefs: MockPreferencesStore(),
             requestMicrophoneAccess: { true },
             errorPresenter: { _ in },
-            streamingSTTProvider: streamingProvider
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.1
         )
 
         await session.toggleRecording()
         recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
         await session.toggleRecording()
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
 
         #expect(streamingProvider.makeSessionCallCount == 1)
         #expect(pipeline.processCallCount == 1)
         #expect(pipeline.processTranscriptCallCount == 0)
         #expect(streamingSession.cancelCallCount == 1)
+        #expect(elapsed < 2.0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming finalize timeout unblocks when operation cannot be cancelled")
+    @MainActor func test_streamingFinalizeTimeout_unblocksNonCooperativeOperation() async {
+        // Verifies that withStreamingFinalizeTimeout uses unstructured Tasks (not
+        // withThrowingTaskGroup) so the caller is unblocked even when bridge.finish()
+        // ignores task cancellation (e.g. blocked in synchronous C/WebSocket I/O).
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch timeout fallback transcript"
+        let streamingSession = MockStreamingSession()
+        streamingSession.finishDelay = 3.0
+        streamingSession.finishBlockingThread = true  // Thread.sleep; ignores Swift cancellation
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.1
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+
+        #expect(pipeline.processCallCount == 1)
+        #expect(elapsed < 2.0)
         #expect(session.state == .idle)
     }
 
