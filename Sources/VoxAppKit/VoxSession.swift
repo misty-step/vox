@@ -178,10 +178,27 @@ public final class VoxSession: ObservableObject {
             ]
         )
 
+        // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
+        // Falls through to cloud if unavailable or on error.
+        if #available(macOS 26.0, *), AppleFoundationModelsClient.isAvailable {
+            let cloudFallback = makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
+            return FallbackRewriteProvider(entries: [
+                .init(provider: AppleFoundationModelsClient(), label: "Apple Foundation Models"),
+                .init(provider: cloudFallback, label: "Cloud"),
+            ])
+        }
+
+        return makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
+    }
+
+    private func makeCloudRewriteProvider(
+        gemini: GeminiClient?,
+        openRouter: OpenRouterClient?
+    ) -> RewriteProvider {
         guard gemini != nil || openRouter != nil else {
             // No keys — return a bare OpenRouter client (will fail on auth)
             print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
-            return OpenRouterClient(apiKey: openRouterKey)
+            return OpenRouterClient(apiKey: "")
         }
 
         if let gemini, let openRouter {
@@ -204,7 +221,17 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeSTTProvider() -> STTProvider {
-        let appleSpeech = AppleSpeechClient()
+        // macOS 26+: SpeechTranscriber (on-device, newer API) with AppleSpeechClient fallback
+        let appleSTT: STTProvider
+        if #available(macOS 26.0, *) {
+            appleSTT = FallbackSTTProvider(
+                primary: SpeechTranscriberClient(),
+                fallback: AppleSpeechClient(),
+                primaryName: "SpeechTranscriber"
+            )
+        } else {
+            appleSTT = AppleSpeechClient()
+        }
 
         // Build decorated cloud providers in preference order
         var cloudProviders: [(name: String, provider: STTProvider)] = []
@@ -225,11 +252,11 @@ public final class VoxSession: ObservableObject {
 
         let chain: STTProvider
         if cloudProviders.isEmpty {
-            chain = appleSpeech
+            chain = appleSTT
         } else if Self.isHedgedRoutingSelected(environment: ProcessInfo.processInfo.environment) {
             // Opt-in: parallel cloud race with stagger delays
             var hedgedEntries: [HedgedSTTProvider.Entry] = [
-                .init(name: "Apple Speech", provider: appleSpeech, delay: 0),
+                .init(name: "Apple Speech", provider: appleSTT, delay: 0),
             ]
             let delays: [TimeInterval] = [0, 5, 10]
             for (i, cp) in cloudProviders.enumerated() {
@@ -238,7 +265,7 @@ public final class VoxSession: ObservableObject {
             chain = HedgedSTTProvider(entries: hedgedEntries)
         } else {
             // Default: sequential primary → fallback → Apple Speech safety net
-            let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSpeech as STTProvider)]
+            let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSTT as STTProvider)]
             chain = allProviders.dropFirst().reduce(allProviders[0]) { accumulated, next in
                 let wrapper = FallbackSTTProvider(
                     primary: accumulated.provider,
