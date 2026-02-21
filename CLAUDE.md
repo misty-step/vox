@@ -28,7 +28,7 @@ Pure SwiftPM, zero external dependencies. Five main targets forming a strict dep
 
 ```
 VoxCore          — protocols, errors, decorators, shared types (no deps)
-VoxProviders     — STT clients + OpenRouter rewriting (depends: VoxCore)
+VoxProviders     — STT clients, rewrite clients, streaming (depends: VoxCore)
 VoxMac           — macOS integrations: audio, keychain, HUD, hotkeys (depends: VoxCore)
 VoxAppKit        — session, pipeline, settings, UI controllers (depends: all above)
 VoxApp           — executable entry point, just main.swift + AppDelegate (depends: VoxAppKit)
@@ -46,7 +46,10 @@ Providers are wrapped in composable decorators, with default routing via sequent
                                    ▼
                      Sequential FallbackSTTProvider chain
                                    │
-      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Apple Speech
+      ElevenLabs(Timeout+Retry) → Deepgram(Timeout+Retry) → Apple STT
+
+Apple STT (macOS 26+): SpeechTranscriberClient → AppleSpeechClient
+Apple STT (macOS < 26): AppleSpeechClient
 ```
 
 - **Default routing**: sequential primary+fallback — tries providers in order, falls back on failure
@@ -62,7 +65,7 @@ Providers are wrapped in composable decorators, with default routing via sequent
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via ModelRoutedRewriteProvider (Gemini direct or OpenRouter) → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via FallbackRewriteProvider (macOS 26+: Apple Foundation Models first, then cloud) or ModelRoutedRewriteProvider (Gemini direct or OpenRouter) → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -77,6 +80,8 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 **Error classification**: `STTError.isRetryable`, `.isFallbackEligible`, and `.isTransientForHealthScoring` centralize error semantics across retry/hedge/routing.
 
 **Quality gate**: `RewriteQualityGate` scores candidate/raw similarity (ratio + distance metrics) for evaluation and benchmarks only — removed from production path in #284 (clean: 0.6, polish: 0.3).
+
+**Availability gating (macOS 26+)**: `#if canImport(FoundationModels)` as compile-time SDK proxy + `@available(macOS 26.0, *)` runtime check. `SpeechTranscriberClient` and `AppleFoundationModelsClient` use this double-gate. On Xcode 16.2 CI the classes compile out entirely; on Xcode 26+ they're fully exercised.
 
 **API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `GEMINI_API_KEY`. Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback). Diagnostics: `VOX_PERF_INGEST_URL` (HTTP endpoint for pipeline timing upload).
 
