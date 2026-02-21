@@ -118,10 +118,14 @@ struct CloudKeysSheet: View {
 private struct KeyField: View {
     let title: String
     let detail: String
+    /// Live `PreferencesStore` binding — written only on commit, not every keystroke.
     let text: Binding<String>
 
+    /// Local buffer: edits accumulate here, never touching Keychain mid-type.
+    @State private var draft: String = ""
+
     private var isConfigured: Bool {
-        !text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -146,9 +150,13 @@ private struct KeyField: View {
                 Spacer(minLength: 0)
             }
 
-            SecureField("API key", text: text)
-                .textContentType(.password)
-                .textFieldStyle(.roundedBorder)
+            SecureField("API key", text: $draft) {
+                // onSubmit: commit when user presses Return
+                commit()
+            }
+            .textContentType(.password)
+            .textFieldStyle(.roundedBorder)
+            .onAppear { draft = text.wrappedValue }
 
             Text(detail)
                 .font(.caption)
@@ -164,5 +172,10 @@ private struct KeyField: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.10), lineWidth: 1)
         )
+        .onDisappear { commit() }
+    }
+
+    private func commit() {
+        text.wrappedValue = draft
     }
 }
