@@ -124,20 +124,24 @@ public final class VoxSession: ObservableObject {
             enableOpus: hasCloudProviders,
             timingHandler: { timing in
                 let totalStageMs = Int((timing.encodeTime + timing.sttTime + timing.rewriteTime + timing.pasteTime) * 1000)
+                var fields: [String: DiagnosticsValue] = [
+                    "processing_level": .string(timing.processingLevel?.rawValue ?? ""),
+                    "total_ms": .int(Int(timing.totalTime * 1000)),
+                    "total_stage_ms": .int(totalStageMs),
+                    "encode_ms": .int(Int(timing.encodeTime * 1000)),
+                    "stt_ms": .int(Int(timing.sttTime * 1000)),
+                    "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
+                    "paste_ms": .int(Int(timing.pasteTime * 1000)),
+                    "original_bytes": .int(timing.originalSizeBytes),
+                    "encoded_bytes": .int(timing.encodedSizeBytes),
+                ]
+                if timing.finalizeTimeInterval > 0 {
+                    fields["finalize_ms"] = .int(Int(timing.finalizeTimeInterval * 1000))
+                }
                 DiagnosticsStore.recordAsync(
                     name: "pipeline_timing",
                     sessionID: dictationID,
-                    fields: [
-                        "processing_level": .string(timing.processingLevel?.rawValue ?? ""),
-                        "total_ms": .int(Int(timing.totalTime * 1000)),
-                        "total_stage_ms": .int(totalStageMs),
-                        "encode_ms": .int(Int(timing.encodeTime * 1000)),
-                        "stt_ms": .int(Int(timing.sttTime * 1000)),
-                        "rewrite_ms": .int(Int(timing.rewriteTime * 1000)),
-                        "paste_ms": .int(Int(timing.pasteTime * 1000)),
-                        "original_bytes": .int(timing.originalSizeBytes),
-                        "encoded_bytes": .int(timing.encodedSizeBytes),
-                    ]
+                    fields: fields
                 )
             },
             onProcessedTranscript: { rawTranscript, outputText, processingLevel in
@@ -344,7 +348,8 @@ public final class VoxSession: ObservableObject {
             print("[Vox] Failed to preserve audio: no application support directory")
             return nil
         }
-        let recoveryDir = support.appendingPathComponent("Vox/recovery")
+        let appName = Bundle.main.bundleIdentifier?.components(separatedBy: ".").last ?? "Vox"
+        let recoveryDir = support.appendingPathComponent("\(appName)/recovery")
         do {
             try fm.createDirectory(at: recoveryDir, withIntermediateDirectories: true)
             let timestamp = ISO8601DateFormatter().string(from: Date())
@@ -664,16 +669,22 @@ public final class VoxSession: ObservableObject {
         }
         do {
             let transcript = try await bridge.finish()
-            let normalized = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
+            let normalizedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedTranscript.isEmpty else {
                 throw VoxError.noTranscript
             }
+            let finalizeElapsed = CFAbsoluteTimeGetCurrent() - finalizeStart
+            if let dictationPipeline = batchPipeline as? DictationPipeline {
+                // Use extended API so the pipeline summary includes finalize time.
+                logFinalize(outcome: "success", reason: "ok", transcriptChars: normalizedTranscript.count)
+                return try await dictationPipeline.process(
+                    transcript: normalizedTranscript,
+                    streamingFinalizeTimeInterval: finalizeElapsed
+                )
+            }
             if let transcriptPipeline = batchPipeline as? TranscriptProcessing {
-                #if DEBUG
-                print("[Vox] Streaming transcript finalized (\(normalized.count) chars)")
-                #endif
-                logFinalize(outcome: "success", reason: "ok", transcriptChars: normalized.count)
-                return try await transcriptPipeline.process(transcript: normalized)
+                logFinalize(outcome: "success", reason: "ok", transcriptChars: normalizedTranscript.count)
+                return try await transcriptPipeline.process(transcript: normalizedTranscript)
             }
             logFinalize(outcome: "batch_fallback", reason: "missing_transcript_pipeline")
             print("[Vox] Streaming finalized, but pipeline lacks TranscriptProcessing; falling back to batch STT")

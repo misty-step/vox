@@ -115,7 +115,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func cleanupOldRecoveryFiles() {
         let fm = FileManager.default
         guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-        let recoveryDir = support.appendingPathComponent("Vox/recovery")
+        let appName = Bundle.main.bundleIdentifier?.components(separatedBy: ".").last ?? "Vox"
+        let recoveryDir = support.appendingPathComponent("\(appName)/recovery")
         guard let files = try? fm.contentsOfDirectory(at: recoveryDir, includingPropertiesForKeys: [.creationDateKey]) else { return }
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
         for file in files {

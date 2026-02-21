@@ -139,7 +139,8 @@ actor DiagnosticsStore {
             self.directoryURL = directoryURL
         } else {
             let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            self.directoryURL = support?.appendingPathComponent("Vox/Diagnostics", isDirectory: true)
+            let appName = Bundle.main.bundleIdentifier?.components(separatedBy: ".").last ?? "Vox"
+            self.directoryURL = support?.appendingPathComponent("\(appName)/Diagnostics", isDirectory: true)
         }
         self.maxRotatedFiles = max(0, maxRotatedFiles)
         self.maxFileBytes = max(1, maxFileBytes)

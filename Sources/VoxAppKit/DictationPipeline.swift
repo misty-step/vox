@@ -14,6 +14,8 @@ public struct PipelineTiming: Sendable {
     public var pasteTime: TimeInterval = 0
     public var originalSizeBytes: Int = 0
     public var encodedSizeBytes: Int = 0
+    /// Non-zero when the transcript came from streaming STT; captures time from stop to finalized transcript.
+    public var finalizeTimeInterval: TimeInterval = 0
 
     public init() {
         self.startTime = CFAbsoluteTimeGetCurrent()
@@ -24,6 +26,13 @@ public struct PipelineTiming: Sendable {
     }
 
     public func summary() -> String {
+        if finalizeTimeInterval > 0 {
+            // Streaming path: finalize replaces encode+stt
+            return String(
+                format: "[Pipeline] Total: %.2fs (finalize: %dms, rewrite: %.2fs, paste: %.2fs)",
+                totalTime, Int(finalizeTimeInterval * 1000), rewriteTime, pasteTime
+            )
+        }
         let encoded = encodedSizeBytes > 0 ? encodedSizeBytes : originalSizeBytes
         let ratio = originalSizeBytes > 0 ? Double(encoded) / Double(originalSizeBytes) : 1.0
         let sizeInfo = originalSizeBytes > 0
@@ -224,7 +233,22 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         return try await process(
             transcript: rawTranscript,
             processingLevel: level,
-            bypassRewriteCache: false
+            bypassRewriteCache: false,
+            streamingFinalizeTimeInterval: 0
+        )
+    }
+
+    /// Extended entry point for the streaming path; includes finalize time in the timing summary.
+    public func process(
+        transcript rawTranscript: String,
+        streamingFinalizeTimeInterval: TimeInterval
+    ) async throws -> String {
+        let level = await MainActor.run { prefs.processingLevel }
+        return try await process(
+            transcript: rawTranscript,
+            processingLevel: level,
+            bypassRewriteCache: false,
+            streamingFinalizeTimeInterval: streamingFinalizeTimeInterval
         )
     }
 
@@ -233,7 +257,22 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         processingLevel: ProcessingLevel,
         bypassRewriteCache: Bool
     ) async throws -> String {
+        try await process(
+            transcript: rawTranscript,
+            processingLevel: processingLevel,
+            bypassRewriteCache: bypassRewriteCache,
+            streamingFinalizeTimeInterval: 0
+        )
+    }
+
+    private func process(
+        transcript rawTranscript: String,
+        processingLevel: ProcessingLevel,
+        bypassRewriteCache: Bool,
+        streamingFinalizeTimeInterval: TimeInterval
+    ) async throws -> String {
         var timing = PipelineTiming()
+        timing.finalizeTimeInterval = streamingFinalizeTimeInterval
         defer {
             timingHandler?(timing)
         }
@@ -252,9 +291,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         timing.rewriteTime = processed.rewriteTime
         timing.pasteTime = processed.pasteTime
 
-        #if DEBUG
         print(timing.summary())
-        #endif
         return processed.text
     }
 
