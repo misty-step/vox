@@ -7,6 +7,10 @@ DerivedData/
 .env*
 !.env.example
 
+# Glance per-directory summaries (generated)
+glance.md
+**/glance.md
+
 # Eval framework
 evals/output/
 evals/.promptfoo-cache/
