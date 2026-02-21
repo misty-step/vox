@@ -23,7 +23,7 @@ swift build
 
 Grant Accessibility permission when prompted. Press **Option+Space** to dictate.
 
-Minimum: one [ElevenLabs](https://elevenlabs.io) key (STT) and one [Gemini](https://ai.google.dev/) key (rewrites). Apple Speech always available on-device as fallback — no key needed.
+Recommended: one [ElevenLabs](https://elevenlabs.io) key (STT) and one [Gemini](https://ai.google.dev/) key (rewrites) for best quality. Apple Speech available on-device as no-key fallback.
 
 ---
 
@@ -112,7 +112,7 @@ swift test                                   # run all tests
 
 ### Project Structure
 
-```
+```text
 Sources/
   VoxCore/       # Protocols, errors, decorators (no dependencies)
   VoxProviders/  # STT/rewrite clients (ElevenLabs, Deepgram, Apple, Gemini, OpenRouter)
