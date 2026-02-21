@@ -64,7 +64,7 @@ enum CloudProviderCatalog {
 
     private static func configuredTitles(from keys: [CloudProviderKey], prefs: PreferencesStore) -> [String] {
         keys.compactMap { key in
-            prefs[keyPath: key.keyPath].isEmpty ? nil : key.title
+            prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : key.title
         }
     }
 }
