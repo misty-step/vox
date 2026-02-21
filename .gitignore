@@ -15,3 +15,5 @@ glance.md
 evals/output/
 evals/.promptfoo-cache/
 node_modules/
+
+.flywheel/
