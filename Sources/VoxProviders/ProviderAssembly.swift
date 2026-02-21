@@ -14,9 +14,6 @@ public struct ProviderAssemblyConfig: Sendable {
     public let geminiAPIKey: String
     public let openRouterAPIKey: String
 
-    /// Maximum in-flight STT transcriptions (default: 8).
-    public let maxConcurrentSTT: Int
-
     /// Optional hook called for each cloud STT provider before chain assembly.
     /// Parameters: (providerName, modelName, provider) → wrappedProvider.
     /// Perf-audit uses this to inject `InstrumentedSTTProvider`.
@@ -32,7 +29,6 @@ public struct ProviderAssemblyConfig: Sendable {
         deepgramAPIKey: String,
         geminiAPIKey: String,
         openRouterAPIKey: String,
-        maxConcurrentSTT: Int = 8,
         sttInstrument: @escaping @Sendable (String, String, any STTProvider) -> any STTProvider = { _, _, p in p },
         rewriteInstrument: @escaping @Sendable (String, any RewriteProvider) -> any RewriteProvider = { _, p in p }
     ) {
@@ -41,22 +37,35 @@ public struct ProviderAssemblyConfig: Sendable {
         self.deepgramAPIKey = trimmed(deepgramAPIKey)
         self.geminiAPIKey = trimmed(geminiAPIKey)
         self.openRouterAPIKey = trimmed(openRouterAPIKey)
-        self.maxConcurrentSTT = max(1, maxConcurrentSTT)
         self.sttInstrument = sttInstrument
         self.rewriteInstrument = rewriteInstrument
     }
 }
 
+// MARK: - CloudSTTEntry
+
+/// A single cloud STT provider entry: retry-wrapped and instrumented, ready for chain assembly.
+public struct CloudSTTEntry: Sendable {
+    public let name: String
+    public let model: String
+    /// Retry-wrapped (and instrumentation-hooked) provider. Not yet chained or concurrency-limited.
+    public let provider: any STTProvider
+}
+
 // MARK: - CloudSTTResult
 
-/// The result of assembling the cloud STT chain.
+/// Result of assembling the cloud STT provider tier.
 public struct CloudSTTResult: Sendable {
-    /// The assembled provider, wrapped with retry + fallback + concurrency limit.
-    /// `nil` when no cloud API keys are configured.
-    public let provider: (any STTProvider)?
+    /// Individual retry-wrapped entries in preference order.
+    /// Use `entries` when building hedged routing or appending to a custom chain.
+    /// Empty when no cloud keys are configured.
+    public let entries: [CloudSTTEntry]
 
-    /// Chain members in preference order, for logging/metadata.
-    public let descriptors: [(name: String, model: String)]
+    /// Sequential fallback chain across all cloud entries.
+    /// `nil` when `entries` is empty.
+    /// Note: does NOT include Apple on-device STT or a `ConcurrencyLimitedSTTProvider` wrapper —
+    /// callers append Apple as the final fallback and apply their own concurrency limit.
+    public let cloudChain: (any STTProvider)?
 }
 
 // MARK: - ProviderAssembly
@@ -64,8 +73,9 @@ public struct CloudSTTResult: Sendable {
 /// Single source of truth for cloud STT and rewrite provider chain assembly.
 ///
 /// Shared by `VoxSession` (app runtime) and `VoxPerfAudit` (CLI).
-/// VoxSession adds Apple on-device STT on top of the cloud chain.
-/// VoxPerfAudit passes instrumentation hooks to record per-provider usage.
+/// VoxSession adds Apple on-device STT on top of the cloud chain and wraps
+/// with `ConcurrencyLimitedSTTProvider`. VoxPerfAudit passes instrumentation
+/// hooks to record per-provider usage metrics.
 public enum ProviderAssembly {
 
     // Retry parameters — single source of truth for both consumers.
@@ -79,12 +89,16 @@ public enum ProviderAssembly {
         "google/gemini-2.0-flash-001",
     ]
 
-    /// Builds the cloud STT provider chain from configured keys.
+    /// Builds the cloud STT provider tier from configured keys.
     ///
-    /// Chain shape: ElevenLabs→Retry → Deepgram→Retry → sequential FallbackChain → ConcurrencyLimited.
-    /// Returns `nil` provider when no cloud keys are configured.
+    /// Each configured provider is wrapped with `RetryingSTTProvider`, then passed through
+    /// the optional `sttInstrument` hook. The entries are chained sequentially via
+    /// `FallbackSTTProvider`. The result does **not** include Apple on-device STT or a
+    /// concurrency limit — callers are responsible for both.
+    ///
+    /// Chain: ElevenLabs→Retry→[Instrument] → Deepgram→Retry→[Instrument] → FallbackChain
     public static func makeCloudSTTProvider(config: ProviderAssemblyConfig) -> CloudSTTResult {
-        var entries: [(name: String, model: String, provider: any STTProvider)] = []
+        var entries: [CloudSTTEntry] = []
 
         if !config.elevenLabsAPIKey.isEmpty {
             let base: any STTProvider = ElevenLabsClient(apiKey: config.elevenLabsAPIKey)
@@ -95,7 +109,7 @@ public enum ProviderAssembly {
                 name: "ElevenLabs"
             )
             let instrumented = config.sttInstrument("ElevenLabs", "scribe_v2", retried)
-            entries.append((name: "ElevenLabs", model: "scribe_v2", provider: instrumented))
+            entries.append(CloudSTTEntry(name: "ElevenLabs", model: "scribe_v2", provider: instrumented))
         }
 
         if !config.deepgramAPIKey.isEmpty {
@@ -107,14 +121,14 @@ public enum ProviderAssembly {
                 name: "Deepgram"
             )
             let instrumented = config.sttInstrument("Deepgram", "nova-3", retried)
-            entries.append((name: "Deepgram", model: "nova-3", provider: instrumented))
+            entries.append(CloudSTTEntry(name: "Deepgram", model: "nova-3", provider: instrumented))
         }
 
         guard !entries.isEmpty else {
-            return CloudSTTResult(provider: nil, descriptors: [])
+            return CloudSTTResult(entries: [], cloudChain: nil)
         }
 
-        // Sequential fallback chain: first → FallbackSTT(first, second) → FallbackSTT(…, third) → …
+        // Sequential fallback: entries[0] primary → FallbackSTT(0, 1) → FallbackSTT(0+1, 2) → …
         let chain = entries.dropFirst().reduce((name: entries[0].name, provider: entries[0].provider)) { acc, next in
             let wrapper: any STTProvider = FallbackSTTProvider(
                 primary: acc.provider,
@@ -124,13 +138,7 @@ public enum ProviderAssembly {
             return (name: "\(acc.name) + \(next.name)", provider: wrapper)
         }
 
-        let limited: any STTProvider = ConcurrencyLimitedSTTProvider(
-            provider: chain.provider,
-            maxConcurrent: config.maxConcurrentSTT
-        )
-
-        let descriptors = entries.map { (name: $0.name, model: $0.model) }
-        return CloudSTTResult(provider: limited, descriptors: descriptors)
+        return CloudSTTResult(entries: entries, cloudChain: chain.provider)
     }
 
     /// Builds the rewrite provider from configured keys.

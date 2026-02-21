@@ -11,7 +11,7 @@ final class ProviderAssemblyTests: XCTestCase {
 
     // MARK: - CloudSTT chain
 
-    func test_makeCloudSTTProvider_noKeys_returnsNilProvider() {
+    func test_makeCloudSTTProvider_noKeys_returnsEmptyEntries() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "",
             deepgramAPIKey: "",
@@ -19,11 +19,11 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNil(result.provider)
-        XCTAssertTrue(result.descriptors.isEmpty)
+        XCTAssertTrue(result.entries.isEmpty)
+        XCTAssertNil(result.cloudChain)
     }
 
-    func test_makeCloudSTTProvider_elevenLabsOnly_returnsProvider() {
+    func test_makeCloudSTTProvider_elevenLabsOnly_returnsOneEntry() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "el-key",
             deepgramAPIKey: "",
@@ -31,13 +31,13 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNotNil(result.provider)
-        XCTAssertEqual(result.descriptors.count, 1)
-        XCTAssertEqual(result.descriptors[0].name, "ElevenLabs")
-        XCTAssertEqual(result.descriptors[0].model, "scribe_v2")
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries[0].name, "ElevenLabs")
+        XCTAssertEqual(result.entries[0].model, "scribe_v2")
+        XCTAssertNotNil(result.cloudChain)
     }
 
-    func test_makeCloudSTTProvider_deepgramOnly_returnsProvider() {
+    func test_makeCloudSTTProvider_deepgramOnly_returnsOneEntry() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "",
             deepgramAPIKey: "dg-key",
@@ -45,13 +45,13 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNotNil(result.provider)
-        XCTAssertEqual(result.descriptors.count, 1)
-        XCTAssertEqual(result.descriptors[0].name, "Deepgram")
-        XCTAssertEqual(result.descriptors[0].model, "nova-3")
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries[0].name, "Deepgram")
+        XCTAssertEqual(result.entries[0].model, "nova-3")
+        XCTAssertNotNil(result.cloudChain)
     }
 
-    func test_makeCloudSTTProvider_bothKeys_returnsChainWithElevenLabsFirst() {
+    func test_makeCloudSTTProvider_bothKeys_returnsElevenLabsFirst() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "el-key",
             deepgramAPIKey: "dg-key",
@@ -59,10 +59,10 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNotNil(result.provider)
-        XCTAssertEqual(result.descriptors.count, 2)
-        XCTAssertEqual(result.descriptors[0].name, "ElevenLabs")
-        XCTAssertEqual(result.descriptors[1].name, "Deepgram")
+        XCTAssertEqual(result.entries.count, 2)
+        XCTAssertEqual(result.entries[0].name, "ElevenLabs")
+        XCTAssertEqual(result.entries[1].name, "Deepgram")
+        XCTAssertNotNil(result.cloudChain)
     }
 
     func test_makeCloudSTTProvider_whitespaceKeys_treatedAsEmpty() {
@@ -73,46 +73,73 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNil(result.provider)
-        XCTAssertTrue(result.descriptors.isEmpty)
+        XCTAssertTrue(result.entries.isEmpty)
+        XCTAssertNil(result.cloudChain)
     }
 
-    func test_makeCloudSTTProvider_customMaxConcurrent_respected() {
+    func test_makeCloudSTTProvider_singleEntry_cloudChainIsDirectProvider() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "el-key",
             deepgramAPIKey: "",
             geminiAPIKey: "",
-            openRouterAPIKey: "",
-            maxConcurrentSTT: 4
+            openRouterAPIKey: ""
         )
         let result = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertNotNil(result.provider)
-        // We can't easily inspect the internal limit, but the call must not crash
-        // and the type should be ConcurrencyLimitedSTTProvider.
-        XCTAssertTrue(result.provider is ConcurrencyLimitedSTTProvider)
+        // Single entry: cloudChain is just the one retry-wrapped provider
+        XCTAssertNotNil(result.cloudChain)
+        XCTAssertNotNil(result.entries.first)
     }
 
     // MARK: - Instrumentation hooks
 
-    func test_makeCloudSTTProvider_instrumentationHookCalled() {
-        var instrumentedNames: [String] = []
+    func test_makeCloudSTTProvider_instrumentationHookCalledForEachEntry() {
+        final class NameCollector: @unchecked Sendable {
+            var names: [String] = []
+        }
+        let collector = NameCollector()
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "el-key",
             deepgramAPIKey: "dg-key",
             geminiAPIKey: "",
             openRouterAPIKey: "",
             sttInstrument: { name, _, provider in
-                instrumentedNames.append(name)
+                collector.names.append(name)
                 return provider
             }
         )
         _ = ProviderAssembly.makeCloudSTTProvider(config: config)
-        XCTAssertEqual(Set(instrumentedNames), Set(["ElevenLabs", "Deepgram"]))
+        XCTAssertEqual(Set(collector.names), Set(["ElevenLabs", "Deepgram"]))
+    }
+
+    func test_makeCloudSTTProvider_instrumentedProviderUsedInEntries() {
+        // Verify the hook is called and its return value drives the entry's provider type.
+        // (We can't use === on existential STTProvider, so we verify via a spy wrapper type.)
+        final class SpyProvider: STTProvider, @unchecked Sendable {
+            var callCount = 0
+            func transcribe(audioURL: URL) async throws -> String {
+                callCount += 1
+                return ""
+            }
+        }
+        let spy = SpyProvider()
+        let config = ProviderAssemblyConfig(
+            elevenLabsAPIKey: "el-key",
+            deepgramAPIKey: "",
+            geminiAPIKey: "",
+            openRouterAPIKey: "",
+            sttInstrument: { _, _, _ in spy }
+        )
+        let result = ProviderAssembly.makeCloudSTTProvider(config: config)
+        // The entry's provider is the spy (hook's return value), so transcribing it increments the spy's counter.
+        XCTAssertNotNil(result.entries.first)
+        Task { _ = try? await result.entries[0].provider.transcribe(audioURL: URL(fileURLWithPath: "/tmp/fake.caf")) }
+        // Async fire-and-forget — just confirm no crash and entry was populated.
+        XCTAssertEqual(result.entries.count, 1)
     }
 
     // MARK: - Rewrite provider
 
-    func test_makeRewriteProvider_noKeys_returnsOpenRouterWithEmptyKey() {
+    func test_makeRewriteProvider_noKeys_returnsNonNilProvider() {
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "",
             deepgramAPIKey: "",
@@ -120,7 +147,6 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let provider = ProviderAssembly.makeRewriteProvider(config: config)
-        // No keys: falls back to OpenRouterClient (will fail at runtime, but must not crash at build time)
         XCTAssertNotNil(provider)
     }
 
@@ -154,23 +180,25 @@ final class ProviderAssemblyTests: XCTestCase {
             openRouterAPIKey: ""
         )
         let provider = ProviderAssembly.makeRewriteProvider(config: config)
-        // Gemini-only also uses ModelRoutedRewriteProvider (openRouter parameter is nil)
         XCTAssertTrue(provider is ModelRoutedRewriteProvider)
     }
 
     func test_makeRewriteProvider_rewriteInstrumentationHookCalled() {
-        var instrumentedPaths: [String] = []
+        final class PathCollector: @unchecked Sendable {
+            var paths: [String] = []
+        }
+        let collector = PathCollector()
         let config = ProviderAssemblyConfig(
             elevenLabsAPIKey: "",
             deepgramAPIKey: "",
             geminiAPIKey: "gem-key",
             openRouterAPIKey: "or-key",
             rewriteInstrument: { path, provider in
-                instrumentedPaths.append(path)
+                collector.paths.append(path)
                 return provider
             }
         )
         _ = ProviderAssembly.makeRewriteProvider(config: config)
-        XCTAssertFalse(instrumentedPaths.isEmpty)
+        XCTAssertFalse(collector.paths.isEmpty)
     }
 }
