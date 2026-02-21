@@ -44,14 +44,22 @@ enum CloudProviderCatalog {
 
     static func transcriptionSummary(prefs: PreferencesStore) -> String {
         let configured = configuredTitles(from: transcriptionKeys, prefs: prefs)
-        if configured.isEmpty { return "Apple Speech (on-device)" }
-        return "\(configured.joined(separator: " → ")) → Apple Speech"
+        return transcriptionSummary(configuredProviderTitles: configured)
+    }
+
+    static func transcriptionSummary(configuredProviderTitles: [String]) -> String {
+        if configuredProviderTitles.isEmpty { return "Apple Speech (on-device)" }
+        return "\(configuredProviderTitles.joined(separator: " → ")) → Apple Speech"
     }
 
     static func rewriteSummary(prefs: PreferencesStore) -> String {
         let configured = configuredTitles(from: rewriteKeys, prefs: prefs)
-        if configured.isEmpty { return "Raw transcript" }
-        return configured.joined(separator: " → ")
+        return rewriteSummary(configuredProviderTitles: configured)
+    }
+
+    static func rewriteSummary(configuredProviderTitles: [String]) -> String {
+        if configuredProviderTitles.isEmpty { return "Raw transcript" }
+        return configuredProviderTitles.joined(separator: " → ")
     }
 
     private static func configuredTitles(from keys: [CloudProviderKey], prefs: PreferencesStore) -> [String] {
