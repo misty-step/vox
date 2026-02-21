@@ -90,6 +90,10 @@ public enum ProviderAssembly {
     static let deepgramMaxRetries = 2
     static let retryBaseDelay: TimeInterval = 0.5
 
+    // Model names — single source of truth for provider identification and instrumentation.
+    static let elevenLabsModel = "scribe_v2"
+    static let deepgramModel = "nova-3"
+
     // OpenRouter fallback model list — keeps both consumers in sync.
     static let openRouterFallbackModels = [
         "google/gemini-2.5-flash",
@@ -115,8 +119,8 @@ public enum ProviderAssembly {
                 baseDelay: retryBaseDelay,
                 name: "ElevenLabs"
             )
-            let instrumented = config.sttInstrument("ElevenLabs", "scribe_v2", retried)
-            entries.append(CloudSTTEntry(name: "ElevenLabs", model: "scribe_v2", provider: instrumented))
+            let instrumented = config.sttInstrument("ElevenLabs", elevenLabsModel, retried)
+            entries.append(CloudSTTEntry(name: "ElevenLabs", model: elevenLabsModel, provider: instrumented))
         }
 
         if !config.deepgramAPIKey.isEmpty {
@@ -127,8 +131,8 @@ public enum ProviderAssembly {
                 baseDelay: retryBaseDelay,
                 name: "Deepgram"
             )
-            let instrumented = config.sttInstrument("Deepgram", "nova-3", retried)
-            entries.append(CloudSTTEntry(name: "Deepgram", model: "nova-3", provider: instrumented))
+            let instrumented = config.sttInstrument("Deepgram", deepgramModel, retried)
+            entries.append(CloudSTTEntry(name: "Deepgram", model: deepgramModel, provider: instrumented))
         }
 
         guard !entries.isEmpty else {
@@ -180,7 +184,11 @@ public enum ProviderAssembly {
             )
         }
 
-        // openRouter only
-        return openRouter!
+        // openRouter only — guard above ensures at least one of gemini/openRouter is non-nil;
+        // the if-let above consumed the gemini case, so openRouter must be non-nil here.
+        guard let openRouter else {
+            fatalError("unreachable: openRouter must be non-nil when gemini is nil and guard passed")
+        }
+        return openRouter
     }
 }
