@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/misty-step/vox/compare/v1.20.0...v1.21.0) (2026-02-21)
+
+
+### Features
+
+* **pipeline:** streaming timing visibility + App Support isolation ([#225](https://github.com/misty-step/vox/issues/225), [#264](https://github.com/misty-step/vox/issues/264)) ([89bd705](https://github.com/misty-step/vox/commit/89bd705435ff0ea8de3cd5086d9c32e5cd4ebe70))
+
 # [1.20.0](https://github.com/misty-step/vox/compare/v1.19.0...v1.20.0) (2026-02-20)
 
 
