@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/misty-step/vox/compare/v1.21.0...v1.22.0) (2026-02-21)
+
+
+### Features
+
+* **streaming:** session-level finalize timeout + non-streaming recorder test ([#290](https://github.com/misty-step/vox/issues/290)) ([f11bcf0](https://github.com/misty-step/vox/commit/f11bcf01a531007c339fc26033678721debaff00)), closes [#258](https://github.com/misty-step/vox/issues/258)
+
 # [1.21.0](https://github.com/misty-step/vox/compare/v1.20.0...v1.21.0) (2026-02-21)
 
 
