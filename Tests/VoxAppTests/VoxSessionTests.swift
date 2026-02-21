@@ -289,6 +289,9 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
     var sentChunks: [AudioChunk] { lock.withLock { _sentChunks } }
     var finishResult: Result<String, Error> = .success("streamed transcript")
     var finishDelay: TimeInterval?
+    /// When true, finishDelay uses Thread.sleep (blocks cooperative thread pool, ignores Swift
+    /// task cancellation) to simulate non-cooperative I/O like a hung WebSocket drain.
+    var finishBlockingThread: Bool = false
     private var _expectedChunkCountAtFinish: Int?
     var expectedChunkCountAtFinish: Int? {
         get { lock.withLock { _expectedChunkCountAtFinish } }
@@ -322,7 +325,18 @@ final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
             }
         }
         if let finishDelay {
-            try await Task.sleep(nanoseconds: UInt64(finishDelay * 1_000_000_000))
+            if finishBlockingThread {
+                // Simulate non-cooperative I/O: uses DispatchQueue (not Swift concurrency),
+                // so Swift task cancellation is ignored. The delay runs to completion
+                // regardless of whether the calling Task is cancelled.
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + finishDelay) {
+                        continuation.resume()
+                    }
+                }
+            } else {
+                try await Task.sleep(nanoseconds: UInt64(finishDelay * 1_000_000_000))
+            }
         }
         continuation?.finish()
         switch finishResult {
@@ -776,6 +790,41 @@ struct VoxSessionDITests {
         #expect(pipeline.processCallCount == 1)
         #expect(pipeline.processTranscriptCallCount == 0)
         #expect(streamingSession.cancelCallCount == 1)
+        #expect(elapsed < 2.0)
+        #expect(session.state == .idle)
+    }
+
+    @Test("Streaming finalize timeout unblocks when operation cannot be cancelled")
+    @MainActor func test_streamingFinalizeTimeout_unblockesNonCooperativeOperation() async {
+        // Verifies that withStreamingFinalizeTimeout uses unstructured Tasks (not
+        // withThrowingTaskGroup) so the caller is unblocked even when bridge.finish()
+        // ignores task cancellation (e.g. blocked in synchronous C/WebSocket I/O).
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.result = "batch timeout fallback transcript"
+        let streamingSession = MockStreamingSession()
+        streamingSession.finishDelay = 3.0
+        streamingSession.finishBlockingThread = true  // Thread.sleep; ignores Swift cancellation
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider,
+            streamingFinalizeTimeout: 0.1
+        )
+
+        await session.toggleRecording()
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x00, 0x01])))
+        await session.toggleRecording()
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+
+        #expect(pipeline.processCallCount == 1)
         #expect(elapsed < 2.0)
         #expect(session.state == .idle)
     }

@@ -1070,6 +1070,25 @@ private func withStreamingSetupTimeout<T: Sendable>(
     }
 }
 
+/// Ensures a `CheckedContinuation` is resumed exactly once when racing two tasks.
+private final class _FinalizeOnceState<T: Sendable>: @unchecked Sendable {
+    private let continuation: CheckedContinuation<T, Error>
+    private var done = false
+    private let lock = NSLock()
+
+    init(_ continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(with result: Result<T, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        continuation.resume(with: result)
+    }
+}
+
 private func withStreamingFinalizeTimeout<T: Sendable>(
     seconds: TimeInterval,
     operation: @escaping @Sendable () async throws -> T
@@ -1080,19 +1099,29 @@ private func withStreamingFinalizeTimeout<T: Sendable>(
     } catch {
         throw StreamingSTTError.finalizationTimeout
     }
-    return try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
+    // Use unstructured Tasks rather than withThrowingTaskGroup. TaskGroup waits for all
+    // children to drain before returning — so if operation() is stuck in non-cancellation-
+    // cooperative I/O (e.g. bridge.finish() blocked on a WebSocket drain), the group would
+    // block indefinitely even after the timeout fires. Unstructured Tasks let us abandon
+    // the hung operation and return control to the caller immediately on timeout.
+    return try await withCheckedThrowingContinuation { continuation in
+        let state = _FinalizeOnceState(continuation)
+        let operationTask = Task {
+            do {
+                state.resume(with: .success(try await operation()))
+            } catch {
+                state.resume(with: .failure(error))
+            }
         }
-        group.addTask {
-            try await Task.sleep(nanoseconds: timeoutNanoseconds)
-            throw StreamingSTTError.finalizationTimeout
+        Task {
+            defer { operationTask.cancel() }
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                state.resume(with: .failure(StreamingSTTError.finalizationTimeout))
+            } catch {
+                state.resume(with: .failure(error))
+            }
         }
-        guard let result = try await group.next() else {
-            throw StreamingSTTError.finalizationTimeout
-        }
-        group.cancelAll()
-        return result
     }
 }
 
