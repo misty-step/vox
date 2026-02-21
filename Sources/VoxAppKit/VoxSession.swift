@@ -161,64 +161,24 @@ public final class VoxSession: ObservableObject {
     }
 
     private func makeRewriteProvider() -> RewriteProvider {
-        let geminiKey = prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let openRouterKey = prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let gemini: GeminiClient? = geminiKey.isEmpty ? nil : GeminiClient(apiKey: geminiKey)
-
-        // OpenRouter supports non-Google polish models (e.g. "x-ai/grok-4.1-fast") and also acts as a
-        // resilient fallback when direct Gemini is unavailable.
-        let openRouter: OpenRouterClient? = openRouterKey.isEmpty ? nil : OpenRouterClient(
-            apiKey: openRouterKey,
-            fallbackModels: [
-                // Keep the chain cheap and fast; polish defaults can still be premium via primary model id.
-                "google/gemini-2.5-flash",
-                "google/gemini-2.0-flash-001",
-            ]
-        )
+        let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: assemblyConfig())
 
         // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
         // Falls through to cloud if unavailable or on error.
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *), AppleFoundationModelsClient.isAvailable {
-            let cloudFallback = makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
             return FallbackRewriteProvider(entries: [
                 .init(provider: AppleFoundationModelsClient(), label: "Apple Foundation Models"),
-                .init(provider: cloudFallback, label: "Cloud"),
+                .init(provider: cloudRewrite, label: "Cloud"),
             ])
         }
         #endif
 
-        return makeCloudRewriteProvider(gemini: gemini, openRouter: openRouter)
-    }
-
-    private func makeCloudRewriteProvider(
-        gemini: GeminiClient?,
-        openRouter: OpenRouterClient?
-    ) -> RewriteProvider {
-        guard gemini != nil || openRouter != nil else {
-            // No keys — return a bare OpenRouter client (will fail on auth)
+        if cloudRewrite is OpenRouterClient, prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
-            return OpenRouterClient(apiKey: "")
         }
-
-        if let gemini, let openRouter {
-            return ModelRoutedRewriteProvider(
-                gemini: gemini,
-                openRouter: openRouter,
-                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
-            )
-        }
-
-        if let gemini {
-            return ModelRoutedRewriteProvider(
-                gemini: gemini,
-                openRouter: openRouter,
-                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
-            )
-        }
-
-        return openRouter!
+        return cloudRewrite
     }
 
     private func makeSTTProvider() -> STTProvider {
@@ -240,25 +200,10 @@ public final class VoxSession: ObservableObject {
         appleSTT = AppleSpeechClient()
         #endif
 
-        // Build decorated cloud providers in preference order
-        var cloudProviders: [(name: String, provider: STTProvider)] = []
-
-        let elevenKey = prefs.elevenLabsAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !elevenKey.isEmpty {
-            let eleven = ElevenLabsClient(apiKey: elevenKey)
-            let retried = RetryingSTTProvider(provider: eleven, maxRetries: 3, baseDelay: 0.5, name: "ElevenLabs")
-            cloudProviders.append((name: "ElevenLabs", provider: retried))
-        }
-
-        let deepgramKey = prefs.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !deepgramKey.isEmpty {
-            let deepgram = DeepgramClient(apiKey: deepgramKey)
-            let retried = RetryingSTTProvider(provider: deepgram, maxRetries: 2, baseDelay: 0.5, name: "Deepgram")
-            cloudProviders.append((name: "Deepgram", provider: retried))
-        }
+        let cloudResult = ProviderAssembly.makeCloudSTTProvider(config: assemblyConfig())
 
         let chain: STTProvider
-        if cloudProviders.isEmpty {
+        if cloudResult.entries.isEmpty {
             chain = appleSTT
         } else if Self.isHedgedRoutingSelected(environment: ProcessInfo.processInfo.environment) {
             // Opt-in: parallel cloud race with stagger delays
@@ -266,26 +211,32 @@ public final class VoxSession: ObservableObject {
                 .init(name: "Apple Speech", provider: appleSTT, delay: 0),
             ]
             let delays: [TimeInterval] = [0, 5, 10]
-            for (i, cp) in cloudProviders.enumerated() {
-                hedgedEntries.append(.init(name: cp.name, provider: cp.provider, delay: delays[min(i, delays.count - 1)]))
+            for (i, entry) in cloudResult.entries.enumerated() {
+                hedgedEntries.append(.init(name: entry.name, provider: entry.provider, delay: delays[min(i, delays.count - 1)]))
             }
             chain = HedgedSTTProvider(entries: hedgedEntries)
         } else {
-            // Default: sequential primary → fallback → Apple Speech safety net
-            let allProviders = cloudProviders + [(name: "Apple Speech", provider: appleSTT as STTProvider)]
-            chain = allProviders.dropFirst().reduce(allProviders[0]) { accumulated, next in
-                let wrapper = FallbackSTTProvider(
-                    primary: accumulated.provider,
-                    fallback: next.provider,
-                    primaryName: accumulated.name
-                )
-                return (name: "\(accumulated.name) + \(next.name)", provider: wrapper as STTProvider)
-            }.provider
+            // Default: sequential cloud chain → Apple Speech safety net
+            let cloudChain = ProviderAssembly.buildFallbackChain(from: cloudResult.entries)!
+            chain = FallbackSTTProvider(
+                primary: cloudChain,
+                fallback: appleSTT,
+                primaryName: ProviderAssembly.chainLabel(for: cloudResult.entries)
+            )
         }
 
         return ConcurrencyLimitedSTTProvider(
             provider: chain,
             maxConcurrent: maxConcurrentSTTRequests()
+        )
+    }
+
+    private func assemblyConfig() -> ProviderAssemblyConfig {
+        ProviderAssemblyConfig(
+            elevenLabsAPIKey: prefs.elevenLabsAPIKey,
+            deepgramAPIKey: prefs.deepgramAPIKey,
+            geminiAPIKey: prefs.geminiAPIKey,
+            openRouterAPIKey: prefs.openRouterAPIKey
         )
     }
 
