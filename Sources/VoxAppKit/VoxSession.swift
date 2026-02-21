@@ -1106,6 +1106,9 @@ private func withStreamingFinalizeTimeout<T: Sendable>(
     // the hung operation and return control to the caller immediately on timeout.
     return try await withCheckedThrowingContinuation { continuation in
         let state = _FinalizeOnceState(continuation)
+        // operationTask may outlive the continuation if operation() is non-cooperative.
+        // The caller's fallback path calls bridge.cancel(), which tears down the
+        // underlying WebSocket and unblocks the hung operation eventually.
         let operationTask = Task {
             do {
                 state.resume(with: .success(try await operation()))

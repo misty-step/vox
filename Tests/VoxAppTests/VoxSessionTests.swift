@@ -795,7 +795,7 @@ struct VoxSessionDITests {
     }
 
     @Test("Streaming finalize timeout unblocks when operation cannot be cancelled")
-    @MainActor func test_streamingFinalizeTimeout_unblockesNonCooperativeOperation() async {
+    @MainActor func test_streamingFinalizeTimeout_unblocksNonCooperativeOperation() async {
         // Verifies that withStreamingFinalizeTimeout uses unstructured Tasks (not
         // withThrowingTaskGroup) so the caller is unblocked even when bridge.finish()
         // ignores task cancellation (e.g. blocked in synchronous C/WebSocket I/O).
