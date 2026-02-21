@@ -64,15 +64,9 @@ public struct CloudSTTEntry: Sendable {
 /// Result of assembling the cloud STT provider tier.
 public struct CloudSTTResult: Sendable {
     /// Individual retry-wrapped entries in preference order.
-    /// Use `entries` when building hedged routing or appending to a custom chain.
+    /// Use `entries` for hedged routing, forced-provider reordering, or display.
     /// Empty when no cloud keys are configured.
     public let entries: [CloudSTTEntry]
-
-    /// Sequential fallback chain across all cloud entries.
-    /// `nil` when `entries` is empty.
-    /// Note: does NOT include Apple on-device STT or a `ConcurrencyLimitedSTTProvider` wrapper —
-    /// callers append Apple as the final fallback and apply their own concurrency limit.
-    public let cloudChain: (any STTProvider)?
 }
 
 // MARK: - ProviderAssembly
@@ -103,11 +97,10 @@ public enum ProviderAssembly {
     /// Builds the cloud STT provider tier from configured keys.
     ///
     /// Each configured provider is wrapped with `RetryingSTTProvider`, then passed through
-    /// the optional `sttInstrument` hook. The entries are chained sequentially via
-    /// `FallbackSTTProvider`. The result does **not** include Apple on-device STT or a
-    /// concurrency limit — callers are responsible for both.
+    /// the optional `sttInstrument` hook. The result does **not** include Apple on-device STT
+    /// or a concurrency limit — callers are responsible for both.
     ///
-    /// Chain: ElevenLabs→Retry→[Instrument] → Deepgram→Retry→[Instrument] → FallbackChain
+    /// Chain: ElevenLabs→Retry→[Instrument] → Deepgram→Retry→[Instrument]
     public static func makeCloudSTTProvider(config: ProviderAssemblyConfig) -> CloudSTTResult {
         var entries: [CloudSTTEntry] = []
 
@@ -135,21 +128,30 @@ public enum ProviderAssembly {
             entries.append(CloudSTTEntry(name: "Deepgram", model: deepgramModel, provider: instrumented))
         }
 
-        guard !entries.isEmpty else {
-            return CloudSTTResult(entries: [], cloudChain: nil)
-        }
+        return CloudSTTResult(entries: entries)
+    }
 
-        // Sequential fallback: entries[0] primary → FallbackSTT(0, 1) → FallbackSTT(0+1, 2) → …
-        let chain = entries.dropFirst().reduce((name: entries[0].name, provider: entries[0].provider)) { acc, next in
+    /// Builds a sequential `FallbackSTTProvider` chain from ordered entries.
+    ///
+    /// Returns `nil` when `entries` is empty. Callers typically append Apple on-device STT
+    /// as a final fallback after this chain.
+    public static func buildFallbackChain(from entries: [CloudSTTEntry]) -> (any STTProvider)? {
+        guard let first = entries.first else { return nil }
+        return entries.dropFirst().reduce(
+            (name: first.name, provider: first.provider)
+        ) { acc, next in
             let wrapper: any STTProvider = FallbackSTTProvider(
                 primary: acc.provider,
                 fallback: next.provider,
                 primaryName: acc.name
             )
             return (name: "\(acc.name) + \(next.name)", provider: wrapper)
-        }
+        }.provider
+    }
 
-        return CloudSTTResult(entries: entries, cloudChain: chain.provider)
+    /// Human-readable label for a chain of entries (e.g. "ElevenLabs + Deepgram").
+    public static func chainLabel(for entries: [CloudSTTEntry]) -> String {
+        entries.map(\.name).joined(separator: " + ")
     }
 
     /// Builds the rewrite provider from configured keys.
@@ -171,24 +173,18 @@ public enum ProviderAssembly {
                 onModelUsed: config.openRouterOnModelUsed
             )
 
-        guard gemini != nil || openRouter != nil else {
+        switch (gemini, openRouter) {
+        case (nil, nil):
             return OpenRouterClient(apiKey: "")
-        }
-
-        if let gemini {
-            let instrumentedGemini = config.rewriteInstrument("gemini_direct", gemini)
+        case let (gem?, _):
+            let instrumented = config.rewriteInstrument("gemini_direct", gem)
             return ModelRoutedRewriteProvider(
-                gemini: instrumentedGemini,
+                gemini: instrumented,
                 openRouter: openRouter,
                 fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
             )
+        case let (nil, or?):
+            return or
         }
-
-        // openRouter only — guard above ensures at least one of gemini/openRouter is non-nil;
-        // the if-let above consumed the gemini case, so openRouter must be non-nil here.
-        guard let openRouter else {
-            fatalError("unreachable: openRouter must be non-nil when gemini is nil and guard passed")
-        }
-        return openRouter
     }
 }

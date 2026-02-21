@@ -233,14 +233,7 @@ private func resolvedProviderLane(
     }
 
     // Rebuild sequential fallback chain from (potentially reordered) entries.
-    let chainProvider = entries.dropFirst().reduce((name: entries[0].name, provider: entries[0].provider)) { acc, next in
-        let wrapper: any STTProvider = FallbackSTTProvider(
-            primary: acc.provider,
-            fallback: next.provider,
-            primaryName: acc.name
-        )
-        return (name: "\(acc.name) + \(next.name)", provider: wrapper)
-    }.provider
+    let chainProvider = ProviderAssembly.buildFallbackChain(from: entries)!
 
     let maxConcurrent = max(1, Int(key("VOX_MAX_CONCURRENT_STT")) ?? 8)
     let sttProvider = ConcurrencyLimitedSTTProvider(provider: chainProvider, maxConcurrent: maxConcurrent)

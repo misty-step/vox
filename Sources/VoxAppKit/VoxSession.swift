@@ -217,11 +217,11 @@ public final class VoxSession: ObservableObject {
             chain = HedgedSTTProvider(entries: hedgedEntries)
         } else {
             // Default: sequential cloud chain → Apple Speech safety net
-            let cloudChain = cloudResult.cloudChain!
+            let cloudChain = ProviderAssembly.buildFallbackChain(from: cloudResult.entries)!
             chain = FallbackSTTProvider(
                 primary: cloudChain,
                 fallback: appleSTT,
-                primaryName: cloudResult.entries.map(\.name).joined(separator: " + ")
+                primaryName: ProviderAssembly.chainLabel(for: cloudResult.entries)
             )
         }
 
