@@ -35,5 +35,41 @@ struct SpeechTranscriberClientTests {
             Issue.record("Expected STTError.invalidAudio, got: \(error)")
         }
     }
+
+    @Test("transcribe non-audio file throws invalidAudio")
+    func test_transcribe_nonAudioFile_throwsInvalidAudio() async throws {
+        guard #available(macOS 26.0, *) else { return }
+        let client = SpeechTranscriberClient()
+        let tmpFile = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vox-test-\(UUID().uuidString).txt")
+        try Data("not audio data".utf8).write(to: tmpFile)
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+        do {
+            _ = try await client.transcribe(audioURL: tmpFile)
+            Issue.record("Expected STTError.invalidAudio but no error thrown")
+        } catch STTError.invalidAudio {
+            // expected: AVAudioFile rejects non-audio files
+        } catch {
+            Issue.record("Expected STTError.invalidAudio, got: \(error)")
+        }
+    }
+
+    @Test("transcribe empty file throws invalidAudio")
+    func test_transcribe_emptyFile_throwsInvalidAudio() async throws {
+        guard #available(macOS 26.0, *) else { return }
+        let client = SpeechTranscriberClient()
+        let tmpFile = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vox-test-\(UUID().uuidString).caf")
+        try Data().write(to: tmpFile)
+        defer { try? FileManager.default.removeItem(at: tmpFile) }
+        do {
+            _ = try await client.transcribe(audioURL: tmpFile)
+            Issue.record("Expected STTError.invalidAudio but no error thrown")
+        } catch STTError.invalidAudio {
+            // expected: AVAudioFile rejects zero-byte files
+        } catch {
+            Issue.record("Expected STTError.invalidAudio, got: \(error)")
+        }
+    }
 }
 #endif
