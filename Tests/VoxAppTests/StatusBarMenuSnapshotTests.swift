@@ -202,4 +202,32 @@ struct StatusBarMenuSnapshotTests {
         #expect(snapshot.copyRawEnabled == false)
         #expect(snapshot.retryEnabled == false)
     }
+
+    @Test("Recording state: copy raw enabled with snapshot, retry disabled")
+    func recoveryDuringRecordingWithSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .recording(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: true
+        )
+
+        #expect(snapshot.copyRawEnabled == true)
+        #expect(snapshot.retryEnabled == false)
+    }
+
+    @Test("Recording state: both recovery items disabled without snapshot")
+    func recoveryDuringRecordingNoSnapshot() {
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: .recording(processingLevel: .clean),
+            hasCloudSTT: true,
+            hasRewrite: true,
+            hotkeyAvailable: true,
+            hasRecoverySnapshot: false
+        )
+
+        #expect(snapshot.copyRawEnabled == false)
+        #expect(snapshot.retryEnabled == false)
+    }
 }

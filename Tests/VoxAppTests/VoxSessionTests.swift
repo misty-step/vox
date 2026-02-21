@@ -1178,6 +1178,50 @@ struct VoxSessionDITests {
         await session.toggleRecording()
         await session.toggleRecording()
 
-        #expect(recoveryAvailabilityEvents.contains(true))
+        #expect(recoveryAvailabilityEvents == [true])
+    }
+
+    @Test("onRecoveryAvailabilityChange fires false when copyLastRawTranscript finds empty store")
+    @MainActor func test_onRecoveryAvailabilityChange_calledFalse_onCopyWithEmptyStore() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+        var recoveryAvailabilityEvents: [Bool] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            recoveryStore: recoveryStore
+        )
+        session.onRecoveryAvailabilityChange = { available in
+            recoveryAvailabilityEvents.append(available)
+        }
+
+        await session.copyLastRawTranscript()
+
+        #expect(recoveryAvailabilityEvents == [false])
+    }
+
+    @Test("onRecoveryAvailabilityChange fires false when retryLastRewrite finds empty store")
+    @MainActor func test_onRecoveryAvailabilityChange_calledFalse_onRetryWithEmptyStore() async {
+        let recoveryStore = LastDictationRecoveryStore(ttlSeconds: 600)
+        var recoveryAvailabilityEvents: [Bool] = []
+        let session = VoxSession(
+            recorder: MockRecorder(),
+            pipeline: MockPipeline(),
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            recoveryStore: recoveryStore
+        )
+        session.onRecoveryAvailabilityChange = { available in
+            recoveryAvailabilityEvents.append(available)
+        }
+
+        await session.retryLastRewrite()
+
+        #expect(recoveryAvailabilityEvents == [false])
     }
 }
