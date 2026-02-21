@@ -4,12 +4,12 @@
 `Vox` is a Swift Package Manager macOS app (`swift-tools-version: 5.9`, macOS 14+).
 
 - `Sources/VoxCore`: core protocols, errors, decorators, shared utilities.
-- `Sources/VoxProviders`: STT + rewrite providers (ElevenLabs, Deepgram, Apple Speech, OpenRouter).
+- `Sources/VoxProviders`: STT + rewrite providers (ElevenLabs, Deepgram, Apple Speech, OpenRouter, Gemini).
 - `Sources/VoxMac`: macOS integrations (audio, keychain, permissions, hotkeys, paste, HUD).
 - `Sources/VoxAppKit`: app orchestration and UI controllers (`VoxSession`, `DictationPipeline`, settings).
 - `Sources/VoxApp`: executable entrypoint.
-- `Tests/VoxCoreTests`, `Tests/VoxProvidersTests`, `Tests/VoxAppTests`: XCTest + Swift Testing suites.
-- `docs/`: architecture and ADRs (`docs/ARCHITECTURE.md`, `docs/adr/`).
+- `Tests/VoxCoreTests`, `Tests/VoxProvidersTests`, `Tests/VoxAppTests`, `Tests/VoxPerfAuditKitTests`: XCTest + Swift Testing suites.
+- `docs/`: architecture, ADRs (`docs/adr/`), codebase map (`docs/CODEBASE_MAP.md`).
 
 ## Build, Test, and Development Commands
 - `swift build`: debug build.
@@ -43,6 +43,23 @@
 - Evidence of verification (`swift build -Xswiftc -warnings-as-errors` and `swift test -Xswiftc -warnings-as-errors`).
 - Screenshots/GIFs for UI changes (HUD, menu bar, settings).
 
-## Security & Configuration Tips
+## Issue Workflow
+- **Priority labels**: `horizon:now` > `horizon:next` > `horizon:soon` > `horizon:later`
+- **Area labels**: `area:ux`, `area:architecture`, `area:performance`, `area:security`, `area:infra`, `area:design`, `area:product`
+- **Type labels**: `type:refactor`, `type:epic`, `enhancement`, `bug`
+- Pick highest-priority unassigned issue (`horizon:now` first, then lower issue number).
+
+## Definition of Done
+- `swift build -Xswiftc -warnings-as-errors` passes.
+- `swift test -Xswiftc -warnings-as-errors` passes.
+- Audio guardrails pass if `AudioRecorder.swift` was touched (`./scripts/test-audio-guardrails.sh`).
+- New behavior has tests covering happy path + error/fallback paths.
+- No transcript content in logs (char counts only).
+- PR includes linked issue, verification evidence, and guardrails checklist.
+
+## Security Boundaries
 - Never commit secrets. Use `.env.local` for local runs and Keychain-backed settings for persisted keys.
-- Expected env vars: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, optional `DEEPGRAM_API_KEY`.
+- Expected env vars: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `GEMINI_API_KEY`.
+- Never log transcript content — only character counts. Debug logs gated behind `#if DEBUG`.
+- Audio files encrypted per-recording with AES-GCM; plaintext CAF deleted after encryption.
+- `SecureFileDeleter` handles cleanup; relies on FileVault for data-at-rest.
