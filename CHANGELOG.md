@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/misty-step/vox/compare/v1.23.0...v1.24.0) (2026-02-21)
+
+
+### Features
+
+* **ux:** disable recovery menu items when no snapshot exists ([#292](https://github.com/misty-step/vox/issues/292)) ([467e9c7](https://github.com/misty-step/vox/commit/467e9c71f4e460ddda0067aaecdf6cee26c3fb5b)), closes [#282](https://github.com/misty-step/vox/issues/282) [#293](https://github.com/misty-step/vox/issues/293)
+
 # [1.23.0](https://github.com/misty-step/vox/compare/v1.22.0...v1.23.0) (2026-02-21)
 
 
