@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/misty-step/vox/compare/v1.22.0...v1.23.0) (2026-02-21)
+
+
+### Features
+
+* **pipeline:** Apple-first on-device baseline — SpeechTranscriber STT + Foundation Models rewrite ([#291](https://github.com/misty-step/vox/issues/291)) ([50166cb](https://github.com/misty-step/vox/commit/50166cb1ae02356d2708a3a8bfe8b6900bb24381)), closes [#255](https://github.com/misty-step/vox/issues/255) [#256](https://github.com/misty-step/vox/issues/256) [#255](https://github.com/misty-step/vox/issues/255) [#256](https://github.com/misty-step/vox/issues/256) [#255](https://github.com/misty-step/vox/issues/255) [#256](https://github.com/misty-step/vox/issues/256) [#261](https://github.com/misty-step/vox/issues/261)
+
 # [1.22.0](https://github.com/misty-step/vox/compare/v1.21.0...v1.22.0) (2026-02-21)
 
 
