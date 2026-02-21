@@ -13,6 +13,7 @@ public final class VoxSession: ObservableObject {
     }
 
     public var onStateChange: ((State) -> Void)?
+    public var onRecoveryAvailabilityChange: ((Bool) -> Void)?
 
     @Published public private(set) var state: State = .idle {
         didSet {
@@ -637,6 +638,7 @@ public final class VoxSession: ObservableObject {
 
         if succeeded {
             SecureFileDeleter.delete(at: url)
+            onRecoveryAvailabilityChange?(true)
             state = .idle
             hud.showSuccess()
         } else {
@@ -848,10 +850,12 @@ public final class VoxSession: ObservableObject {
 
     private func latestRawTranscriptForRecovery() async throws -> String {
         guard let rawTranscript = await recoveryStore.latestRawTranscript() else {
+            onRecoveryAvailabilityChange?(false)
             throw Self.noRecentDictationError
         }
         let normalized = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
+            onRecoveryAvailabilityChange?(false)
             throw Self.noRecentDictationError
         }
         return normalized
@@ -862,10 +866,12 @@ public final class VoxSession: ObservableObject {
             throw VoxError.internalError("Retry rewrite is unavailable while dictation is active.")
         }
         guard let snapshot = await recoveryStore.latestSnapshot() else {
+            onRecoveryAvailabilityChange?(false)
             throw Self.noRecentDictationError
         }
         let normalizedRaw = snapshot.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedRaw.isEmpty else {
+            onRecoveryAvailabilityChange?(false)
             throw Self.noRecentDictationError
         }
 

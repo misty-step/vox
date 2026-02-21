@@ -79,6 +79,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             statusBarController?.updateState(statusState)
         }
+        session.onRecoveryAvailabilityChange = { [weak statusBarController] available in
+            Task { @MainActor in
+                statusBarController?.setRecoveryAvailable(available)
+            }
+        }
 
         attemptHotkeyRegistration(showErrorDialog: true)
 
