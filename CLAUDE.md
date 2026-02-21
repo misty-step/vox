@@ -24,7 +24,7 @@ Git hooks (`.githooks/`): pre-commit runs SwiftLint on staged files (<1s), pre-p
 
 ## Architecture
 
-Pure SwiftPM, zero external dependencies. Five targets forming a strict dependency hierarchy:
+Pure SwiftPM, zero external dependencies. Five main targets forming a strict dependency hierarchy (plus auxiliary: `VoxBenchmarks`, `VoxPerfAudit`, `VoxPerfAuditKit`):
 
 ```
 VoxCore          — protocols, errors, decorators, shared types (no deps)
@@ -62,7 +62,7 @@ Providers are wrapped in composable decorators, with default routing via sequent
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via OpenRouterClient → RewriteQualityGate validates output → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via ModelRoutedRewriteProvider (Gemini direct or OpenRouter) → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -76,9 +76,9 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Error classification**: `STTError.isRetryable`, `.isFallbackEligible`, and `.isTransientForHealthScoring` centralize error semantics across retry/hedge/routing.
 
-**Quality gate**: `RewriteQualityGate` scores candidate/raw similarity (ratio + distance metrics) for evaluation and benchmarks (clean: 0.6, polish: 0.3).
+**Quality gate**: `RewriteQualityGate` scores candidate/raw similarity (ratio + distance metrics) for evaluation and benchmarks only — removed from production path in #284 (clean: 0.6, polish: 0.3).
 
-**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY` (optional). Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback).
+**API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `GEMINI_API_KEY`. Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback). Diagnostics: `VOX_PERF_INGEST_URL` (HTTP endpoint for pipeline timing upload).
 
 **Release automation safety**: release scripts that generate plist/XML content must validate output with `plutil -lint`; CI secret checks should fail with explicit missing-secret names (avoid bare `test -n` without context).
 
@@ -102,10 +102,11 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 ## Testing
 
-XCTest and Swift Testing with async tests. ~62 tests across three targets:
+XCTest and Swift Testing with async tests. ~171 tests across four targets:
 - `VoxCoreTests` — decorators, error classification, quality gate, multipart encoding
-- `VoxProvidersTests` — client request format, file size limits
-- `VoxAppTests` — DI contract verification for VoxSession, pipeline latency benchmarks
+- `VoxProvidersTests` — client request format, streaming protocol, file size limits
+- `VoxAppTests` — session state machine, pipeline integration, streaming, benchmark SLO
+- `VoxPerfAuditKitTests` — config parsing, provider plan, distribution math
 
 Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcribe_retriesOnThrottledError`).
 
@@ -131,3 +132,5 @@ Audio regression guardrail:
 - **Security**: no transcript content in logs (char counts only); debug logs gated behind `#if DEBUG`
 - **Audio cleanup**: `SecureFileDeleter` — relies on FileVault; `preserveAudio()` returns `URL?` for error recovery dialog
 - **Simplicity gate** ([ADR-0001](docs/adr/0001-simplicity-first-design.md)): no new user-facing settings without ADR justification; no advanced tabs, threshold tuning, or model selection UI; defaults over options; no dark features (stored prefs without UI)
+
+For detailed architecture, module guide, and navigation, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).
