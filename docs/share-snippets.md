@@ -16,7 +16,7 @@ Ready-to-post copy for organic sharing. Adjust as needed.
 
 ---
 
-## Reddit (r/macapps, r/MacOS)
+## Reddit (r/macapps, r/macOS)
 
 > **Vox – keyboard-driven dictation for macOS (open source)**
 >

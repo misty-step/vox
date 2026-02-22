@@ -410,6 +410,8 @@ public final class StatusBarController: NSObject {
         let copied = NSPasteboard.general.setString(ShareVox.clipboardString, forType: .string)
         if copied {
             DiagnosticsStore.recordAsync(name: DiagnosticsEventNames.shareTrigger)
+        } else {
+            print("[Vox] shareVox: pasteboard write failed")
         }
     }
     @objc private func openSetupChecklist() { onSetupChecklist() }
