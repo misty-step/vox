@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/misty-step/vox/compare/v1.25.0...v1.26.0) (2026-02-22)
+
+
+### Features
+
+* **virality:** add Share Vox menu action with clipboard copy and event tracking ([#299](https://github.com/misty-step/vox/issues/299)) ([97bc145](https://github.com/misty-step/vox/commit/97bc1452eb0dc283dd695f12c0f43b813668524a)), closes [#183](https://github.com/misty-step/vox/issues/183)
+
 # [1.25.0](https://github.com/misty-step/vox/compare/v1.24.0...v1.25.0) (2026-02-21)
 
 
