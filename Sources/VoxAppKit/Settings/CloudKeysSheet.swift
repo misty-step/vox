@@ -123,6 +123,8 @@ private struct KeyField: View {
 
     /// Local buffer: edits accumulate here, never touching Keychain mid-type.
     @State private var draft: String = ""
+    /// Value at sheet-open time — used to detect actual edits.
+    @State private var original: String = ""
 
     private var isConfigured: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -152,11 +154,14 @@ private struct KeyField: View {
 
             SecureField("API key", text: $draft) {
                 // onSubmit: commit when user presses Return
-                commit()
+                commitIfEdited()
             }
             .textContentType(.password)
             .textFieldStyle(.roundedBorder)
-            .onAppear { draft = text.wrappedValue }
+            .onAppear {
+                draft = text.wrappedValue
+                original = text.wrappedValue
+            }
 
             Text(detail)
                 .font(.caption)
@@ -172,10 +177,15 @@ private struct KeyField: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.primary.opacity(0.10), lineWidth: 1)
         )
-        .onDisappear { commit() }
+        .onDisappear { commitIfEdited() }
     }
 
-    private func commit() {
+    /// Writes `draft` to the store only when the user actually changed the value.
+    /// This prevents materializing env-var-only keys into Keychain when the sheet
+    /// is opened and closed without editing.
+    private func commitIfEdited() {
+        guard draft != original else { return }
         text.wrappedValue = draft
+        original = draft
     }
 }
