@@ -65,7 +65,7 @@ public enum AudioFileEncryption {
         outputURL: URL,
         key: Data
     ) async throws {
-        try await Task.detached(priority: .utility) {
+        try await Task.detached(priority: .userInitiated) {
             try AudioFileEncryption._encryptSync(plainURL: plainURL, outputURL: outputURL, key: key)
         }.value
     }
@@ -75,6 +75,8 @@ public enum AudioFileEncryption {
         outputURL: URL,
         key: Data
     ) throws {
+        var key = key
+        defer { AudioFileEncryption.zeroizeKey(&key) }
         guard !key.isEmpty else {
             throw Error.keyMissing
         }
@@ -123,7 +125,7 @@ public enum AudioFileEncryption {
         outputURL: URL,
         key: Data
     ) async throws {
-        try await Task.detached(priority: .utility) {
+        try await Task.detached(priority: .userInitiated) {
             try AudioFileEncryption._decryptSync(encryptedURL: encryptedURL, outputURL: outputURL, key: key)
         }.value
     }
@@ -133,6 +135,8 @@ public enum AudioFileEncryption {
         outputURL: URL,
         key: Data
     ) throws {
+        var key = key
+        defer { AudioFileEncryption.zeroizeKey(&key) }
         guard !key.isEmpty else {
             throw Error.keyMissing
         }
