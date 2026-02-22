@@ -1,3 +1,10 @@
+## [1.26.1](https://github.com/misty-step/vox/compare/v1.26.0...v1.26.1) (2026-02-22)
+
+
+### Performance Improvements
+
+* **audio:** move temp file encrypt/decrypt off MainActor ([#302](https://github.com/misty-step/vox/issues/302)) ([a2577e7](https://github.com/misty-step/vox/commit/a2577e7d03a9390c14cd152dd9e29cb78bd04373)), closes [#267](https://github.com/misty-step/vox/issues/267) [#267](https://github.com/misty-step/vox/issues/267)
+
 # [1.26.0](https://github.com/misty-step/vox/compare/v1.25.0...v1.26.0) (2026-02-22)
 
 
