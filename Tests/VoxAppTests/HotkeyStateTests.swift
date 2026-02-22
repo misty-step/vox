@@ -44,13 +44,18 @@ struct HotkeyStateTests {
         #expect(second == true)
     }
 
+    @Test("default onRetry is callable no-op")
+    func defaultOnRetryNoOp() {
+        let state = HotkeyState()
+        state.onRetry() // must not crash
+    }
+
     @Test("isAvailable publishes changes")
-    func publishesChanges() async {
+    func publishesChanges() {
         let state = HotkeyState(isAvailable: true)
         var published = false
         let cancellable = state.$isAvailable.dropFirst().sink { _ in published = true }
         state.isAvailable = false
-        await Task.yield()
         #expect(published == true)
         _ = cancellable
     }
@@ -97,5 +102,11 @@ struct SettingsWindowControllerTests {
         controller.updateHotkeyAvailability(false)
         controller.hotkeyState.onRetry()
         #expect(called == true)
+    }
+
+    @Test("default init has hotkey available")
+    func defaultInitAvailable() {
+        let controller = SettingsWindowController()
+        #expect(controller.hotkeyState.isAvailable == true)
     }
 }
