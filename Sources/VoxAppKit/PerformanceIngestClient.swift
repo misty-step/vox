@@ -26,7 +26,7 @@ actor PerformanceIngestClient {
     private let encoder: JSONEncoder
     private let flushIntervalSeconds: TimeInterval
     private let maxBufferedBytes: Int
-    private let allowedEventNames: Set<String> = [DiagnosticsEventNames.pipelineTiming]
+    private let allowedEventNames: Set<String> = [DiagnosticsEventNames.pipelineTiming, DiagnosticsEventNames.shareTrigger]
     private let appVersion: String
     private let appBuild: String
     private let osVersion: String

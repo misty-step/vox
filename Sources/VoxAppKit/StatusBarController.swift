@@ -407,8 +407,10 @@ public final class StatusBarController: NSObject {
     @objc private func retryLastRewrite() { onRetryLastRewrite() }
     @objc private func shareVox() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(ShareVox.clipboardString, forType: .string)
-        DiagnosticsStore.recordAsync(name: DiagnosticsEventNames.shareTrigger)
+        let copied = NSPasteboard.general.setString(ShareVox.clipboardString, forType: .string)
+        if copied {
+            DiagnosticsStore.recordAsync(name: DiagnosticsEventNames.shareTrigger)
+        }
     }
     @objc private func openSetupChecklist() { onSetupChecklist() }
     @objc private func openSettings() { onSettings() }
