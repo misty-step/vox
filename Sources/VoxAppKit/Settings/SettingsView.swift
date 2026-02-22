@@ -3,21 +3,18 @@ import SwiftUI
 public struct SettingsView: View {
     private let productInfo: ProductInfo
     @State private var showingCloudKeys = false
-    private let hotkeyAvailable: Bool
-    private let onRetryHotkey: () -> Void
+    @ObservedObject private var hotkeyState: HotkeyState
 
     public init(
         productInfo: ProductInfo = .current(),
-        hotkeyAvailable: Bool = true,
-        onRetryHotkey: @escaping () -> Void = {}
+        hotkeyState: HotkeyState = HotkeyState()
     ) {
         self.productInfo = productInfo
-        self.hotkeyAvailable = hotkeyAvailable
-        self.onRetryHotkey = onRetryHotkey
+        self._hotkeyState = ObservedObject(wrappedValue: hotkeyState)
     }
 
     private var content: SettingsViewContent {
-        SettingsViewContent.make(productInfo: productInfo, hotkeyAvailable: hotkeyAvailable)
+        SettingsViewContent.make(productInfo: productInfo, hotkeyAvailable: hotkeyState.isAvailable)
     }
 
     public var body: some View {
@@ -75,7 +72,7 @@ public struct SettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    BasicsSection(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey)
+                    BasicsSection(hotkeyState: hotkeyState)
                     CloudProvidersSection(onManageKeys: { showingCloudKeys = true })
                 }
                 .padding(20)

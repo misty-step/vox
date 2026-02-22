@@ -3,8 +3,7 @@ import VoxMac
 
 struct BasicsSection: View {
     @ObservedObject private var prefs = PreferencesStore.shared
-    var hotkeyAvailable: Bool = true
-    var onRetryHotkey: () -> Void = {}
+    @ObservedObject var hotkeyState: HotkeyState
     @ObservedObject private var deviceObserver = AudioDeviceObserver.shared
 
     var body: some View {
@@ -21,7 +20,7 @@ struct BasicsSection: View {
                     HStack(spacing: 8) {
                         KeyboardShortcutBadge(text: "⌥ Space")
 
-                        if !hotkeyAvailable {
+                        if !hotkeyState.isAvailable {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
                                 .help("Hotkey unavailable")
@@ -29,7 +28,7 @@ struct BasicsSection: View {
                     }
                 }
 
-                if !hotkeyAvailable {
+                if !hotkeyState.isAvailable {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Hotkey unavailable")
                             .font(.subheadline.weight(.semibold))
@@ -40,7 +39,7 @@ struct BasicsSection: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Button("Retry Hotkey Registration") { onRetryHotkey() }
+                        Button("Retry Hotkey Registration") { hotkeyState.onRetry() }
                             .controlSize(.small)
                     }
                     .padding(10)
