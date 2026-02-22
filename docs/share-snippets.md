@@ -40,6 +40,6 @@ Ready-to-post copy for organic sharing. Adjust as needed.
 
 ## Direct Link (used by "Share Vox…" menu action)
 
-```
+```text
 Check out Vox — a fast, privacy-first dictation app for macOS: https://github.com/misty-step/vox
 ```

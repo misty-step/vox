@@ -5,7 +5,7 @@ import Foundation
 @Suite("ShareVox content")
 struct ShareVoxTests {
     @Test("URL is a valid GitHub repo URL")
-    func urlIsValidGitHub() throws {
+    func urlIsValidGitHub() {
         let url = ShareVox.repositoryURL
         #expect(url.scheme == "https")
         #expect(url.host == "github.com")
