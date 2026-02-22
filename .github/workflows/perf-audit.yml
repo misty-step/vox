@@ -86,29 +86,37 @@ jobs:
           BASE_SHA_USED="$BASE_SHA"
           BASE_MODE="missing"
 
-          # Optional baseline: pulled from perf-audit branch if present.
-          git fetch origin perf-audit || true
-          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            while IFS= read -r path; do
-              [ -n "$path" ] || continue
-              dest="$HISTORY_DIR/$(basename "$path")"
-              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
-            done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 80)
+          # Optional baseline: pulled from misty-step/vox-perf-audit (public, no token needed).
+          AUDIT_REPO="misty-step/vox-perf-audit"
 
-            if [ -f "$PROVIDER_HEAD" ]; then
-              if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$BASE_JSON" 2>/dev/null; then
-                BASE_SHA_USED="$BASE_SHA"
-                BASE_MODE="exact"
-              else
-                while IFS= read -r candidate; do
-                  [ -n "$candidate" ] || continue
-                  if git show "origin/perf-audit:audit/${candidate}.json" >"$BASE_JSON" 2>/dev/null; then
-                    BASE_SHA_USED="$candidate"
-                    BASE_MODE="nearest_ancestor"
-                    break
-                  fi
-                done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
-              fi
+          # Fetch PR history artifacts for trend context.
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            fname="$(basename "$path")"
+            gh api "repos/${AUDIT_REPO}/contents/${path}" --jq '.content' \
+              | base64 -d > "$HISTORY_DIR/$fname" 2>/dev/null || rm -f "$HISTORY_DIR/$fname"
+          done < <(
+            gh api "repos/${AUDIT_REPO}/contents/audit/pr/${PR_NUMBER}" \
+              --jq '.[].path' 2>/dev/null | head -n 80 || true
+          )
+
+          if [ -f "$PROVIDER_HEAD" ]; then
+            # Try exact base SHA first.
+            if gh api "repos/${AUDIT_REPO}/contents/audit/${BASE_SHA}.json" \
+                --jq '.content' | base64 -d > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
+              BASE_SHA_USED="$BASE_SHA"
+              BASE_MODE="exact"
+            else
+              # Walk ancestry for nearest persisted ancestor.
+              while IFS= read -r candidate; do
+                [ -n "$candidate" ] || continue
+                if gh api "repos/${AUDIT_REPO}/contents/audit/${candidate}.json" \
+                    --jq '.content' | base64 -d > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
+                  BASE_SHA_USED="$candidate"
+                  BASE_MODE="nearest_ancestor"
+                  break
+                fi
+              done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
             fi
           fi
 
@@ -146,7 +154,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -197,34 +205,33 @@ jobs:
             --commit "${GITHUB_SHA}" \
             --label "ci-master-codepath"
 
-      - name: Persist To perf-audit Branch
+      - name: Persist To vox-perf-audit
         if: always() && hashFiles('perf-out/head.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.PERF_AUDIT_TOKEN }}
         run: |
           set -euo pipefail
 
-          SHA="${GITHUB_SHA}"
-
-          git fetch origin perf-audit || true
-
-          WORKTREE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vox-perf-audit.XXXXXX")"
-          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            git worktree add "$WORKTREE_DIR" origin/perf-audit
-          else
-            git worktree add "$WORKTREE_DIR" --detach
-            cd "$WORKTREE_DIR"
-            git checkout --orphan perf-audit
-            git rm -rf . >/dev/null 2>&1 || true
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "PERF_AUDIT_TOKEN not set; skipping persist to vox-perf-audit."
+            exit 0
           fi
 
-          cd "$WORKTREE_DIR"
-          mkdir -p audit
-          cp "${GITHUB_WORKSPACE}/perf-out/head.json" "audit/${SHA}.json"
+          SHA="${GITHUB_SHA}"
+          AUDIT_REPO="misty-step/vox-perf-audit"
 
-          git add "audit/${SHA}.json"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "perf(audit): ${SHA}" || exit 0
-          git push origin HEAD:perf-audit
+          # base64 encode and upload via Contents API (create, idempotent on 422).
+          CONTENT="$(base64 < perf-out/head.json | tr -d '\n')"
+          gh api \
+            --method PUT \
+            "repos/${AUDIT_REPO}/contents/audit/${SHA}.json" \
+            --field "message=perf(audit): ${SHA}" \
+            --field "content=${CONTENT}" \
+            --field "committer[name]=github-actions[bot]" \
+            --field "committer[email]=41898282+github-actions[bot]@users.noreply.github.com" \
+            2>&1 | grep -v "already exists" || true
+
+          echo "Persisted audit/${SHA}.json to ${AUDIT_REPO}"
 
       - name: Upload Artifacts
         if: always()

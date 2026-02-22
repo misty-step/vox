@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -54,14 +54,19 @@ jobs:
           echo "HEAD_CODEPATH_JSON=$HEAD_CODEPATH_JSON" >> "$GITHUB_ENV"
           echo "META_JSON=$META_JSON" >> "$GITHUB_ENV"
 
-      - name: Persist To perf-audit Branch
+      - name: Persist To vox-perf-audit
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PERF_AUDIT_TOKEN }}
         run: |
           set -euo pipefail
 
           if [ -z "${META_JSON:-}" ]; then
             echo "META_JSON unset; skipping."
+            exit 0
+          fi
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "PERF_AUDIT_TOKEN not set; skipping persist to vox-perf-audit."
             exit 0
           fi
 
@@ -83,25 +88,31 @@ jobs:
             exit 0
           fi
 
-          git fetch origin perf-audit || true
-
-          WORKTREE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vox-perf-audit.XXXXXX")"
-          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            git worktree add "$WORKTREE_DIR" origin/perf-audit
-          else
-            git worktree add "$WORKTREE_DIR" --detach
-            cd "$WORKTREE_DIR"
-            git checkout --orphan perf-audit
-            git rm -rf . >/dev/null 2>&1 || true
-          fi
-
-          cd "$WORKTREE_DIR"
-          mkdir -p "audit/pr/${PR_NUMBER}"
+          AUDIT_REPO="misty-step/vox-perf-audit"
           ADDED=0
 
+          upload_file() {
+            local src="$1"
+            local dest_path="$2"
+            local msg="$3"
+            local content
+            content="$(base64 < "$src" | tr -d '\n')"
+            gh api \
+              --method PUT \
+              "repos/${AUDIT_REPO}/contents/${dest_path}" \
+              --field "message=${msg}" \
+              --field "content=${content}" \
+              --field "committer[name]=github-actions[bot]" \
+              --field "committer[email]=41898282+github-actions[bot]@users.noreply.github.com" \
+              2>&1 | grep -v "already exists" || true
+            echo "Persisted ${dest_path} to ${AUDIT_REPO}"
+          }
+
           if [ -n "${HEAD_JSON:-}" ]; then
-            cp "${GITHUB_WORKSPACE}/${HEAD_JSON}" "audit/pr/${PR_NUMBER}/${SHA}.json"
-            git add "audit/pr/${PR_NUMBER}/${SHA}.json"
+            upload_file \
+              "${GITHUB_WORKSPACE}/${HEAD_JSON}" \
+              "audit/pr/${PR_NUMBER}/${SHA}.json" \
+              "perf(audit): pr#${PR_NUMBER} ${SHA}"
             ADDED=1
           fi
 
@@ -111,18 +122,14 @@ jobs:
               SHOULD_COPY=0
             fi
             if [ "$SHOULD_COPY" -eq 1 ]; then
-              cp "${GITHUB_WORKSPACE}/${HEAD_CODEPATH_JSON}" "audit/pr/${PR_NUMBER}/${SHA}-codepath.json"
-              git add "audit/pr/${PR_NUMBER}/${SHA}-codepath.json"
+              upload_file \
+                "${GITHUB_WORKSPACE}/${HEAD_CODEPATH_JSON}" \
+                "audit/pr/${PR_NUMBER}/${SHA}-codepath.json" \
+                "perf(audit): pr#${PR_NUMBER} ${SHA} codepath"
               ADDED=1
             fi
           fi
 
           if [ "$ADDED" -eq 0 ]; then
             echo "No new perf JSON files to persist."
-            exit 0
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "perf(audit): pr#${PR_NUMBER} ${SHA} lanes" || exit 0
-          git push origin HEAD:perf-audit
