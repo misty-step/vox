@@ -323,6 +323,11 @@ public final class StatusBarController: NSObject {
         menu.addItem(retryRewriteItem)
         menu.addItem(.separator())
 
+        let shareItem = NSMenuItem(title: "Share Vox…", action: #selector(shareVox), keyEquivalent: "")
+        shareItem.target = self
+        menu.addItem(shareItem)
+        menu.addItem(.separator())
+
         let setupItem = NSMenuItem(title: "Setup Checklist...", action: #selector(openSetupChecklist), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
@@ -400,6 +405,11 @@ public final class StatusBarController: NSObject {
     @objc private func toggleRecording() { onToggle() }
     @objc private func copyLastRawTranscript() { onCopyLastRawTranscript() }
     @objc private func retryLastRewrite() { onRetryLastRewrite() }
+    @objc private func shareVox() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ShareVox.clipboardString, forType: .string)
+        DiagnosticsStore.recordAsync(name: DiagnosticsEventNames.shareTrigger)
+    }
     @objc private func openSetupChecklist() { onSetupChecklist() }
     @objc private func openSettings() { onSettings() }
     @objc private func exportDiagnostics() {

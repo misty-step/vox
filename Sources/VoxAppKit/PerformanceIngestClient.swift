@@ -2,6 +2,7 @@ import Foundation
 
 enum DiagnosticsEventNames {
     static let pipelineTiming = "pipeline_timing"
+    static let shareTrigger = "share_triggered"
 }
 
 /// Best-effort performance telemetry uploader.
