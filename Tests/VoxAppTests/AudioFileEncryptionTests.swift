@@ -3,7 +3,7 @@ import XCTest
 @testable import VoxMac
 
 final class AudioFileEncryptionTests: XCTestCase {
-    func test_encryptAndDecrypt_roundTripsFileContents() throws {
+    func test_encryptAndDecrypt_roundTripsFileContents() async throws {
         let plainURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("audio-encryption-\(UUID().uuidString).caf")
         let encryptedURL = AudioFileEncryption.encryptedURL(for: plainURL)
@@ -20,15 +20,15 @@ final class AudioFileEncryptionTests: XCTestCase {
         try sourceData.write(to: plainURL)
         let key = AudioFileEncryption.randomKey()
 
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
-        try AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: key)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+        try await AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: key)
 
         let restoredData = try Data(contentsOf: decryptedURL)
         XCTAssertEqual(restoredData, sourceData)
         XCTAssertTrue(AudioFileEncryption.isEncrypted(url: encryptedURL))
     }
 
-    func test_decryptWithWrongKeyThrows() throws {
+    func test_decryptWithWrongKeyThrows() async throws {
         let plainURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("audio-encryption-wrong-\(UUID().uuidString).caf")
         let encryptedURL = AudioFileEncryption.encryptedURL(for: plainURL)
@@ -45,12 +45,13 @@ final class AudioFileEncryptionTests: XCTestCase {
         let key = AudioFileEncryption.randomKey()
         let wrongKey = AudioFileEncryption.randomKey()
 
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
-        XCTAssertThrowsError(try AudioFileEncryption.decrypt(
-            encryptedURL: encryptedURL,
-            outputURL: decryptedURL,
-            key: wrongKey
-        ))
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+        do {
+            try await AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: wrongKey)
+            XCTFail("Expected decrypt with wrong key to throw")
+        } catch {
+            // expected
+        }
     }
 
     func test_randomKey_produces256BitKey() {
@@ -88,7 +89,7 @@ final class AudioFileEncryptionTests: XCTestCase {
         XCTAssertEqual(encryptedURL.deletingPathExtension(), plainURL)
     }
 
-    func test_encrypt_withEmptyKey_throwsKeyMissing() throws {
+    func test_encrypt_withEmptyKey_throwsKeyMissing() async throws {
         let plainURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("enc-empty-key-\(UUID().uuidString).caf")
         let encryptedURL = AudioFileEncryption.encryptedURL(for: plainURL)
@@ -97,12 +98,15 @@ final class AudioFileEncryptionTests: XCTestCase {
             try? FileManager.default.removeItem(at: encryptedURL)
         }
         try Data([0x01]).write(to: plainURL)
-        XCTAssertThrowsError(
-            try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: Data())
-        )
+        do {
+            try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: Data())
+            XCTFail("Expected encrypt with empty key to throw")
+        } catch {
+            // expected
+        }
     }
 
-    func test_decrypt_withEmptyKey_throwsKeyMissing() throws {
+    func test_decrypt_withEmptyKey_throwsKeyMissing() async throws {
         let plainURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("dec-empty-key-in-\(UUID().uuidString).caf")
         let encryptedURL = AudioFileEncryption.encryptedURL(for: plainURL)
@@ -115,13 +119,37 @@ final class AudioFileEncryptionTests: XCTestCase {
         }
         try Data([0x01]).write(to: plainURL)
         let key = AudioFileEncryption.randomKey()
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
-        XCTAssertThrowsError(
-            try AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: Data())
-        )
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+        do {
+            try await AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: Data())
+            XCTFail("Expected decrypt with empty key to throw")
+        } catch {
+            // expected
+        }
     }
 
-    func test_encryptAndDecrypt_roundTrips_largeMultiChunkFile() throws {
+    @MainActor
+    func test_encrypt_async_completesFromMainActorContext() async throws {
+        let sourceData = Data([0xAA, 0xBB, 0xCC, 0xDD])
+        let plainURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("async-enc-\(UUID().uuidString).caf")
+        let encryptedURL = AudioFileEncryption.encryptedURL(for: plainURL)
+        let decryptedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("async-dec-\(UUID().uuidString).caf")
+        defer {
+            try? FileManager.default.removeItem(at: plainURL)
+            try? FileManager.default.removeItem(at: encryptedURL)
+            try? FileManager.default.removeItem(at: decryptedURL)
+        }
+        try sourceData.write(to: plainURL)
+        let key = AudioFileEncryption.randomKey()
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+        try await AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: key)
+        let restored = try Data(contentsOf: decryptedURL)
+        XCTAssertEqual(restored, sourceData)
+    }
+
+    func test_encryptAndDecrypt_roundTrips_largeMultiChunkFile() async throws {
         // 200KB — exceeds the 64KB chunk size, exercising multi-chunk path
         let sourceData = Data((0..<(200 * 1024)).map { UInt8($0 & 0xFF) })
         let plainURL = FileManager.default.temporaryDirectory
@@ -137,8 +165,8 @@ final class AudioFileEncryptionTests: XCTestCase {
 
         try sourceData.write(to: plainURL)
         let key = AudioFileEncryption.randomKey()
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
-        try AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: key)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+        try await AudioFileEncryption.decrypt(encryptedURL: encryptedURL, outputURL: decryptedURL, key: key)
 
         let restored = try Data(contentsOf: decryptedURL)
         XCTAssertEqual(restored, sourceData)

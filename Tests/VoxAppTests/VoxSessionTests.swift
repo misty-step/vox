@@ -32,7 +32,7 @@ final class MockRecorder: AudioChunkStreaming {
         return (0.5, 0.7)
     }
 
-    func stop() throws -> URL {
+    func stop() async throws -> URL {
         stopCallCount += 1
         if let stopError {
             throw stopError
@@ -87,7 +87,7 @@ final class MockEncryptedRecorder: AudioRecording, EncryptedAudioRecording, Audi
         return (0.5, 0.7)
     }
 
-    func stop() throws -> URL {
+    func stop() async throws -> URL {
         stopCallCount += 1
         if let stopError {
             throw stopError
@@ -147,7 +147,7 @@ final class MockNonStreamingRecorder: AudioRecording {
         return (0.5, 0.7)
     }
 
-    func stop() throws -> URL {
+    func stop() async throws -> URL {
         stopCallCount += 1
         if let stopError {
             throw stopError
@@ -986,7 +986,7 @@ struct VoxSessionDITests {
         }
 
         try Data([0x01, 0x02, 0x03]).write(to: plainURL)
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
         try? FileManager.default.removeItem(at: plainURL)
 
         let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
@@ -1027,7 +1027,7 @@ struct VoxSessionDITests {
         }
 
         try Data([0x10, 0x11, 0x12]).write(to: plainURL)
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
         try? FileManager.default.removeItem(at: plainURL)
 
         let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
@@ -1063,7 +1063,7 @@ struct VoxSessionDITests {
         }
 
         try Data([0x21, 0x22, 0x23]).write(to: plainURL)
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
         try? FileManager.default.removeItem(at: plainURL)
 
         let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)
@@ -1106,7 +1106,7 @@ struct VoxSessionDITests {
         }
 
         try Data([0x31, 0x32, 0x33]).write(to: plainURL)
-        try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
+        try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: encryptionKey)
         try? FileManager.default.removeItem(at: plainURL)
 
         let recorder = MockEncryptedRecorder(recordingURL: encryptedURL, encryptionKey: encryptionKey)

@@ -61,7 +61,7 @@ public protocol TextPaster: Sendable {
 public protocol AudioRecording: AnyObject {
     func start(inputDeviceUID: String?) throws
     func currentLevel() -> (average: Float, peak: Float)
-    func stop() throws -> URL
+    func stop() async throws -> URL
 }
 
 /// Provides access to an ephemeral per-recording key for encrypted temp files.

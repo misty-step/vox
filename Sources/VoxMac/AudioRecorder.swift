@@ -264,7 +264,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming, Encrypted
         return (latestAverage, latestPeak)
     }
 
-    public func stop() throws -> URL {
+    public func stop() async throws -> URL {
         if let recorder, let url = currentURL {
             let encryptedURL = currentEncryptedURL
             recorder.stop()
@@ -275,7 +275,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming, Encrypted
             self.latestAverage = 0
             self.latestPeak = 0
             try throwCaptureIntegrityFailureIfPresent()
-            return try finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
+            return try await finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
         }
 
         guard let engine, let url = currentURL else {
@@ -298,13 +298,13 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming, Encrypted
         self.latestAverage = 0
         self.latestPeak = 0
         try throwCaptureIntegrityFailureIfPresent()
-        return try finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
+        return try await finalizedRecordingURL(from: url, encryptedURL: encryptedURL)
     }
 
     private func finalizedRecordingURL(
         from plainURL: URL,
         encryptedURL: URL?
-    ) throws -> URL {
+    ) async throws -> URL {
         guard let key = currentRecordingEncryptionKey else {
             return plainURL
         }
@@ -312,7 +312,7 @@ public final class AudioRecorder: AudioRecording, AudioChunkStreaming, Encrypted
             throw VoxError.internalError("Missing encrypted recording URL.")
         }
         do {
-            try AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
+            try await AudioFileEncryption.encrypt(plainURL: plainURL, outputURL: encryptedURL, key: key)
             SecureFileDeleter.delete(at: plainURL)
             return encryptedURL
         } catch {

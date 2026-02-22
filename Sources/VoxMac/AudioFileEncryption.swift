@@ -64,6 +64,16 @@ public enum AudioFileEncryption {
         plainURL: URL,
         outputURL: URL,
         key: Data
+    ) async throws {
+        try await Task.detached(priority: .utility) {
+            try AudioFileEncryption._encryptSync(plainURL: plainURL, outputURL: outputURL, key: key)
+        }.value
+    }
+
+    private static func _encryptSync(
+        plainURL: URL,
+        outputURL: URL,
+        key: Data
     ) throws {
         guard !key.isEmpty else {
             throw Error.keyMissing
@@ -109,6 +119,16 @@ public enum AudioFileEncryption {
     }
 
     public static func decrypt(
+        encryptedURL: URL,
+        outputURL: URL,
+        key: Data
+    ) async throws {
+        try await Task.detached(priority: .utility) {
+            try AudioFileEncryption._decryptSync(encryptedURL: encryptedURL, outputURL: outputURL, key: key)
+        }.value
+    }
+
+    private static func _decryptSync(
         encryptedURL: URL,
         outputURL: URL,
         key: Data

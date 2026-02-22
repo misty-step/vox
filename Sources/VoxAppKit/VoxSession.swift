@@ -462,7 +462,7 @@ public final class VoxSession: ObservableObject {
 
         let url: URL
         do {
-            url = try recorder.stop()
+            url = try await recorder.stop()
         } catch {
             await cancelAndAwaitStreamingSetup()
             let streamingBridge = detachStreamingBridge()
@@ -528,7 +528,7 @@ public final class VoxSession: ObservableObject {
                     temporaryBatchAudioURL: &temporaryBatchAudioURL
                 )
             } else if AudioFileEncryption.isEncrypted(url: url) {
-                let prepared = try prepareBatchAudioURL(from: url, decryptionKey: &decryptionKey)
+                let prepared = try await prepareBatchAudioURL(from: url, decryptionKey: &decryptionKey)
                 temporaryBatchAudioURL = prepared.temporaryAudioURL
                 output = try await active.process(audioURL: prepared.batchAudioURL)
             } else {
@@ -560,7 +560,7 @@ public final class VoxSession: ObservableObject {
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
-            let preservedURL = preserveRecoverableAudio(
+            let preservedURL = await preserveRecoverableAudio(
                 recordedURL: url,
                 decryptionKey: &decryptionKey,
                 temporaryBatchAudioURL: temporaryBatchAudioURL
@@ -693,7 +693,7 @@ public final class VoxSession: ObservableObject {
         }
 
         await bridge.cancel()
-        let preparedAudio = try prepareBatchAudioURL(from: audioURL, decryptionKey: &decryptionKey)
+        let preparedAudio = try await prepareBatchAudioURL(from: audioURL, decryptionKey: &decryptionKey)
         temporaryBatchAudioURL = preparedAudio.temporaryAudioURL
         return try await batchPipeline.process(audioURL: preparedAudio.batchAudioURL)
     }
@@ -701,7 +701,7 @@ public final class VoxSession: ObservableObject {
     private func prepareBatchAudioURL(
         from recordedURL: URL,
         decryptionKey: inout Data?
-    ) throws -> (batchAudioURL: URL, temporaryAudioURL: URL?) {
+    ) async throws -> (batchAudioURL: URL, temporaryAudioURL: URL?) {
         guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
             return (recordedURL, nil)
         }
@@ -717,7 +717,7 @@ public final class VoxSession: ObservableObject {
         }
 
         do {
-            try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+            try await AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
         } catch {
             SecureFileDeleter.delete(at: plainURL)
             throw error
@@ -730,7 +730,7 @@ public final class VoxSession: ObservableObject {
         recordedURL: URL,
         decryptionKey: inout Data?,
         temporaryBatchAudioURL: URL?
-    ) -> URL? {
+    ) async -> URL? {
         guard AudioFileEncryption.isEncrypted(url: recordedURL) else {
             return preserveAudio(at: recordedURL)
         }
@@ -751,7 +751,7 @@ public final class VoxSession: ObservableObject {
             }
 
             do {
-                try AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
+                try await AudioFileEncryption.decrypt(encryptedURL: recordedURL, outputURL: plainURL, key: key)
             } catch {
                 SecureFileDeleter.delete(at: plainURL)
                 return preserveAudio(at: recordedURL)
