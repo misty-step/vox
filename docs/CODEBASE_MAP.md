@@ -131,7 +131,7 @@ App orchestration. Depends on VoxCore, VoxProviders, VoxMac.
 | `RewriteResultCache.swift` | LRU+TTL rewrite cache (128 entries, 600s, 1024-char max); keyed by transcript+level+model |
 | `StatusBarController.swift` | Menu bar item, menu construction, icon rendering, all menu actions |
 | `SettingsWindowController.swift` | NSHostingController wrapper for SwiftUI settings |
-| `Settings/*.swift` | SwiftUI views: basics, cloud keys sheet, provider catalog, product footer |
+| `Settings/*.swift` | SwiftUI views: basics, cloud keys sheet, provider catalog, product footer; `HotkeyState` shared observable for hotkey availability |
 | `Onboarding/*.swift` | Setup checklist with live permission/key status |
 | `ProductInfo.swift` | Version/build resolution from Bundle → env vars → fallbacks |
 
