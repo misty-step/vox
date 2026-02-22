@@ -4,23 +4,25 @@ import SwiftUI
 @MainActor
 public final class SettingsWindowController: NSWindowController {
 
+    let hotkeyState: HotkeyState
+
     public init(hotkeyAvailable: Bool = true, onRetryHotkey: (() -> Void)? = nil) {
-        let view = SettingsView(hotkeyAvailable: hotkeyAvailable, onRetryHotkey: onRetryHotkey ?? {})
+        let state = HotkeyState(isAvailable: hotkeyAvailable, onRetry: onRetryHotkey ?? {})
+        let view = SettingsView(hotkeyState: state)
         let hosting = NSHostingController(rootView: view)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Vox Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 600, height: 480))
         window.center()
+        self.hotkeyState = state
         super.init(window: window)
     }
 
     func updateHotkeyAvailability(_ available: Bool, onRetry: (() -> Void)? = nil) {
-        if let hostingController = window?.contentViewController as? NSHostingController<SettingsView> {
-            hostingController.rootView = SettingsView(
-                hotkeyAvailable: available,
-                onRetryHotkey: onRetry ?? {}
-            )
+        hotkeyState.isAvailable = available
+        if let retry = onRetry {
+            hotkeyState.onRetry = retry
         }
     }
 
