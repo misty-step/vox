@@ -1,47 +1,61 @@
 # Vox
 
-Voice-to-text for macOS with optional AI polish.
+**Voice-to-text for macOS. Speak naturally — get polished text.**
 
-## Why
+Option+Space to record. Auto-pastes into any app. No configuration maze.
 
-Dictation apps either give you raw transcripts (unusable for professional writing) or lock refinement behind complex settings and subscriptions. Vox takes a different approach: speak naturally, get polished text. No configuration maze, no learning curve.
+---
 
-SuperWhisper alternative that's simpler and smarter.
+<!-- Demo: ~30s GIF showing Option+Space → recording HUD → text pasted -->
+<!-- Add demo.gif here once captured: ![Vox demo](docs/assets/demo.gif) -->
 
-## Features
-
-- **Press Option+Space** to start/stop recording
-- **STT resilience**: sequential fallback (ElevenLabs → Deepgram → Apple Speech); opt-in hedged routing via `VOX_STT_ROUTING=hedged`
-- **Proactive STT concurrency limiter**: queues requests before provider caps (`VOX_MAX_CONCURRENT_STT`, default `8`)
-- **Three processing levels**: Raw (verbatim transcript), Clean (tidy up), Polish (full rewrite)
-- **Microphone selection**: choose input device from Settings
-- **Auto-paste** directly into any application
-- **Menu bar app** with minimal footprint
-- **Recovery actions**: menu bar supports "Copy Last Raw Transcript" and "Retry Last Rewrite"
-- **State-aware visual identity**: consistent menu icon + HUD language for ready/recording/processing
-- **VoiceOver-aware HUD**: accessibility labels/values + state announcements for recording transitions
-- **BYOK** (Bring Your Own Keys) for complete control over costs
-- **Secure storage** via macOS Keychain
-- **Exportable diagnostics bundle** (menu bar → Export Diagnostics…): zip of privacy-safe context + event logs (no transcript text, no audio, no API keys)
+---
 
 ## Quick Start
 
 ```bash
-# Clone and build
 git clone https://github.com/misty-step/vox.git
 cd vox
+cp .env.example .env.local   # add your API keys
 swift build
-
-# Configure keys
-cp .env.example .env.local
-# edit .env.local
-# (or configure in Settings after launch)
-
-# Run
 ./scripts/run.sh
 ```
 
-Grant Accessibility permissions when prompted. Press Option+Space to dictate.
+Grant Accessibility permission when prompted. Press **Option+Space** to dictate.
+
+Recommended: one [ElevenLabs](https://elevenlabs.io) key (STT) and one [Gemini](https://ai.google.dev/) key (rewrites) for best quality. Apple Speech available on-device as no-key fallback.
+
+---
+
+## Why Vox
+
+| | Vox | SuperWhisper | macOS Dictation |
+|---|---|---|---|
+| AI rewriting (Clean/Polish) | ✅ | ✅ | ❌ |
+| Open source / BYOK | ✅ | ❌ (subscription) | ❌ |
+| Resilient STT fallback chain | ✅ | ❌ | ❌ |
+| On-device fallback (no key) | ✅ | ❌ | ✅ |
+| Minimal footprint (menu bar) | ✅ | ✅ | ❌ |
+| Configuration maze | ❌ | ⚠️ | ❌ |
+
+BYOK = bring your own API keys. You pay providers directly, not a middleman.
+
+---
+
+## Features
+
+- **Option+Space** to start/stop recording (global hotkey)
+- **Three processing levels** — Raw (verbatim), Clean (tidy), Polish (full rewrite)
+- **Resilient STT chain** — ElevenLabs → Deepgram → Apple Speech; opt-in hedged routing via `VOX_STT_ROUTING=hedged`
+- **Streaming transcription** — Deepgram WebSocket for real-time results (enabled by default)
+- **Auto-paste** directly into the focused application
+- **Microphone selection** from Settings
+- **Recovery actions** — Copy Last Raw Transcript, Retry Last Rewrite
+- **Accessibility-first HUD** — VoiceOver labels + state announcements
+- **Exportable diagnostics bundle** — privacy-safe (no transcript text, no audio, no keys)
+- **Secure key storage** via macOS Keychain
+
+---
 
 ## Setup
 
@@ -49,139 +63,109 @@ Grant Accessibility permissions when prompted. Press Option+Space to dictate.
 
 - macOS 14 (Sonoma) or later
 - Swift 5.9+
-- [SwiftLint](https://github.com/realm/SwiftLint) (development only, `brew install swiftlint`)
-- [ElevenLabs API key](https://elevenlabs.io) for primary transcription
-- [Gemini API key](https://ai.google.dev/) for AI rewriting
-- [OpenRouter API key](https://openrouter.ai) (optional) for rewrite fallback
-- [Deepgram API key](https://console.deepgram.com) (optional) for fallback transcription and streaming STT
-- Apple Speech is always available as an on-device fallback (no key needed)
+- API keys: [ElevenLabs](https://elevenlabs.io) (STT) + [Gemini](https://ai.google.dev/) (rewrites)
+- Optional: [Deepgram](https://console.deepgram.com) (streaming STT + fallback), [OpenRouter](https://openrouter.ai) (rewrite fallback)
+- [SwiftLint](https://github.com/realm/SwiftLint) for development (`brew install swiftlint`)
 
-### Installation
+### Configuration
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/misty-step/vox.git
-   cd vox
-   ```
+**`.env.local`** (development):
+```bash
+ELEVENLABS_API_KEY=your-key
+GEMINI_API_KEY=your-key
+DEEPGRAM_API_KEY=your-key           # optional, enables streaming STT
+OPENROUTER_API_KEY=your-key         # optional, rewrite fallback
+```
 
-2. Build the app:
-   ```bash
-   swift build -c release
-   ```
+**Settings window** (persistent): click the menu bar icon → Settings. Keys stored in Keychain.
 
-3. Run:
-   ```bash
-   .build/release/Vox
-   ```
+Advanced env overrides — add to `.env.local` (loaded by `run.sh`) or inline-prefix the command:
+```bash
+VOX_MAX_CONCURRENT_STT=8            # global STT in-flight cap (default 8)
+VOX_DISABLE_STREAMING_STT=1         # force batch-only transcription
+VOX_STT_ROUTING=hedged              # parallel cloud race w/ stagger delays
+VOX_AUDIO_BACKEND=recorder          # legacy file-only audio backend
+VOX_PERF_INGEST_URL=https://...     # pipeline timing upload endpoint
+```
 
-### Signed Distribution (Maintainers)
+Example: `VOX_DISABLE_STREAMING_STT=1 ./scripts/run.sh`
 
-For a signed + notarized `Vox.app` distribution artifact:
+### Permissions
 
+Vox requires Accessibility access to paste text. macOS prompts on first launch. If missed:
+
+> System Settings → Privacy & Security → Accessibility → Enable Vox
+
+---
+
+## Development
+
+```bash
+swift build                                  # debug build
+swift build -c release                       # release build
+swift test                                   # run all tests
+./scripts/run-tests-ci.sh                    # CI-equivalent (strict + timeout)
+./scripts/test-audio-guardrails.sh           # audio regression contract tests
+./scripts/lint.sh                            # SwiftLint
+./scripts/run.sh                             # launch with .env.local keys
+```
+
+### Project Structure
+
+```text
+Sources/
+  VoxCore/       # Protocols, errors, decorators (no dependencies)
+  VoxProviders/  # STT/rewrite clients (ElevenLabs, Deepgram, Apple, Gemini, OpenRouter)
+  VoxMac/        # macOS: audio, Keychain, HUD, hotkeys
+  VoxAppKit/     # Session, pipeline, settings, UI (testable library)
+  VoxApp/        # Entry point (main.swift only)
+```
+
+See [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md) for detailed navigation.
+
+### Releases
+
+Vox uses [Landfall](https://github.com/misty-step/landfall) for automated releases — conventional commits (`feat:`, `fix:`) on `master` trigger version bumps and GitHub releases automatically.
+
+For signed + notarized distribution:
 ```bash
 export VOX_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export VOX_NOTARY_PROFILE="vox-notary"
 ./scripts/release-macos.sh
 ```
 
-**Automated Releases:** Vox uses [Landfall](https://github.com/misty-step/landfall) for automated versioning and releases. When PRs merge to `master` with conventional commits (`feat:`, `fix:`, etc.), Landfall automatically bumps the version, updates the changelog, and creates GitHub releases.
+See `docs/RELEASE.md` for full certificate and CI setup.
 
-See `docs/RELEASE.md` for full setup (certificate, notary credentials, CI secrets) and `CONTRIBUTING.md` for release workflow details.
-
-### Configuration
-
-API keys can be provided two ways:
-
-**Environment variables** (recommended for development):
-```bash
-export ELEVENLABS_API_KEY=your-key
-export GEMINI_API_KEY=your-key
-export OPENROUTER_API_KEY=your-key         # optional rewrite fallback
-export DEEPGRAM_API_KEY=your-key           # optional STT fallback + streaming
-export VOX_MAX_CONCURRENT_STT=8            # optional global STT in-flight limit
-export VOX_DISABLE_STREAMING_STT=1         # optional: disable streaming STT path
-export VOX_STT_ROUTING=hedged              # optional: parallel race w stagger delays
-export VOX_AUDIO_BACKEND=recorder          # optional: legacy file-only audio backend
-export VOX_PERF_INGEST_URL=https://...     # optional: upload pipeline_timing perf events as NDJSON (disabled by default)
-```
-
-**Settings window** (persisted in Keychain):
-Click the menu bar icon and select Settings. Keys stored securely in macOS Keychain.
-
-### Permissions
-
-Vox requires Accessibility permissions to paste text into applications. macOS will prompt on first launch. If denied, enable manually:
-
-System Settings > Privacy & Security > Accessibility > Enable Vox
-
-### Diagnostics
-
-Menu bar icon → Export Diagnostics…
-
-Creates a `.zip` containing `VoxDiagnostics/context.json` + `VoxDiagnostics/diagnostics-*.jsonl`.
-
-Privacy: no transcript text, no audio, no API keys (presence booleans only). Nothing uploaded automatically.
-
-## Development
-
-```bash
-# Build debug
-swift build
-
-# Build release
-swift build -c release
-
-# Build signed + notarized release app bundle (maintainers)
-./scripts/release-macos.sh
-
-# Lint
-./scripts/lint.sh
-
-# CI-equivalent strict tests with hang timeout
-./scripts/run-tests-ci.sh
-
-# Run (loads .env.local)
-./scripts/run.sh
-```
-
-### Project Structure
-
-```
-Sources/
-  VoxCore/       # Protocols, errors, decorators (timeout/retry/concurrency/routing/health-aware)
-  VoxProviders/  # STT clients (ElevenLabs, Deepgram, Apple Speech), OpenRouter rewriting
-  VoxMac/        # macOS-specific: audio recording, device selection, Keychain, HUD, hotkeys
-  VoxAppKit/     # Session, pipeline, settings, UI controllers (testable library)
-  VoxApp/        # Executable entry point (just main.swift)
-```
-
-### Rewrite Models
-
-Default rewrite model (Clean/Polish): `gemini-2.5-flash-lite` (Gemini direct) / `google/gemini-2.5-flash-lite` (OpenRouter)
-
-See `docs/MODEL_EVALUATION.md` and `evals/polish-bakeoff.yaml` for bakeoff candidates and selection notes.
-
-## Product Standards
-
-- **Version/build in-app**: shown in Settings footer (release build via Info.plist; dev can set `VOX_APP_VERSION`/`VOX_BUILD_NUMBER`).
-- **Attribution**: Vox by Misty Step.
-- **Contact/help**: open a support issue at https://github.com/misty-step/vox/issues.
+---
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style, and PR guidelines.
+Fork, branch, submit PR. Quick check:
 
-Quick version: fork, branch, `./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && ./scripts/run-tests-ci.sh`, submit PR.
+```bash
+./scripts/lint.sh && swift build -Xswiftc -warnings-as-errors && ./scripts/run-tests-ci.sh
+```
 
-## Use as a Library
+See [CONTRIBUTING.md](CONTRIBUTING.md) for code style, PR guidelines, and branch naming.
 
-Vox publishes `VoxCore`, `VoxProviders`, `VoxMac`, and `VoxAppKit` as SwiftPM library products. See [Wrapper Integration Points](docs/ARCHITECTURE.md#wrapper-integration-points) for dependency setup and extension seams.
+---
 
 ## Docs
 
-- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- ADRs: [docs/adr/](docs/adr/)
-- Postmortems: [docs/postmortems/](docs/postmortems/)
+- [Architecture](docs/ARCHITECTURE.md)
+- [ADRs](docs/adr/)
+- [Codebase Map](docs/CODEBASE_MAP.md)
+- [Postmortems](docs/postmortems/)
+
+## Product
+
+- **Version**: shown in Settings footer (release build via Info.plist)
+- **Attribution**: Vox by [Misty Step](https://github.com/misty-step)
+- **Support**: [open an issue](https://github.com/misty-step/vox/issues)
+
+## Library Use
+
+`VoxCore`, `VoxProviders`, `VoxMac`, and `VoxAppKit` are published as SwiftPM library products. See [Wrapper Integration Points](docs/ARCHITECTURE.md#wrapper-integration-points).
 
 ## License
 
