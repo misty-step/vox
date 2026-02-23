@@ -71,20 +71,36 @@ jobs:
           fi
 
           python3 - > meta.env <<'PY'
-          import json, os, sys
+          import json, os, re, sys
           path = os.environ["META_JSON"]
           data = json.load(open(path, "r", encoding="utf-8"))
           pr = data.get("pullRequestNumber")
           sha = data.get("commitSHA")
-          if not pr or not sha:
+          if pr is None or not sha:
             sys.exit(0)
-          print(f"PR_NUMBER={pr}")
-          print(f"SHA={sha}")
+          if isinstance(pr, int):
+            pr_str = str(pr)
+          elif isinstance(pr, str) and re.fullmatch(r"[0-9]+", pr):
+            pr_str = pr
+          else:
+            sys.exit(0)
+          if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+            sys.exit(0)
+          print(f"PR_NUMBER={pr_str}")
+          print(f"SHA={sha.lower()}")
           PY
 
           source meta.env
           if [ -z "${PR_NUMBER:-}" ] || [ -z "${SHA:-}" ]; then
             echo "Missing PR_NUMBER/SHA in head.json; skipping."
+            exit 0
+          fi
+          if ! printf '%s' "$PR_NUMBER" | grep -Eq '^[0-9]+$'; then
+            echo "Invalid PR_NUMBER in head.json; skipping."
+            exit 0
+          fi
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "Invalid SHA in head.json; skipping."
             exit 0
           fi
 

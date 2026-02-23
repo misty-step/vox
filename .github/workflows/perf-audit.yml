@@ -103,11 +103,18 @@ jobs:
               --jq '.[].path' 2>/dev/null | head -n 80 || true
           )
 
-          # Pre-fetch the full audit SHA listing once via Git Trees API.
-          # Contents API directory listings cap at 1,000 entries; Trees API handles >100K.
+          # Pre-fetch baseline SHA listing once via Git Trees API.
+          # Query the audit subtree directly to avoid huge root-tree payloads.
           _AUDIT_DEFAULT="$(gh api "repos/${AUDIT_REPO}" --jq '.default_branch' 2>/dev/null || echo 'main')"
-          AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
-            --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+          _AUDIT_TREE_SHA="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}" \
+            --jq '.tree[] | select(.path=="audit" and .type=="tree") | .sha' 2>/dev/null | head -n 1 || true)"
+          if [ -n "$_AUDIT_TREE_SHA" ]; then
+            AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_TREE_SHA}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^[^/]+\\.json$")) | .path | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+          else
+            AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+          fi
 
           # Master baseline history: last 15 master commits with persisted baselines.
           # Provides cross-PR trend context so the chart isn't reset each PR.
