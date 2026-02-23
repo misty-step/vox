@@ -57,7 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-say -o "$AIFF_PATH" "$TEXT"
+say -v Samantha -r 175 -o "$AIFF_PATH" "$TEXT"
 afconvert "$AIFF_PATH" -o "$CAF_PATH" -f caff -d LEI16@16000 -c 1
 
 if [ -n "$OUT_PATH" ]; then

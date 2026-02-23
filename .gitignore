@@ -17,3 +17,5 @@ evals/.promptfoo-cache/
 node_modules/
 
 .flywheel/
+
+thinktank.log
