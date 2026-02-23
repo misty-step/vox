@@ -44,13 +44,13 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Includes plain-language trend + status semantics (`improved|neutral|regressed`) and confidence labels.
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.
-- On PR runs, persists `head.json` to `vox-perf-audit` via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
+- On PR runs, persists `head.json` to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit) via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
 
 ## Perf Audit Store
 
 Artifacts live at **[misty-step/vox-perf-audit](https://github.com/misty-step/vox-perf-audit)** — a dedicated append-only repo.
 
-```
+```text
 audit/
   <commit-sha>.json              # master push (provider lane)
   pr/

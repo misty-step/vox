@@ -108,13 +108,18 @@ jobs:
               BASE_MODE="exact"
             else
               # Walk ancestry for nearest persisted ancestor.
+              # One API call to list available SHAs, then intersect locally.
+              AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/contents/audit" \
+                --jq '[.[] | .name | sub("\\.json$"; "")] | join("\n")' 2>/dev/null || true)"
               while IFS= read -r candidate; do
                 [ -n "$candidate" ] || continue
-                if gh api "repos/${AUDIT_REPO}/contents/audit/${candidate}.json" \
-                    --jq '.content' | base64 -d > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
-                  BASE_SHA_USED="$candidate"
-                  BASE_MODE="nearest_ancestor"
-                  break
+                if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$candidate"; then
+                  if gh api "repos/${AUDIT_REPO}/contents/audit/${candidate}.json" \
+                      --jq '.content' | base64 -d > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
+                    BASE_SHA_USED="$candidate"
+                    BASE_MODE="nearest_ancestor"
+                    break
+                  fi
                 fi
               done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
             fi
