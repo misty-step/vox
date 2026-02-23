@@ -105,7 +105,7 @@ jobs:
               [ -n "$path" ] || continue
               dest="$HISTORY_DIR/master-$(basename "$path")"
               git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
-            done < <(git log --name-only --pretty=format: -n 50 origin/perf-audit -- audit/ | grep '\.json$' | grep -v '^audit/pr/' | head -n 15)
+            done < <(git ls-tree -r --name-only origin/perf-audit "audit" | grep -v "^audit/pr/" | sort | tail -15)
 
             if [ -f "$PROVIDER_HEAD" ]; then
               if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$BASE_JSON" 2>/dev/null; then
