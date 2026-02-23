@@ -153,11 +153,15 @@ def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist) -> 
     return f"{name} ({fmt_ms(value)}, {share:.0f}%)"
 
 
-def change_status(latest: float, previous: float) -> str:
+def change_status(latest: float, previous: float, noise: float = 0.0) -> str:
     if previous <= 0:
         return "neutral"
     delta = latest - previous
     pct = abs(delta) / previous
+    # Suppress verdict when delta is within the within-run measurement spread.
+    # A between-run change smaller than within-run noise is indistinguishable from variance.
+    if noise > 0 and abs(delta) <= noise:
+        return "neutral"
     if delta > 200 and pct > 0.10:
         return "regressed"
     if delta < -200 and pct > 0.10:
@@ -427,7 +431,8 @@ def render_lane_section(
         series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
         if len(series) >= 2:
             prev = series[-2]
-            status = change_status(series[-1], prev)
+            spread = variability(row.generation)
+            status = change_status(series[-1], prev, noise=spread)
             change = fmt_change(series[-1], prev)
         else:
             status = "n/a"
@@ -576,7 +581,7 @@ def main() -> None:
     lines.append("")
     lines.append("> Lower latency is better for every metric in this report.")
     lines.append("> Generation = encode + STT + rewrite (paste is excluded from decisions in CI).")
-    lines.append("> Regression status rule: `regressed` means slower by both >200ms and >10% vs previous run.")
+    lines.append("> Regression status rule: `regressed` means slower by both >200ms and >10% vs previous run, and the delta exceeds within-run measurement spread (noise floor).")
     lines.append("")
     lines.append(f"- Head: `{short_sha(head_sha)}`")
     if base:

@@ -23,8 +23,9 @@ public enum ProcessingLevel: String, Codable, CaseIterable, Sendable {
     public static let defaultCleanRewriteModel = "gemini-2.5-flash-lite"
 
     /// Default rewrite model for Polish.
-    /// Intentionally separate from Clean; polish can trade speed for quality.
-    public static let defaultPolishRewriteModel = "x-ai/grok-4.1-fast"
+    /// Same model as Clean — gemini-2.5-flash-lite wins on latency and quality for both levels.
+    /// See docs/performance/rewrite-model-lockdown-2026-02-23.md for bakeoff evidence.
+    public static let defaultPolishRewriteModel = "gemini-2.5-flash-lite"
 
     public var defaultModel: String {
         switch self {
