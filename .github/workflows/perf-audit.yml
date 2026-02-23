@@ -80,7 +80,10 @@ jobs:
             cp "$CODEPATH_HEAD" "$PRIMARY_HEAD"
           fi
 
-          HISTORY_DIR="$OUT_DIR/history/pr"
+          # Combined history dir: per-PR runs + recent master baselines.
+          # Both sources are needed so the trend spans actual project history,
+          # not just the 2-3 commits in the current PR.
+          HISTORY_DIR="$OUT_DIR/history"
           mkdir -p "$HISTORY_DIR"
           BASE_JSON="$OUT_DIR/base.json"
           BASE_SHA_USED="$BASE_SHA"
@@ -89,11 +92,20 @@ jobs:
           # Optional baseline: pulled from perf-audit branch if present.
           git fetch origin perf-audit || true
           if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
+            # Per-PR history (shows how this PR evolved across pushes)
             while IFS= read -r path; do
               [ -n "$path" ] || continue
-              dest="$HISTORY_DIR/$(basename "$path")"
+              dest="$HISTORY_DIR/pr-$(basename "$path")"
               git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
             done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 80)
+
+            # Master baseline history (recent 15 commits merged to master).
+            # Provides cross-PR trend context so the chart isn't reset each PR.
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              dest="$HISTORY_DIR/master-$(basename "$path")"
+              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
+            done < <(git ls-tree -r --name-only origin/perf-audit "audit" | grep -v "^audit/pr/" | sort | tail -15)
 
             if [ -f "$PROVIDER_HEAD" ]; then
               if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$BASE_JSON" 2>/dev/null; then
