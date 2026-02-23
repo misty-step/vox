@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Build & Test
+    name: CI
     runs-on: macos-14
     timeout-minutes: 15
 
