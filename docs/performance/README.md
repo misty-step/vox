@@ -45,6 +45,7 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.
 - On PR runs, persists `head.json` to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit) via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
+- PR artifact routing (`<pr>`, `<commit>`) is derived from trusted `workflow_run` event metadata, not from artifact JSON fields.
 
 ## Perf Audit Store
 
@@ -62,6 +63,7 @@ audit/
 Retention policy: never rewrite, only append. Artifacts are permanent.
 
 Requires `PERF_AUDIT_TOKEN` secret in this repo (a PAT with `contents: write` on `vox-perf-audit`).
+If `PERF_AUDIT_TOKEN` is missing, persist steps log a skip message and exit 0.
 
 ## Runtime Perf Upload (Opt-In)
 
