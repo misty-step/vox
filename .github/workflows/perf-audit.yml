@@ -103,18 +103,28 @@ jobs:
               --jq '.[].path' 2>/dev/null | head -n 80 || true
           )
 
-          # Master baseline history (recent 15 commits merged to master).
+          # Pre-fetch the full audit SHA listing once via Git Trees API.
+          # Contents API directory listings cap at 1,000 entries; Trees API handles >100K.
+          _AUDIT_DEFAULT="$(gh api "repos/${AUDIT_REPO}" --jq '.default_branch' 2>/dev/null || echo 'main')"
+          AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
+            --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+
+          # Master baseline history: last 15 master commits with persisted baselines.
           # Provides cross-PR trend context so the chart isn't reset each PR.
-          while IFS= read -r sha; do
-            [ -n "$sha" ] || continue
-            gh api "repos/${AUDIT_REPO}/contents/audit/${sha}.json" --jq '.content' \
-              | base64 -d > "$HISTORY_DIR/master-${sha}.json" 2>/dev/null \
-              || rm -f "$HISTORY_DIR/master-${sha}.json"
-          done < <(
-            gh api "repos/${AUDIT_REPO}/contents/audit" \
-              --jq '[.[] | select(.type=="file") | .name | sub("\\.json$"; "")] | sort | .[-15:] | .[]' \
-              2>/dev/null || true
-          )
+          # Uses git log for correct chronological ordering (SHA sort ≠ time order).
+          if [ -n "$AVAILABLE_SHAS" ]; then
+            _MASTER_COUNT=0
+            while IFS= read -r sha; do
+              [ -n "$sha" ] || continue
+              if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$sha"; then
+                gh api "repos/${AUDIT_REPO}/contents/audit/${sha}.json" --jq '.content' \
+                  | base64 -d > "$HISTORY_DIR/master-${sha}.json" 2>/dev/null \
+                  || rm -f "$HISTORY_DIR/master-${sha}.json"
+                _MASTER_COUNT=$((_MASTER_COUNT + 1))
+                [ "$_MASTER_COUNT" -ge 15 ] && break
+              fi
+            done < <(git log --first-parent origin/master --format="%H" 2>/dev/null | head -n 200 || true)
+          fi
 
           if [ -f "$PROVIDER_HEAD" ]; then
             # Try exact base SHA first.
@@ -124,9 +134,7 @@ jobs:
               BASE_MODE="exact"
             else
               # Walk ancestry for nearest persisted ancestor.
-              # One API call to list available SHAs, then intersect locally.
-              AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/contents/audit" \
-                --jq '[.[] | .name | sub("\\.json$"; "")] | join("\n")' 2>/dev/null || true)"
+              # Uses pre-fetched AVAILABLE_SHAS; 0 extra API calls for the intersection.
               while IFS= read -r candidate; do
                 [ -n "$candidate" ] || continue
                 if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$candidate"; then
