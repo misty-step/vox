@@ -1,0 +1,565 @@
+{
+  "audioBytes" : 558044,
+  "audioFile" : "2 fixtures",
+  "commitSHA" : "71612588990d5efce1d25f5633fdde5af040582c",
+  "fixtureResults" : [
+    {
+      "audioBytes" : 130414,
+      "audioFile" : "fixture-short.caf",
+      "fixtureID" : "fixture-short",
+      "levels" : [
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 623.0790615081787,
+              "min" : 584.7729444503784,
+              "p50" : 598.770022392273,
+              "p95" : 619.7442531585693
+            },
+            "pasteMs" : {
+              "max" : 0.12302398681640625,
+              "min" : 0.03993511199951172,
+              "p50" : 0.05698204040527344,
+              "p95" : 0.12021064758300781
+            },
+            "rewriteMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "sttMs" : {
+              "max" : 623.0790615081787,
+              "min" : 584.7729444503784,
+              "p50" : 598.770022392273,
+              "p95" : 619.7442531585693
+            },
+            "totalStageMs" : {
+              "max" : 623.2020854949951,
+              "min" : 584.8128795623779,
+              "p50" : 598.8789796829224,
+              "p95" : 619.8540687561035
+            }
+          },
+          "iterations" : 5,
+          "level" : "raw",
+          "providers" : {
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 1528.101086616516,
+              "min" : 951.1160850524902,
+              "p50" : 1059.2041015625,
+              "p95" : 1436.2582683563232
+            },
+            "pasteMs" : {
+              "max" : 0.11599063873291016,
+              "min" : 0.030040740966796875,
+              "p50" : 0.047087669372558594,
+              "p95" : 0.11179447174072266
+            },
+            "rewriteMs" : {
+              "max" : 473.12307357788086,
+              "min" : 368.00503730773926,
+              "p50" : 440.1000738143921,
+              "p95" : 466.65446758270264
+            },
+            "sttMs" : {
+              "max" : 1089.6730422973633,
+              "min" : 583.111047744751,
+              "p50" : 596.9809293746948,
+              "p95" : 997.359824180603
+            },
+            "totalStageMs" : {
+              "max" : 1528.1481742858887,
+              "min" : 951.2110948562622,
+              "p50" : 1059.2341423034668,
+              "p95" : 1436.3191366195679
+            }
+          },
+          "iterations" : 5,
+          "level" : "clean",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "google/gemini-2.5-flash-lite",
+                "path" : "openrouter"
+              }
+            ],
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "generationMs" : {
+              "max" : 1073.9480257034302,
+              "min" : 967.695951461792,
+              "p50" : 1008.9420080184937,
+              "p95" : 1071.9090223312378
+            },
+            "pasteMs" : {
+              "max" : 0.2650022506713867,
+              "min" : 0.04601478576660156,
+              "p50" : 0.06592273712158203,
+              "p95" : 0.22740364074707028
+            },
+            "rewriteMs" : {
+              "max" : 491.06597900390625,
+              "min" : 362.8450632095337,
+              "p50" : 390.10894298553467,
+              "p95" : 484.46078300476074
+            },
+            "sttMs" : {
+              "max" : 633.0939531326294,
+              "min" : 582.8820466995239,
+              "p50" : 605.7130098342896,
+              "p95" : 630.2417755126953
+            },
+            "totalStageMs" : {
+              "max" : 1073.999047279358,
+              "min" : 967.7618741989136,
+              "p50" : 1009.0190172195435,
+              "p95" : 1072.0028400421143
+            }
+          },
+          "iterations" : 5,
+          "level" : "polish",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "google/gemini-2.5-flash-lite",
+                "path" : "openrouter"
+              }
+            ],
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "audioBytes" : 427630,
+      "audioFile" : "fixture-medium.caf",
+      "fixtureID" : "fixture-medium",
+      "levels" : [
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 32.65500068664551,
+              "min" : 20.401954650878906,
+              "p50" : 27.73904800415039,
+              "p95" : 32.141995429992676
+            },
+            "generationMs" : {
+              "max" : 1208.2699537277222,
+              "min" : 1039.700984954834,
+              "p50" : 1155.1170349121094,
+              "p95" : 1199.698567390442
+            },
+            "pasteMs" : {
+              "max" : 0.09799003601074219,
+              "min" : 0.030040740966796875,
+              "p50" : 0.048995018005371094,
+              "p95" : 0.09720325469970703
+            },
+            "rewriteMs" : {
+              "max" : 0,
+              "min" : 0,
+              "p50" : 0,
+              "p95" : 0
+            },
+            "sttMs" : {
+              "max" : 1178.1799793243408,
+              "min" : 1019.2990303039551,
+              "p50" : 1127.377986907959,
+              "p95" : 1169.0955877304077
+            },
+            "totalStageMs" : {
+              "max" : 1208.3189487457275,
+              "min" : 1039.7310256958008,
+              "p50" : 1155.2150249481201,
+              "p95" : 1199.7463703155518
+            }
+          },
+          "iterations" : 5,
+          "level" : "raw",
+          "providers" : {
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 36.40305995941162,
+              "min" : 19.205093383789062,
+              "p50" : 32.62507915496826,
+              "p95" : 35.81743240356445
+            },
+            "generationMs" : {
+              "max" : 2021.0769176483154,
+              "min" : 1565.1891231536865,
+              "p50" : 1690.2519464492798,
+              "p95" : 1969.320559501648
+            },
+            "pasteMs" : {
+              "max" : 0.12600421905517578,
+              "min" : 0.029087066650390625,
+              "p50" : 0.05698204040527344,
+              "p95" : 0.11360645294189452
+            },
+            "rewriteMs" : {
+              "max" : 701.1001110076904,
+              "min" : 480.52799701690674,
+              "p50" : 556.6970109939575,
+              "p95" : 681.6806793212891
+            },
+            "sttMs" : {
+              "max" : 1430.9049844741821,
+              "min" : 1024.791955947876,
+              "p50" : 1066.8120384216309,
+              "p95" : 1372.0131874084473
+            },
+            "totalStageMs" : {
+              "max" : 2021.1409330368042,
+              "min" : 1565.3151273727417,
+              "p50" : 1690.2810335159302,
+              "p95" : 1969.38316822052
+            }
+          },
+          "iterations" : 5,
+          "level" : "clean",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "google/gemini-2.5-flash-lite",
+                "path" : "openrouter"
+              }
+            ],
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        },
+        {
+          "distributions" : {
+            "encodeMs" : {
+              "max" : 35.75897216796875,
+              "min" : 21.95894718170166,
+              "p50" : 34.04200077056885,
+              "p95" : 35.582590103149414
+            },
+            "generationMs" : {
+              "max" : 1710.2940082550049,
+              "min" : 1477.7121543884277,
+              "p50" : 1554.5599460601807,
+              "p95" : 1688.005805015564
+            },
+            "pasteMs" : {
+              "max" : 0.2950429916381836,
+              "min" : 0.05602836608886719,
+              "p50" : 0.07903575897216797,
+              "p95" : 0.25522708892822266
+            },
+            "rewriteMs" : {
+              "max" : 575.6969451904297,
+              "min" : 390.1031017303467,
+              "p50" : 534.6859693527222,
+              "p95" : 571.5345621109009
+            },
+            "sttMs" : {
+              "max" : 1099.7200012207031,
+              "min" : 992.8270578384399,
+              "p50" : 1030.817985534668,
+              "p95" : 1090.489411354065
+            },
+            "totalStageMs" : {
+              "max" : 1710.373044013977,
+              "min" : 1477.7681827545166,
+              "p50" : 1554.655909538269,
+              "p95" : 1688.0804300308228
+            }
+          },
+          "iterations" : 5,
+          "level" : "polish",
+          "providers" : {
+            "rewriteObserved" : [
+              {
+                "count" : 5,
+                "model" : "google/gemini-2.5-flash-lite",
+                "path" : "openrouter"
+              }
+            ],
+            "sttMode" : "batch",
+            "sttObserved" : [
+              {
+                "count" : 5,
+                "model" : "scribe_v2",
+                "provider" : "ElevenLabs"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "fixtures" : [
+    {
+      "audioBytes" : 130414,
+      "audioFile" : "fixture-short.caf",
+      "id" : "fixture-short"
+    },
+    {
+      "audioBytes" : 427630,
+      "audioFile" : "fixture-medium.caf",
+      "id" : "fixture-medium"
+    }
+  ],
+  "generatedAt" : "2026-02-23T17:05:24Z",
+  "iterationsPerLevel" : 5,
+  "label" : "ci-provider",
+  "lane" : "provider",
+  "levels" : [
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 32.65500068664551,
+          "min" : 0,
+          "p50" : 10.200977325439453,
+          "p95" : 31.500738859176632
+        },
+        "generationMs" : {
+          "max" : 1208.2699537277222,
+          "min" : 584.7729444503784,
+          "p50" : 831.3900232315063,
+          "p95" : 1188.9843344688416
+        },
+        "pasteMs" : {
+          "max" : 0.12302398681640625,
+          "min" : 0.030040740966796875,
+          "p50" : 0.052988529205322266,
+          "p95" : 0.11669397354125975
+        },
+        "rewriteMs" : {
+          "max" : 0,
+          "min" : 0,
+          "p50" : 0,
+          "p95" : 0
+        },
+        "sttMs" : {
+          "max" : 1178.1799793243408,
+          "min" : 584.7729444503784,
+          "p50" : 821.1890459060669,
+          "p95" : 1157.7400982379913
+        },
+        "totalStageMs" : {
+          "max" : 1208.3189487457275,
+          "min" : 584.8128795623779,
+          "p50" : 831.466555595398,
+          "p95" : 1189.030647277832
+        }
+      },
+      "iterations" : 10,
+      "level" : "raw",
+      "providers" : {
+        "sttMode" : "batch",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "scribe_v2",
+            "provider" : "ElevenLabs"
+          }
+        ]
+      }
+    },
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 36.40305995941162,
+          "min" : 0,
+          "p50" : 9.602546691894531,
+          "p95" : 35.08539795875549
+        },
+        "generationMs" : {
+          "max" : 2021.0769176483154,
+          "min" : 951.1160850524902,
+          "p50" : 1546.6451048851013,
+          "p95" : 1904.6251118183134
+        },
+        "pasteMs" : {
+          "max" : 0.12600421905517578,
+          "min" : 0.029087066650390625,
+          "p50" : 0.05447864532470703,
+          "p95" : 0.12149810791015624
+        },
+        "rewriteMs" : {
+          "max" : 701.1001110076904,
+          "min" : 368.00503730773926,
+          "p50" : 476.8255352973938,
+          "p95" : 657.4063897132872
+        },
+        "sttMs" : {
+          "max" : 1430.9049844741821,
+          "min" : 583.111047744751,
+          "p50" : 1029.3084979057312,
+          "p95" : 1298.3984410762785
+        },
+        "totalStageMs" : {
+          "max" : 2021.1409330368042,
+          "min" : 951.2110948562622,
+          "p50" : 1546.7316508293152,
+          "p95" : 1904.6859622001646
+        }
+      },
+      "iterations" : 10,
+      "level" : "clean",
+      "providers" : {
+        "rewriteObserved" : [
+          {
+            "count" : 10,
+            "model" : "google/gemini-2.5-flash-lite",
+            "path" : "openrouter"
+          }
+        ],
+        "sttMode" : "batch",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "scribe_v2",
+            "provider" : "ElevenLabs"
+          }
+        ]
+      }
+    },
+    {
+      "distributions" : {
+        "encodeMs" : {
+          "max" : 35.75897216796875,
+          "min" : 0,
+          "p50" : 10.97947359085083,
+          "p95" : 35.362112522125244
+        },
+        "generationMs" : {
+          "max" : 1710.2940082550049,
+          "min" : 967.695951461792,
+          "p50" : 1275.830090045929,
+          "p95" : 1660.1455509662626
+        },
+        "pasteMs" : {
+          "max" : 0.2950429916381836,
+          "min" : 0.04601478576660156,
+          "p50" : 0.07146596908569336,
+          "p95" : 0.28152465820312494
+        },
+        "rewriteMs" : {
+          "max" : 575.6969451904297,
+          "min" : 362.8450632095337,
+          "p50" : 473.0114936828613,
+          "p95" : 566.3315832614899
+        },
+        "sttMs" : {
+          "max" : 1099.7200012207031,
+          "min" : 582.8820466995239,
+          "p50" : 812.9605054855347,
+          "p95" : 1078.9511740207672
+        },
+        "totalStageMs" : {
+          "max" : 1710.373044013977,
+          "min" : 967.7618741989136,
+          "p50" : 1275.8836150169373,
+          "p95" : 1660.2146625518797
+        }
+      },
+      "iterations" : 10,
+      "level" : "polish",
+      "providers" : {
+        "rewriteObserved" : [
+          {
+            "count" : 10,
+            "model" : "google/gemini-2.5-flash-lite",
+            "path" : "openrouter"
+          }
+        ],
+        "sttMode" : "batch",
+        "sttObserved" : [
+          {
+            "count" : 10,
+            "model" : "scribe_v2",
+            "provider" : "ElevenLabs"
+          }
+        ]
+      }
+    }
+  ],
+  "pullRequestNumber" : 312,
+  "rewriteRouting" : "openrouter",
+  "schemaVersion" : 3,
+  "sttChain" : [
+    {
+      "model" : "scribe_v2",
+      "provider" : "ElevenLabs"
+    },
+    {
+      "model" : "nova-3",
+      "provider" : "Deepgram"
+    }
+  ],
+  "sttMode" : "batch",
+  "sttSelectionPolicy" : "auto",
+  "warmupIterationsPerLevel" : 1
+}
