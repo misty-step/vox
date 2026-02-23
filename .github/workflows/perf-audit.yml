@@ -80,7 +80,10 @@ jobs:
             cp "$CODEPATH_HEAD" "$PRIMARY_HEAD"
           fi
 
-          HISTORY_DIR="$OUT_DIR/history/pr"
+          # Combined history dir: per-PR runs + recent master baselines.
+          # Both sources are needed so the trend spans actual project history,
+          # not just the 2-3 commits in the current PR.
+          HISTORY_DIR="$OUT_DIR/history"
           mkdir -p "$HISTORY_DIR"
           BASE_JSON="$OUT_DIR/base.json"
           BASE_SHA_USED="$BASE_SHA"
@@ -98,6 +101,19 @@ jobs:
           done < <(
             gh api "repos/${AUDIT_REPO}/contents/audit/pr/${PR_NUMBER}" \
               --jq '.[].path' 2>/dev/null | head -n 80 || true
+          )
+
+          # Master baseline history (recent 15 commits merged to master).
+          # Provides cross-PR trend context so the chart isn't reset each PR.
+          while IFS= read -r sha; do
+            [ -n "$sha" ] || continue
+            gh api "repos/${AUDIT_REPO}/contents/audit/${sha}.json" --jq '.content' \
+              | base64 -d > "$HISTORY_DIR/master-${sha}.json" 2>/dev/null \
+              || rm -f "$HISTORY_DIR/master-${sha}.json"
+          done < <(
+            gh api "repos/${AUDIT_REPO}/contents/audit" \
+              --jq '[.[] | select(.type=="file") | .name | sub("\\.json$"; "")] | sort | .[-15:] | .[]' \
+              2>/dev/null || true
           )
 
           if [ -f "$PROVIDER_HEAD" ]; then
