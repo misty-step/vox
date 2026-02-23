@@ -27,7 +27,7 @@ struct CloudProvidersSection: View {
                         ForEach(CloudProviderCatalog.transcriptionKeys) { key in
                             ProviderStatusBadge(
                                 title: key.title,
-                                configured: !prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                configured: prefs.keyStatusCache[key.keychainKey] == true
                             )
                         }
                     }
@@ -43,7 +43,7 @@ struct CloudProvidersSection: View {
                         ForEach(CloudProviderCatalog.rewriteKeys) { key in
                             ProviderStatusBadge(
                                 title: key.title,
-                                configured: !prefs[keyPath: key.keyPath].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                configured: prefs.keyStatusCache[key.keychainKey] == true
                             )
                         }
                     }
