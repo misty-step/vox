@@ -107,7 +107,7 @@ def fmt_change(current: float, reference: float) -> str:
 def fmt_points(values: list[float]) -> str:
     if not values:
         return "—"
-    return " -> ".join(fmt_ms(value) for value in values)
+    return " → ".join(fmt_ms(value) for value in values)
 
 
 def fmt_chain(chain: list[dict[str, Any]]) -> str:
@@ -116,7 +116,7 @@ def fmt_chain(chain: list[dict[str, Any]]) -> str:
         provider = str(entry.get("provider") or "—")
         model = str(entry.get("model") or "")
         parts.append(f"{provider}({model})" if model else provider)
-    return " -> ".join(parts) if parts else "—"
+    return " → ".join(parts) if parts else "—"
 
 
 def fmt_usage(items: list[dict[str, Any]], max_items: int = 2) -> str:
@@ -382,6 +382,79 @@ def trend_series(
     return values[-max_points:]
 
 
+def render_summary_section(
+    lines: list[str],
+    snapshot: LaneSnapshot,
+    history_snapshots: list[LaneSnapshot],
+    base_snapshot: Optional[LaneSnapshot],
+    history_max: int,
+    head_sha: Optional[str],
+    base_sha: Optional[str],
+    base_mode: str,
+) -> None:
+    """Compact always-visible summary: one table row per level, regressions flagged."""
+    regressions: list[str] = []
+    table_rows: list[str] = []
+
+    for level in LEVELS:
+        row = snapshot.levels.get(level)
+        if row is None:
+            table_rows.append(f"| {level} | — | — | — |")
+            continue
+
+        p95_str = fmt_ms(row.generation.p95)
+
+        # vs base (master snapshot)
+        base_row = (
+            base_snapshot.levels.get(level)
+            if base_snapshot and base_snapshot.lane == snapshot.lane
+            else None
+        )
+        if base_row:
+            base_status = change_status(row.generation.p95, base_row.generation.p95)
+            vs_base = fmt_change(row.generation.p95, base_row.generation.p95)
+            if base_status == "regressed":
+                vs_base = f"**{vs_base}** ⚠️"
+                regressions.append(f"{level} (vs base)")
+        else:
+            vs_base = "—"
+
+        # vs prev in trend window (noise-gated)
+        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
+        if len(series) >= 2:
+            spread = variability(row.generation)
+            trend_status = change_status(series[-1], series[-2], noise=spread)
+            if trend_status == "neutral":
+                vs_trend = "neutral"
+            elif trend_status == "regressed":
+                vs_trend = f"**{fmt_change(series[-1], series[-2])}** ⚠️"
+                regressions.append(f"{level} (trend)")
+            else:
+                vs_trend = fmt_change(series[-1], series[-2])
+        else:
+            vs_trend = f"{len(series)} pt"
+
+        table_rows.append(f"| {level} | {p95_str} | {vs_base} | {vs_trend} |")
+
+    verdict = "no regressions" if not regressions else f"regression: {', '.join(regressions)}"
+    lines.append(f"## ⚡ Perf — {verdict}")
+    lines.append("")
+    lines.append("| level | p95 | vs base | vs trend |")
+    lines.append("| --- | ---: | --- | --- |")
+    lines.extend(table_rows)
+    lines.append("")
+
+    # One-line context footer
+    base_ref = short_sha(base_sha) if base_sha else "—"
+    base_note = "" if base_mode == "exact" else f" ({base_mode})" if base_mode != "missing" else " (no baseline)"
+    lines.append(
+        f"> `{snapshot.lane}` · {len(snapshot.fixtures)} fixture(s) · "
+        f"{snapshot.iterations_per_fixture}+{snapshot.warmup_per_fixture} iter · "
+        f"head `{short_sha(head_sha)}` · base `{base_ref}`{base_note}"
+    )
+    lines.append("")
+
+
 def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
     if not snapshot.fixtures:
         return
@@ -404,16 +477,14 @@ def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
     lines.append("")
 
 
-def render_lane_section(
+def render_lane_detail(
     lines: list[str],
-    title: str,
     snapshot: LaneSnapshot,
     history_snapshots: list[LaneSnapshot],
     history_max: int,
     base_snapshot: Optional[LaneSnapshot] = None,
 ) -> None:
-    lines.append(f"### {title}")
-    lines.append("")
+    """Detailed per-lane tables: stage breakdown, trend history, fixture breakdown, routing."""
     fixture_count = len(snapshot.fixtures)
     lines.append(
         f"Weighted aggregate across {fixture_count} fixture(s) by audio bytes; "
@@ -421,27 +492,7 @@ def render_lane_section(
     )
     lines.append("")
 
-    lines.append("| Level | Latest p95 | Status vs prev | Change vs prev | Confidence |")
-    lines.append("| --- | ---: | --- | --- | --- |")
-    for level in LEVELS:
-        row = snapshot.levels.get(level)
-        if row is None:
-            lines.append(f"| {level} | — | n/a | n/a | low |")
-            continue
-        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
-        if len(series) >= 2:
-            prev = series[-2]
-            spread = variability(row.generation)
-            status = change_status(series[-1], prev, noise=spread)
-            change = fmt_change(series[-1], prev)
-        else:
-            status = "n/a"
-            change = "n/a"
-        confidence = confidence_label(row.iterations, variability(row.generation), row.generation.p95)
-        lines.append(f"| {level} | {fmt_ms(row.generation.p95)} | {status} | {change} | {confidence} |")
-    lines.append("")
-
-    lines.append("| Level | Gen p50 | Gen p95 | Gen var (p95-p50) | STT p95 (var) | Rewrite p95 (var) | Encode p95 (var) | Dominant stage |")
+    lines.append("| Level | p50 | p95 | spread | STT p95 | Rewrite p95 | Encode p95 | Dominant |")
     lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for level in LEVELS:
         row = snapshot.levels.get(level)
@@ -449,72 +500,59 @@ def render_lane_section(
             lines.append(f"| {level} | — | — | — | — | — | — | — |")
             continue
         lines.append(
-            f"| {level} | {fmt_ms(row.generation.p50)} | {fmt_ms(row.generation.p95)} | {fmt_ms(variability(row.generation))} | "
-            f"{fmt_ms(row.stt.p95)} ({fmt_ms(variability(row.stt))}) | "
-            f"{fmt_ms(row.rewrite.p95)} ({fmt_ms(variability(row.rewrite))}) | "
-            f"{fmt_ms(row.encode.p95)} ({fmt_ms(variability(row.encode))}) | "
+            f"| {level} | {fmt_ms(row.generation.p50)} | {fmt_ms(row.generation.p95)} | "
+            f"{fmt_ms(variability(row.generation))} | "
+            f"{fmt_ms(row.stt.p95)} | "
+            f"{fmt_ms(row.rewrite.p95)} | "
+            f"{fmt_ms(row.encode.p95)} | "
             f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode)} |"
         )
     lines.append("")
 
-    lines.append("| Level | Runs | Latest | Vs mean | Vs best | Vs worst |")
-    lines.append("| --- | ---: | ---: | --- | --- | --- |")
+    lines.append("**Trend (generation p95, oldest → newest)**")
+    lines.append("")
+    lines.append("| Level | Points | Runs | Vs mean | Vs best |")
+    lines.append("| --- | --- | ---: | --- | --- |")
     for level in LEVELS:
         series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
         if not series:
-            lines.append(f"| {level} | 0 | — | n/a | n/a | n/a |")
+            lines.append(f"| {level} | — | 0 | — | — |")
             continue
         latest = series[-1]
         mean = sum(series) / len(series)
         best = min(series)
-        worst = max(series)
-        vs_best = "best in window" if int(round(latest - best)) == 0 else fmt_change(latest, best)
-        vs_worst = "worst in window" if int(round(latest - worst)) == 0 else fmt_change(latest, worst)
+        vs_best = "best" if int(round(latest - best)) == 0 else fmt_change(latest, best)
         lines.append(
-            f"| {level} | {len(series)} | {fmt_ms(latest)} | {fmt_change(latest, mean)} | {vs_best} | {vs_worst} |"
+            f"| {level} | {fmt_points(series)} | {len(series)} | "
+            f"{fmt_change(latest, mean)} | {vs_best} |"
         )
-    lines.append("")
-
-    lines.append("<details>")
-    lines.append(f"<summary>{title}: trend points (generation p95, oldest to newest)</summary>")
-    lines.append("")
-    lines.append("| Level | Points |")
-    lines.append("| --- | --- |")
-    for level in LEVELS:
-        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
-        lines.append(f"| {level} | {fmt_points(series)} |")
-    lines.append("")
-    lines.append("</details>")
     lines.append("")
 
     render_fixture_table(lines, snapshot)
 
     if base_snapshot and base_snapshot.lane == snapshot.lane:
-        lines.append("#### Base Branch Comparison (weighted)")
+        lines.append("**Base branch comparison**")
         lines.append("")
-        lines.append("| Level | p50 change | p95 change | Status |")
-        lines.append("| --- | --- | --- | --- |")
+        lines.append("| Level | p50 change | p95 change |")
+        lines.append("| --- | --- | --- |")
         for level in LEVELS:
             current_row = snapshot.levels.get(level)
             base_row = base_snapshot.levels.get(level)
             if not current_row or not base_row:
-                lines.append(f"| {level} | n/a | n/a | n/a |")
+                lines.append(f"| {level} | n/a | n/a |")
                 continue
-            status = change_status(current_row.generation.p95, base_row.generation.p95)
             lines.append(
                 f"| {level} | {fmt_change(current_row.generation.p50, base_row.generation.p50)} | "
-                f"{fmt_change(current_row.generation.p95, base_row.generation.p95)} | {status} |"
+                f"{fmt_change(current_row.generation.p95, base_row.generation.p95)} |"
             )
         lines.append("")
 
-    lines.append("<details>")
-    lines.append(f"<summary>{title}: routing + provider observations</summary>")
+    lines.append("**Routing**")
     lines.append("")
     lines.append("| Field | Value |")
     lines.append("| --- | --- |")
-    lines.append(f"| Lane | {snapshot.lane} |")
-    lines.append(f"| STT routing | mode={snapshot.stt_mode}, policy={snapshot.stt_policy}" + (f", forced={snapshot.stt_forced}" if snapshot.stt_forced else "") + f", chain={fmt_chain(snapshot.stt_chain)} |")
-    lines.append(f"| Rewrite routing | {snapshot.rewrite_routing} |")
+    lines.append(f"| STT | mode={snapshot.stt_mode}, policy={snapshot.stt_policy}" + (f", forced={snapshot.stt_forced}" if snapshot.stt_forced else "") + f", chain={fmt_chain(snapshot.stt_chain)} |")
+    lines.append(f"| Rewrite | {snapshot.rewrite_routing} |")
     lines.append("")
     lines.append("| Level | STT observed | Rewrite observed |")
     lines.append("| --- | --- | --- |")
@@ -524,8 +562,6 @@ def render_lane_section(
         stt_obs = providers.get("sttObserved") if isinstance(providers, dict) else []
         rw_obs = providers.get("rewriteObserved") if isinstance(providers, dict) else []
         lines.append(f"| {level} | {fmt_usage(stt_obs or [])} | {'—' if level == 'raw' else fmt_usage(rw_obs or [])} |")
-    lines.append("")
-    lines.append("</details>")
     lines.append("")
 
 
@@ -539,8 +575,8 @@ def main() -> None:
     ap.add_argument("--requested-base-sha", required=False, help="Requested base SHA")
     ap.add_argument("--base-mode", required=False, default="missing", help="exact|nearest_ancestor|missing")
     ap.add_argument("--head-sha", required=False, help="Head SHA display override")
-    ap.add_argument("--history-dir", required=False, help="Directory containing prior PR perf JSON files")
-    ap.add_argument("--history-max", required=False, type=int, default=10, help="Max points per trend series")
+    ap.add_argument("--history-dir", required=False, help="Directory containing prior perf JSON files (PR + master history)")
+    ap.add_argument("--history-max", required=False, type=int, default=15, help="Max points per trend series")
     args = ap.parse_args()
 
     head = load_json(Path(args.head))
@@ -575,73 +611,64 @@ def main() -> None:
     history_snapshots = [snapshot for run in trend_runs if (snapshot := build_snapshot(run)) is not None]
     history_max = max(2, args.history_max)
 
-    lines: list[str] = []
-    lines.append("<!-- vox-perf-audit -->")
-    lines.append("## Performance Report")
-    lines.append("")
-    lines.append("> Lower latency is better for every metric in this report.")
-    lines.append("> Generation = encode + STT + rewrite (paste is excluded from decisions in CI).")
-    lines.append("> Regression status rule: `regressed` means slower by both >200ms and >10% vs previous run, and the delta exceeds within-run measurement spread (noise floor).")
-    lines.append("")
-    lines.append(f"- Head: `{short_sha(head_sha)}`")
-    if base:
-        base_detail = f"`{short_sha(resolved_base_sha)}`"
-        if base_mode == "nearest_ancestor" and requested_base_sha and resolved_base_sha:
-            base_detail += f" (nearest ancestor of requested `{short_sha(requested_base_sha)}`)"
-        lines.append(f"- Base: {base_detail}")
-    elif requested_base_sha:
-        lines.append(f"- Base: `{short_sha(requested_base_sha)}` (not available in baseline store)")
-    lines.append("")
-
     provider_snapshot = snapshots.get("provider")
     codepath_snapshot = snapshots.get("codepath")
+    primary_snapshot = provider_snapshot or codepath_snapshot
 
-    if provider_snapshot:
-        render_lane_section(
+    lines: list[str] = []
+    lines.append("<!-- vox-perf-audit -->")
+
+    # ── Summary (always visible) ─────────────────────────────────────────────
+    if primary_snapshot:
+        render_summary_section(
             lines,
-            "Provider Perf (Live Network)",
+            primary_snapshot,
+            history_snapshots,
+            base_snapshot,
+            history_max,
+            head_sha=head_sha,
+            base_sha=resolved_base_sha,
+            base_mode=base_mode,
+        )
+
+    # ── Provider details (collapsible) ───────────────────────────────────────
+    if provider_snapshot:
+        detail_lines: list[str] = []
+        render_lane_detail(
+            detail_lines,
             provider_snapshot,
             history_snapshots,
             history_max,
             base_snapshot=base_snapshot,
         )
+        lines.append("<details>")
+        lines.append("<summary>Provider Perf — stage breakdown, trend history, routing</summary>")
+        lines.append("")
+        lines.extend(detail_lines)
+        lines.append("</details>")
+        lines.append("")
     else:
-        lines.append("### Provider Perf (Live Network)")
+        lines.append("<details>")
+        lines.append("<summary>Provider Perf — unavailable</summary>")
         lines.append("")
         lines.append("Provider lane unavailable in this run (likely missing CI secrets).")
         lines.append("")
+        lines.append("</details>")
+        lines.append("")
 
+    # ── Codepath details (collapsible) ───────────────────────────────────────
     if codepath_snapshot:
-        render_lane_section(
-            lines,
-            "Codepath Perf (Deterministic)",
+        cp_detail_lines: list[str] = []
+        render_lane_detail(
+            cp_detail_lines,
             codepath_snapshot,
             history_snapshots,
             history_max,
-            base_snapshot=None,
         )
-    else:
-        lines.append("### Codepath Perf (Deterministic)")
-        lines.append("")
-        lines.append("Codepath lane unavailable in this run.")
-        lines.append("")
-
-    lines.append("<details>")
-    lines.append("<summary>Head JSON (primary lane)</summary>")
-    lines.append("")
-    lines.append("```json")
-    lines.append(json.dumps(head, indent=2, sort_keys=True))
-    lines.append("```")
-    lines.append("</details>")
-    lines.append("")
-
-    if codepath_head:
         lines.append("<details>")
-        lines.append("<summary>Head JSON (codepath lane)</summary>")
+        lines.append("<summary>Codepath Perf (deterministic mock) — stage breakdown, trend history</summary>")
         lines.append("")
-        lines.append("```json")
-        lines.append(json.dumps(codepath_head, indent=2, sort_keys=True))
-        lines.append("```")
+        lines.extend(cp_detail_lines)
         lines.append("</details>")
         lines.append("")
 
