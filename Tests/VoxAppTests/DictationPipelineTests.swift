@@ -512,7 +512,7 @@ struct DictationPipelineTests {
     }
 
     @Test("Process falls back to CAF when Opus conversion throws")
-    func process_enableOpus_throwingConverter_fallsBackToCAF() async throws {
+    func test_process_enableOpus_fallsBackToCAF_whenConverterThrows() async throws {
         let stt = MockSTTProvider()
         stt.results = [.success("hello world")]
 
