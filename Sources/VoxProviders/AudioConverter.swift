@@ -23,7 +23,36 @@ public enum AudioConversionError: Error, LocalizedError {
     }
 }
 
+public struct OpusAvailability: Sendable {
+    public let isAvailable: Bool
+    public let unavailableReason: String?
+
+    public init(isAvailable: Bool, unavailableReason: String?) {
+        self.isAvailable = isAvailable
+        self.unavailableReason = unavailableReason
+    }
+}
+
 public enum AudioConverter {
+    public static let conversionExecutable = "/usr/bin/afconvert"
+    public static var conversionExecutableName: String {
+        URL(fileURLWithPath: conversionExecutable).lastPathComponent
+    }
+
+    public static func opusConversionAvailability() async -> OpusAvailability {
+        switch await cachedOpusConversionAvailability() {
+        case .available:
+            return OpusAvailability(isAvailable: true, unavailableReason: nil)
+        case .unavailable(let reason):
+            return OpusAvailability(isAvailable: false, unavailableReason: reason)
+        case .unknown:
+            return OpusAvailability(
+                isAvailable: false,
+                unavailableReason: "Opus conversion availability unknown"
+            )
+        }
+    }
+
     private enum OpusConversionAvailability {
         case unknown
         case available
@@ -31,7 +60,6 @@ public enum AudioConverter {
     }
 
     private static let opusBitrate = 32_000
-    private static let conversionExecutable = "/usr/bin/afconvert"
     private static let errorPreviewLimit = 500
     private static let availabilityState = OpusConversionAvailabilityState()
 
@@ -62,7 +90,7 @@ public enum AudioConverter {
     private static let processTimeout: TimeInterval = 30
 
     public static func isOpusConversionAvailable() async -> Bool {
-        switch await opusConversionAvailability() {
+        switch await cachedOpusConversionAvailability() {
         case .available:
             return true
         case .unavailable, .unknown:
@@ -71,7 +99,7 @@ public enum AudioConverter {
     }
 
     private static func assertOpusConversionAvailable() async throws {
-        switch await opusConversionAvailability() {
+        switch await cachedOpusConversionAvailability() {
         case .available:
             return
         case .unavailable(let reason):
@@ -81,7 +109,7 @@ public enum AudioConverter {
         }
     }
 
-    private static func opusConversionAvailability() async -> OpusConversionAvailability {
+    private static func cachedOpusConversionAvailability() async -> OpusConversionAvailability {
         let current = await availabilityState.currentAvailability()
         switch current {
         case .available, .unavailable:
@@ -91,7 +119,9 @@ public enum AudioConverter {
             let discovered = await task.value
 
             if let reason = await availabilityState.finishLookupIfNeeded(with: discovered) {
-                print("[AudioConverter] Opus conversion unavailable: \(reason)")
+                #if DEBUG
+                print("[AudioConverter] Opus unavailable: \(reason)")
+                #endif
             }
             return await availabilityState.currentAvailability()
         }
@@ -154,7 +184,7 @@ public enum AudioConverter {
                             let preview = sanitizedPreview(stderr, limit: errorPreviewLimit)
                             if let preview, !preview.isEmpty {
                                 #if DEBUG
-                                print("[AudioConverter] afconvert stderr: \(preview)")
+                                print("[AudioConverter] \(conversionExecutableName) stderr: \(preview)")
                                 #endif
                             }
                             continuation.resume(

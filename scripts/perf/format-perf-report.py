@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +42,7 @@ class LevelStats:
     stt: Dist
     rewrite: Dist
     encode: Dist
+    paste: Dist
 
 
 @dataclass(frozen=True)
@@ -142,12 +147,59 @@ def fmt_usage(items: list[dict[str, Any]], max_items: int = 2) -> str:
     return ", ".join(rendered)
 
 
+def load_changed_files(path: Optional[str]) -> list[str]:
+    if not path:
+        return []
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        print(f"[perf-report] failed to read changed files ({path}): {exc}", file=sys.stderr)
+        return []
+    return [line.strip() for line in lines if line.strip()]
+
+
+def stage_related_files(changed_files: list[str], stage: str, limit: int = 4) -> list[str]:
+    stage_patterns: dict[str, tuple[str, ...]] = {
+        "stt": (
+            r"sources/voxproviders/.*(stt|deepgram|elevenlabs|speechtranscriber|applespeech|providerassembly)",
+            r"sources/voxcore/.*(stt|fallbackstt|retryingstt|timeoutstt|hedgedstt|healthawarestt|concurrencylimitedstt)",
+            r"sources/voxappkit/dictationpipeline\.swift",
+        ),
+        "rewrite": (
+            r"sources/voxproviders/.*(rewrite|openrouter|gemini|foundationmodels|modelrouted)",
+            r"sources/voxcore/.*(rewrite|modelroutedrewrite)",
+            r"sources/voxappkit/dictationpipeline\.swift",
+        ),
+        "encode": (
+            r"sources/voxproviders/.*(audioconverter|opus|encode)",
+            r"sources/voxmac/.*(audioencoder|audiorecorder|capturedaudioinspector)",
+            r"sources/voxappkit/dictationpipeline\.swift",
+        ),
+        "paste": (
+            r"sources/voxmac/.*(clipboardpaster|hud)",
+            r"sources/voxappkit/.*(dictationpipeline|voxsession)",
+        ),
+    }
+    patterns = stage_patterns.get(stage, ())
+    if not patterns:
+        return []
+
+    hits: list[str] = []
+    for path in changed_files:
+        lower = path.lower()
+        if any(re.search(pattern, lower) for pattern in patterns):
+            hits.append(path)
+        if len(hits) >= limit:
+            break
+    return hits
+
+
 def variability(dist: Dist) -> float:
     return max(0.0, dist.p95 - dist.p50)
 
 
-def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist) -> str:
-    candidates = [("STT", stt.p95), ("Rewrite", rewrite.p95), ("Encode", encode.p95)]
+def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist, paste: Dist) -> str:
+    candidates = [("STT", stt.p95), ("Rewrite", rewrite.p95), ("Encode", encode.p95), ("Paste", paste.p95)]
     name, value = max(candidates, key=lambda item: item[1])
     share = (value / generation.p95 * 100) if generation.p95 > 0 else 0.0
     return f"{name} ({fmt_ms(value)}, {share:.0f}%)"
@@ -206,6 +258,7 @@ def level_stats_from_entry(level_entry: dict[str, Any]) -> LevelStats:
         stt=dist_from_level(level_entry, "sttMs"),
         rewrite=dist_from_level(level_entry, "rewriteMs"),
         encode=dist_from_level(level_entry, "encodeMs"),
+        paste=dist_from_level(level_entry, "pasteMs"),
     )
 
 
@@ -303,6 +356,7 @@ def build_snapshot(run: dict[str, Any]) -> Optional[LaneSnapshot]:
                 stt=weighted_dist([row.stt for row in level_rows], weights),
                 rewrite=weighted_dist([row.rewrite for row in level_rows], weights),
                 encode=weighted_dist([row.encode for row in level_rows], weights),
+                paste=weighted_dist([row.paste for row in level_rows], weights),
             )
     else:
         aggregated_levels = top_level_map
@@ -379,7 +433,163 @@ def trend_series(
             values.append(row.rewrite.p95)
         elif metric == "encode":
             values.append(row.encode.p95)
+        elif metric == "paste":
+            values.append(row.paste.p95)
     return values[-max_points:]
+
+
+def metric_value(row: LevelStats, metric: str) -> float:
+    if metric == "generation":
+        return row.generation.p95
+    if metric == "stt":
+        return row.stt.p95
+    if metric == "rewrite":
+        return row.rewrite.p95
+    if metric == "encode":
+        return row.encode.p95
+    if metric == "paste":
+        return row.paste.p95
+    return 0.0
+
+
+def lane_snapshots(history_snapshots: list[LaneSnapshot], lane: str) -> list[LaneSnapshot]:
+    return [snapshot for snapshot in history_snapshots if snapshot.lane == lane]
+
+
+def run_source_label(snapshot: LaneSnapshot) -> str:
+    pr_number = snapshot.run.get("pullRequestNumber")
+    if isinstance(pr_number, int) and pr_number > 0:
+        return f"PR #{pr_number}"
+    return "master"
+
+
+def run_timestamp_label(snapshot: LaneSnapshot) -> str:
+    parsed = parse_generated_at(snapshot.run.get("generatedAt"))
+    if parsed is None:
+        return "—"
+    return parsed.strftime("%Y-%m-%d %H:%M")
+
+
+def render_mermaid_trend_chart(lines: list[str], lane_history: list[LaneSnapshot], lane: str, max_points: int = 30) -> None:
+    if len(lane_history) < 2:
+        return
+
+    series_runs = lane_history[-max_points:]
+
+    def level_series(level: str) -> list[int]:
+        values: list[int] = []
+        for snapshot in series_runs:
+            row = snapshot.levels.get(level)
+            values.append(int(round(row.generation.p95)) if row else 0)
+        return values
+
+    raw_values = level_series("raw")
+    clean_values = level_series("clean")
+    polish_values = level_series("polish")
+    all_values = raw_values + clean_values + polish_values
+    y_max = max(all_values) if all_values else 0
+    y_upper = max(1000, ((y_max + 499) // 500) * 500)
+    x_axis = ", ".join(str(index + 1) for index in range(len(series_runs)))
+    lane_title = "Provider" if lane == "provider" else "Codepath"
+
+    lines.append("**Longitudinal chart (generation p95 by run order)**")
+    lines.append("")
+    lines.append("```mermaid")
+    lines.append("xychart-beta")
+    lines.append(f'    title "{lane_title} generation p95 trend (ms)"')
+    lines.append(f"    x-axis \"Run\" [{x_axis}]")
+    lines.append(f"    y-axis \"ms\" 0 --> {y_upper}")
+    lines.append(f"    line \"raw\" [{', '.join(str(value) for value in raw_values)}]")
+    lines.append(f"    line \"clean\" [{', '.join(str(value) for value in clean_values)}]")
+    lines.append(f"    line \"polish\" [{', '.join(str(value) for value in polish_values)}]")
+    lines.append("```")
+    lines.append("")
+
+
+def render_stage_metric_chart(
+    lines: list[str],
+    lane_history: list[LaneSnapshot],
+    lane: str,
+    metric: str,
+    title: str,
+    max_points: int = 30,
+) -> None:
+    if len(lane_history) < 2:
+        return
+
+    series_runs = lane_history[-max_points:]
+    level_names = ["raw", "clean", "polish"]
+    level_series: dict[str, list[int]] = {}
+    has_signal = False
+    for level in level_names:
+        points: list[int] = []
+        for snapshot in series_runs:
+            row = snapshot.levels.get(level)
+            value = int(round(metric_value(row, metric))) if row else 0
+            points.append(value)
+            if value > 0:
+                has_signal = True
+        level_series[level] = points
+
+    if not has_signal:
+        return
+
+    all_values = [value for points in level_series.values() for value in points]
+    y_max = max(all_values) if all_values else 0
+    y_upper = max(200, ((y_max + 99) // 100) * 100)
+    x_axis = ", ".join(str(index + 1) for index in range(len(series_runs)))
+    lane_title = "Provider" if lane == "provider" else "Codepath"
+
+    lines.append(f"**{title} (p95 by run order)**")
+    lines.append("")
+    lines.append("```mermaid")
+    lines.append("xychart-beta")
+    lines.append(f'    title "{lane_title} {title} p95 trend (ms)"')
+    lines.append(f"    x-axis \"Run\" [{x_axis}]")
+    lines.append(f"    y-axis \"ms\" 0 --> {y_upper}")
+    for level in level_names:
+        points = level_series[level]
+        lines.append(f"    line \"{level}\" [{', '.join(str(value) for value in points)}]")
+    lines.append("```")
+    lines.append("")
+
+
+def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot]) -> None:
+    if not lane_history:
+        lines.append("**Run timeline**")
+        lines.append("")
+        lines.append("No historical runs available for this lane.")
+        lines.append("")
+        return
+
+    start_label = run_timestamp_label(lane_history[0])
+    end_label = run_timestamp_label(lane_history[-1])
+    lines.append("**Run timeline (oldest → newest)**")
+    lines.append("")
+    lines.append(f"{len(lane_history)} runs from {start_label} to {end_label}.")
+    lines.append("")
+    lines.append("| idx | generatedAt (UTC) | source | commit | raw p95 | clean p95 | polish p95 | clean Δ vs prev |")
+    lines.append("| ---: | --- | --- | --- | ---: | ---: | ---: | --- |")
+
+    previous_clean: Optional[float] = None
+    for index, snapshot in enumerate(lane_history, start=1):
+        raw = snapshot.levels.get("raw")
+        clean = snapshot.levels.get("clean")
+        polish = snapshot.levels.get("polish")
+        clean_value = clean.generation.p95 if clean else 0.0
+        clean_delta = (
+            fmt_change(clean_value, previous_clean) if previous_clean is not None and clean else "—"
+        )
+        previous_clean = clean_value if clean else previous_clean
+        lines.append(
+            f"| {index} | {run_timestamp_label(snapshot)} | {run_source_label(snapshot)} | "
+            f"`{short_sha(snapshot.run.get('commitSHA'))}` | "
+            f"{fmt_ms(raw.generation.p95) if raw else '—'} | "
+            f"{fmt_ms(clean.generation.p95) if clean else '—'} | "
+            f"{fmt_ms(polish.generation.p95) if polish else '—'} | "
+            f"{clean_delta} |"
+        )
+    lines.append("")
 
 
 def render_summary_section(
@@ -452,7 +662,181 @@ def render_summary_section(
         f"{snapshot.iterations_per_fixture}+{snapshot.warmup_per_fixture} iter · "
         f"head `{short_sha(head_sha)}` · base `{base_ref}`{base_note}"
     )
+    lane_history = lane_snapshots(history_snapshots, snapshot.lane)
+    if lane_history:
+        first_label = run_timestamp_label(lane_history[0])
+        last_label = run_timestamp_label(lane_history[-1])
+        lines.append(
+            f"> trend coverage: {len(lane_history)} run(s) from {first_label} to {last_label}"
+        )
     lines.append("")
+
+
+def render_actionable_signals(
+    lines: list[str],
+    primary_snapshot: LaneSnapshot,
+    history_snapshots: list[LaneSnapshot],
+    history_max: int,
+    base_snapshot: Optional[LaneSnapshot],
+    codepath_snapshot: Optional[LaneSnapshot],
+    changed_files: list[str],
+) -> None:
+    lines.append("## Actionable Signals")
+    lines.append("")
+    findings: list[str] = []
+
+    for level in LEVELS:
+        row = primary_snapshot.levels.get(level)
+        if row is None:
+            continue
+
+        base_row = (
+            base_snapshot.levels.get(level)
+            if base_snapshot and base_snapshot.lane == primary_snapshot.lane
+            else None
+        )
+        if base_row is None:
+            continue
+
+        status = change_status(row.generation.p95, base_row.generation.p95)
+        if status != "regressed":
+            continue
+
+        total_delta = row.generation.p95 - base_row.generation.p95
+        stage_deltas = {
+            "stt": row.stt.p95 - base_row.stt.p95,
+            "rewrite": row.rewrite.p95 - base_row.rewrite.p95,
+            "encode": row.encode.p95 - base_row.encode.p95,
+            "paste": row.paste.p95 - base_row.paste.p95,
+        }
+        dominant_stage = max(stage_deltas, key=lambda stage: stage_deltas[stage])
+        dominant_delta = stage_deltas[dominant_stage]
+        contribution = (dominant_delta / total_delta * 100) if total_delta > 0 else 0.0
+
+        cross_lane_hint = ""
+        if primary_snapshot.lane == "provider" and codepath_snapshot:
+            codepath_row = codepath_snapshot.levels.get(level)
+            if codepath_row is not None:
+                codepath_series = trend_series(
+                    history_snapshots,
+                    "codepath",
+                    level,
+                    "generation",
+                    max_points=max(2, history_max),
+                )
+                if len(codepath_series) >= 2:
+                    codepath_trend = change_status(
+                        codepath_series[-1],
+                        codepath_series[-2],
+                        noise=variability(codepath_row.generation),
+                    )
+                    if codepath_trend == "neutral":
+                        cross_lane_hint = "codepath stable while provider regressed; likely external/provider variance."
+                    elif codepath_trend == "regressed":
+                        cross_lane_hint = "both provider and codepath moved; likely code-path change."
+
+        related_files = stage_related_files(changed_files, dominant_stage)
+        files_hint = ", ".join(f"`{path}`" for path in related_files) if related_files else "no stage-specific file match"
+        findings.append(
+            f"- `{level}` regressed by {fmt_change(row.generation.p95, base_row.generation.p95)}; "
+            f"largest stage delta is `{dominant_stage}` ({fmt_ms(dominant_delta)}, {contribution:.0f}% of net delta). "
+            f"Changed files: {files_hint}. {cross_lane_hint}".strip()
+        )
+
+    if not findings:
+        lines.append("- No level crossed regression thresholds versus base in this run.")
+    else:
+        lines.extend(findings)
+    lines.append("")
+
+
+def maybe_generate_llm_synthesis(
+    primary_snapshot: LaneSnapshot,
+    base_snapshot: Optional[LaneSnapshot],
+    codepath_snapshot: Optional[LaneSnapshot],
+    changed_files: list[str],
+) -> Optional[str]:
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    level_rows: list[dict[str, Any]] = []
+    for level in LEVELS:
+        current = primary_snapshot.levels.get(level)
+        if current is None:
+            continue
+        base = (
+            base_snapshot.levels.get(level)
+            if base_snapshot and base_snapshot.lane == primary_snapshot.lane
+            else None
+        )
+        level_rows.append(
+            {
+                "level": level,
+                "generation_p95_ms": int(round(current.generation.p95)),
+                "stt_p95_ms": int(round(current.stt.p95)),
+                "rewrite_p95_ms": int(round(current.rewrite.p95)),
+                "encode_p95_ms": int(round(current.encode.p95)),
+                "delta_vs_base_ms": (
+                    int(round(current.generation.p95 - base.generation.p95))
+                    if base is not None
+                    else None
+                ),
+            }
+        )
+
+    payload = {
+        "lane": primary_snapshot.lane,
+        "head": short_sha(primary_snapshot.run.get("commitSHA")),
+        "base": short_sha(base_snapshot.run.get("commitSHA")) if base_snapshot else None,
+        "levels": level_rows,
+        "codepath_present": codepath_snapshot is not None,
+        "changed_files": changed_files[:30],
+    }
+
+    prompt = (
+        "You are a performance reviewer for a CI benchmark report. "
+        "Return exactly 3 short bullets:\n"
+        "1) most likely cause of regression/speedup (stage + confidence),\n"
+        "2) strongest evidence from the provided metrics,\n"
+        "3) one concrete next validation step.\n"
+        "Do not mention unavailable data. Keep each bullet under 28 words.\n\n"
+        f"Data:\n{json.dumps(payload, separators=(',', ':'))}"
+    )
+
+    request_body = {
+        "model": "google/gemini-2.5-flash-lite",
+        "messages": [
+            {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 220,
+    }
+
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8")
+        decoded = json.loads(raw)
+        content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
+        if isinstance(content, list):
+            content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+        if not isinstance(content, str):
+            return None
+        cleaned = content.strip()
+        return cleaned[:1800] if cleaned else None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        return None
 
 
 def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
@@ -492,12 +876,12 @@ def render_lane_detail(
     )
     lines.append("")
 
-    lines.append("| Level | p50 | p95 | spread | STT p95 | Rewrite p95 | Encode p95 | Dominant |")
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    lines.append("| Level | p50 | p95 | spread | STT p95 | Rewrite p95 | Encode p95 | Paste p95 | Dominant |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for level in LEVELS:
         row = snapshot.levels.get(level)
         if row is None:
-            lines.append(f"| {level} | — | — | — | — | — | — | — |")
+            lines.append(f"| {level} | — | — | — | — | — | — | — | — |")
             continue
         lines.append(
             f"| {level} | {fmt_ms(row.generation.p50)} | {fmt_ms(row.generation.p95)} | "
@@ -505,7 +889,8 @@ def render_lane_detail(
             f"{fmt_ms(row.stt.p95)} | "
             f"{fmt_ms(row.rewrite.p95)} | "
             f"{fmt_ms(row.encode.p95)} | "
-            f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode)} |"
+            f"{fmt_ms(row.paste.p95)} | "
+            f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode, row.paste)} |"
         )
     lines.append("")
 
@@ -527,6 +912,14 @@ def render_lane_detail(
             f"{fmt_change(latest, mean)} | {vs_best} |"
         )
     lines.append("")
+
+    lane_history = lane_snapshots(history_snapshots, snapshot.lane)
+    render_mermaid_trend_chart(lines, lane_history, snapshot.lane)
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "stt", "STT")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
+    render_run_timeline(lines, lane_history)
 
     render_fixture_table(lines, snapshot)
 
@@ -576,7 +969,8 @@ def main() -> None:
     ap.add_argument("--base-mode", required=False, default="missing", help="exact|nearest_ancestor|missing")
     ap.add_argument("--head-sha", required=False, help="Head SHA display override")
     ap.add_argument("--history-dir", required=False, help="Directory containing prior perf JSON files (PR + master history)")
-    ap.add_argument("--history-max", required=False, type=int, default=15, help="Max points per trend series")
+    ap.add_argument("--history-max", required=False, type=int, default=60, help="Max points per trend series")
+    ap.add_argument("--changed-files", required=False, help="Optional path to changed-files list from git diff")
     args = ap.parse_args()
 
     head = load_json(Path(args.head))
@@ -604,6 +998,7 @@ def main() -> None:
     base_snapshot = build_snapshot(base) if base else None
 
     history_runs = load_history_runs(Path(args.history_dir)) if args.history_dir else []
+    changed_files = load_changed_files(args.changed_files)
     current_runs: list[dict[str, Any]] = [head]
     if codepath_head:
         current_runs.append(codepath_head)
@@ -630,6 +1025,26 @@ def main() -> None:
             base_sha=resolved_base_sha,
             base_mode=base_mode,
         )
+        render_actionable_signals(
+            lines,
+            primary_snapshot=primary_snapshot,
+            history_snapshots=history_snapshots,
+            history_max=history_max,
+            base_snapshot=base_snapshot,
+            codepath_snapshot=codepath_snapshot,
+            changed_files=changed_files,
+        )
+        llm_synthesis = maybe_generate_llm_synthesis(
+            primary_snapshot=primary_snapshot,
+            base_snapshot=base_snapshot,
+            codepath_snapshot=codepath_snapshot,
+            changed_files=changed_files,
+        )
+        if llm_synthesis:
+            lines.append("### LLM Synthesis (Experimental)")
+            lines.append("")
+            lines.append(llm_synthesis)
+            lines.append("")
 
     # ── Provider details (collapsible) ───────────────────────────────────────
     if provider_snapshot:

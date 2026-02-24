@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 import Testing
 @testable import VoxCore
+@testable import VoxProviders
 @testable import VoxAppKit
 
 // MARK: - Mocks
@@ -508,6 +509,43 @@ struct DictationPipelineTests {
         #expect(stt.callCount == 1)
         #expect(stt.lastAudioURL == audioURL)
         #expect(!FileManager.default.fileExists(atPath: convertedURL.path))
+    }
+
+    @Test("Process falls back to CAF when Opus conversion throws")
+    func test_process_enableOpus_fallsBackToCAF_whenConverterThrows() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .raw
+        let largeCAF = try makeCAF(frameCount: 8_000)
+        defer { try? FileManager.default.removeItem(at: largeCAF) }
+
+        let conversionFailure = AudioConversionError.conversionFailed(
+            exitCode: 1,
+            stderr: "afconvert conversion failed"
+        )
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            isOpusConversionEnabled: { true },
+            convertCAFToOpus: { _ in
+                throw conversionFailure
+            },
+            opusBypassThreshold: 0
+        )
+
+        let result = try await pipeline.process(audioURL: largeCAF)
+
+        #expect(result == "hello world")
+        #expect(stt.callCount == 1)
+        #expect(stt.lastAudioURL == largeCAF)
     }
 
     @Test("Process skips Opus conversion when converter is unavailable")
