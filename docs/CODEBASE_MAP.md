@@ -238,7 +238,7 @@ Cloud chain (all macOS versions):
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yml` | Push/PR to master | Lint → build → audio guardrails → tests → benchmark (PRs) |
-| `cerberus.yml` | PR opened/sync | 5 parallel AI reviewers → council verdict |
+| `cerberus.yml` | PR opened/sync/reopen/ready | Cerberus reusable workflow (master) with routed reviewer bench + verdict |
 | `eval-smoke.yml` | PR touching prompts/evals | promptfoo smoke eval → PR comment |
 | `eval-nightly.yml` | Weekday 06:00 UTC | Full eval suite (smoke + injection) |
 | `perf-audit.yml` | PR + push to master | Pipeline latency audit → baseline comparison → PR comment |
