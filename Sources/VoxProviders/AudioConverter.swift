@@ -23,20 +23,33 @@ public enum AudioConversionError: Error, LocalizedError {
     }
 }
 
+public struct OpusAvailability: Sendable {
+    public let isAvailable: Bool
+    public let unavailableReason: String?
+
+    public init(isAvailable: Bool, unavailableReason: String?) {
+        self.isAvailable = isAvailable
+        self.unavailableReason = unavailableReason
+    }
+}
+
 public enum AudioConverter {
     public static let conversionExecutable = "/usr/bin/afconvert"
     public static var conversionExecutableName: String {
         URL(fileURLWithPath: conversionExecutable).lastPathComponent
     }
 
-    public static func opusConversionAvailability() async -> (isAvailable: Bool, unavailableReason: String?) {
+    public static func opusConversionAvailability() async -> OpusAvailability {
         switch await cachedOpusConversionAvailability() {
         case .available:
-            return (isAvailable: true, unavailableReason: nil)
+            return OpusAvailability(isAvailable: true, unavailableReason: nil)
         case .unavailable(let reason):
-            return (isAvailable: false, unavailableReason: reason)
+            return OpusAvailability(isAvailable: false, unavailableReason: reason)
         case .unknown:
-            return (isAvailable: false, unavailableReason: "Opus conversion availability unknown")
+            return OpusAvailability(
+                isAvailable: false,
+                unavailableReason: "Opus conversion availability unknown"
+            )
         }
     }
 

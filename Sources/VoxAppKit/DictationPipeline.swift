@@ -54,10 +54,8 @@ private func formatBytes(_ bytes: Int) -> String {
 private actor OpusConversionUnavailableLogger {
     private var hasLogged = false
 
-    func shouldLogUnavailableMessage() -> Bool {
-        if hasLogged {
-            return false
-        }
+    func attemptLogOnce() -> Bool {
+        guard !hasLogged else { return false }
         hasLogged = true
         return true
     }
@@ -191,7 +189,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         SecureFileDeleter.delete(at: opusURL)
                     }
                 } else {
-                    if await Self.opusConversionUnavailableLogger.shouldLogUnavailableMessage(),
+                    if await Self.opusConversionUnavailableLogger.attemptLogOnce(),
                        let unavailable = await AudioConverter.opusConversionAvailability().unavailableReason {
                         print("[Pipeline] Opus unavailable: \(unavailable)")
                     }
