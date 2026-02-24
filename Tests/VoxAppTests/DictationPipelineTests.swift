@@ -382,6 +382,7 @@ struct DictationPipelineTests {
             paster: paster,
             prefs: prefs,
             enableOpus: true,
+            isOpusConversionEnabled: { true },
             convertCAFToOpus: { inputURL in
                 try await converter.convert(inputURL)
             },
@@ -458,6 +459,7 @@ struct DictationPipelineTests {
             paster: paster,
             prefs: prefs,
             enableOpus: true,
+            isOpusConversionEnabled: { true },
             convertCAFToOpus: { inputURL in
                 try await converter.convert(inputURL)
             },
@@ -492,6 +494,7 @@ struct DictationPipelineTests {
             paster: paster,
             prefs: prefs,
             enableOpus: true,
+            isOpusConversionEnabled: { true },
             convertCAFToOpus: { inputURL in
                 try await converter.convert(inputURL)
             },

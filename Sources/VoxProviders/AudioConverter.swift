@@ -33,10 +33,7 @@ public enum AudioConverter {
     private static let opusBitrate = 32_000
     private static let conversionExecutable = "/usr/bin/afconvert"
     private static let errorPreviewLimit = 500
-    private static let availabilityLock = NSLock()
-    private static var conversionAvailability: OpusConversionAvailability = .unknown
-    private static var availabilityLookupTask: Task<OpusConversionAvailability, Never>?
-    private static var didLogUnavailable = false
+    private static let availabilityState = OpusConversionAvailabilityState()
 
     public static func convertCAFToOpus(from inputURL: URL) async throws -> URL {
         try await assertOpusConversionAvailable()
@@ -85,44 +82,19 @@ public enum AudioConverter {
     }
 
     private static func opusConversionAvailability() async -> OpusConversionAvailability {
-        availabilityLock.lock()
-        let current = conversionAvailability
-        if case .available = current {
-            availabilityLock.unlock()
-            return .available
-        }
-        if case .unavailable = current {
-            availabilityLock.unlock()
+        let current = await availabilityState.currentAvailability()
+        switch current {
+        case .available, .unavailable:
             return current
-        }
-        if let task = availabilityLookupTask {
-            availabilityLock.unlock()
-            return await task.value
-        }
-        let task = Task { [conversionExecutable] in
-            let discovered = await probeOpusConversionAvailability(using: conversionExecutable)
-            availabilityLock.lock()
-            if case .unknown = conversionAvailability {
-                conversionAvailability = discovered
-                if case .unavailable(let reason) = discovered, !didLogUnavailable {
-                    print("[AudioConverter] Opus conversion unavailable: \(reason)")
-                    didLogUnavailable = true
-                }
+        case .unknown:
+            let task = await availabilityState.startLookupIfNeeded(using: conversionExecutable)
+            let discovered = await task.value
+
+            if let reason = await availabilityState.finishLookupIfNeeded(with: discovered) {
+                print("[AudioConverter] Opus conversion unavailable: \(reason)")
             }
-            availabilityLock.unlock()
-            return conversionAvailability
+            return await availabilityState.currentAvailability()
         }
-        availabilityLookupTask = task
-        availabilityLock.unlock()
-        let discovered = await task.value
-        availabilityLock.lock()
-        availabilityLookupTask = nil
-        if case .unavailable(let reason) = conversionAvailability, !didLogUnavailable {
-            print("[AudioConverter] Opus conversion unavailable: \(reason)")
-            didLogUnavailable = true
-        }
-        availabilityLock.unlock()
-        return discovered
     }
 
     private static func probeOpusConversionAvailability(using executable: String) async -> OpusConversionAvailability {
@@ -238,5 +210,37 @@ public enum AudioConverter {
             return nil
         }
         return String(value.prefix(limit))
+    }
+
+    private actor OpusConversionAvailabilityState {
+        private var conversionAvailability: OpusConversionAvailability = .unknown
+        private var lookupTask: Task<OpusConversionAvailability, Never>?
+        private var didLogUnavailable = false
+
+        func currentAvailability() -> OpusConversionAvailability {
+            conversionAvailability
+        }
+
+        func startLookupIfNeeded(using executable: String) -> Task<OpusConversionAvailability, Never> {
+            if let task = lookupTask {
+                return task
+            }
+            let task = Task { await AudioConverter.probeOpusConversionAvailability(using: executable) }
+            lookupTask = task
+            return task
+        }
+
+        func finishLookupIfNeeded(with discovered: OpusConversionAvailability) -> String? {
+            if case .unknown = conversionAvailability {
+                conversionAvailability = discovered
+            }
+            lookupTask = nil
+            if case .unavailable(let reason) = conversionAvailability,
+               !didLogUnavailable {
+                didLogUnavailable = true
+                return reason
+            }
+            return nil
+        }
     }
 }
