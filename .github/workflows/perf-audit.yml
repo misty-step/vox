@@ -6,6 +6,9 @@ on:
   push:
     branches: [master]
 
+env:
+  PERF_AUDIT_REPO: misty-step/vox-perf-audit
+
 jobs:
   pr:
     name: Perf Audit (PR Comment)
@@ -89,15 +92,26 @@ jobs:
           BASE_SHA_USED="$BASE_SHA"
           BASE_MODE="missing"
 
-          # Optional baseline: pulled from misty-step/vox-perf-audit (public, no token needed).
-          AUDIT_REPO="misty-step/vox-perf-audit"
+          # Optional baseline: pulled from dedicated perf audit store (public, no token needed).
+          AUDIT_REPO="${PERF_AUDIT_REPO}"
+
+          fetch_raw_content() {
+            local path="$1"
+            local dest="$2"
+            gh api \
+              -H "Accept: application/vnd.github.raw" \
+              "repos/${AUDIT_REPO}/contents/${path}" > "$dest" 2>/dev/null \
+              || {
+                rm -f "$dest"
+                return 1
+              }
+          }
 
           # Fetch PR history artifacts for trend context.
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             fname="$(basename "$path")"
-            gh api "repos/${AUDIT_REPO}/contents/${path}" --jq '.content | @base64d' \
-              > "$HISTORY_DIR/$fname" 2>/dev/null || rm -f "$HISTORY_DIR/$fname"
+            fetch_raw_content "$path" "$HISTORY_DIR/$fname" || true
           done < <(
             gh api "repos/${AUDIT_REPO}/contents/audit/pr/${PR_NUMBER}" \
               --jq '.[].path' 2>/dev/null | head -n 80 || true
@@ -120,13 +134,12 @@ jobs:
           # Provides cross-PR trend context so the chart isn't reset each PR.
           # Uses git log for correct chronological ordering (SHA sort ≠ time order).
           if [ -n "$AVAILABLE_SHAS" ]; then
+            git fetch --no-tags origin master >/dev/null 2>&1 || true
             _MASTER_COUNT=0
             while IFS= read -r sha; do
               [ -n "$sha" ] || continue
               if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$sha"; then
-                gh api "repos/${AUDIT_REPO}/contents/audit/${sha}.json" --jq '.content | @base64d' \
-                  > "$HISTORY_DIR/master-${sha}.json" 2>/dev/null \
-                  || rm -f "$HISTORY_DIR/master-${sha}.json"
+                fetch_raw_content "audit/${sha}.json" "$HISTORY_DIR/master-${sha}.json" || true
                 _MASTER_COUNT=$((_MASTER_COUNT + 1))
                 [ "$_MASTER_COUNT" -ge 15 ] && break
               fi
@@ -135,8 +148,7 @@ jobs:
 
           if [ -f "$PROVIDER_HEAD" ]; then
             # Try exact base SHA first.
-            if gh api "repos/${AUDIT_REPO}/contents/audit/${BASE_SHA}.json" \
-                --jq '.content | @base64d' > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
+            if fetch_raw_content "audit/${BASE_SHA}.json" "$BASE_JSON" && [ -s "$BASE_JSON" ]; then
               BASE_SHA_USED="$BASE_SHA"
               BASE_MODE="exact"
             else
@@ -145,8 +157,7 @@ jobs:
               while IFS= read -r candidate; do
                 [ -n "$candidate" ] || continue
                 if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$candidate"; then
-                  if gh api "repos/${AUDIT_REPO}/contents/audit/${candidate}.json" \
-                      --jq '.content | @base64d' > "$BASE_JSON" 2>/dev/null && [ -s "$BASE_JSON" ]; then
+                  if fetch_raw_content "audit/${candidate}.json" "$BASE_JSON" && [ -s "$BASE_JSON" ]; then
                     BASE_SHA_USED="$candidate"
                     BASE_MODE="nearest_ancestor"
                     break
@@ -254,25 +265,37 @@ jobs:
           fi
 
           SHA="${GITHUB_SHA}"
-          AUDIT_REPO="misty-step/vox-perf-audit"
+          AUDIT_REPO="${PERF_AUDIT_REPO}"
 
-          # base64 encode and upload via Contents API (create, idempotent on 422).
+          # Base64 encode and upload via Contents API (create, idempotent on 422).
+          PAYLOAD="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-upload.XXXXXX.json")"
           CONTENT="$(base64 < perf-out/head.json | tr -d '\n')"
+          jq -n \
+            --arg message "perf(audit): ${SHA}" \
+            --arg content "$CONTENT" \
+            '{
+              message: $message,
+              content: $content,
+              committer: {
+                name: "github-actions[bot]",
+                email: "41898282+github-actions[bot]@users.noreply.github.com"
+              }
+            }' > "$PAYLOAD"
+
           if HTTP_OUT="$(gh api \
             --method PUT \
             "repos/${AUDIT_REPO}/contents/audit/${SHA}.json" \
-            --field "message=perf(audit): ${SHA}" \
-            --field "content=${CONTENT}" \
-            --field "committer[name]=github-actions[bot]" \
-            --field "committer[email]=41898282+github-actions[bot]@users.noreply.github.com" \
+            --input "$PAYLOAD" \
             2>&1)"; then
             echo "Persisted audit/${SHA}.json to ${AUDIT_REPO}"
           elif echo "$HTTP_OUT" | grep -q "already exists"; then
             echo "Already exists: audit/${SHA}.json — skipping."
           else
             echo "ERROR uploading audit/${SHA}.json: $HTTP_OUT" >&2
+            rm -f "$PAYLOAD"
             exit 1
           fi
+          rm -f "$PAYLOAD"
 
       - name: Upload Artifacts
         if: always()

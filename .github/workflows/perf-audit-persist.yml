@@ -5,6 +5,9 @@ on:
     workflows: ['Perf: Audit']
     types: [completed]
 
+env:
+  PERF_AUDIT_REPO: misty-step/vox-perf-audit
+
 jobs:
   persist:
     name: Persist PR Perf JSON
@@ -86,23 +89,33 @@ jobs:
           fi
           SHA="$(printf '%s' "$SHA" | tr '[:upper:]' '[:lower:]')"
 
-          AUDIT_REPO="misty-step/vox-perf-audit"
+          AUDIT_REPO="${PERF_AUDIT_REPO}"
           ADDED=0
 
           upload_file() {
             local src="$1"
             local dest_path="$2"
             local msg="$3"
-            local content http_out
+            local content http_out payload
             content="$(base64 < "$src" | tr -d '\n')"
+            payload="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-upload.XXXXXX.json")"
+            jq -n \
+              --arg message "$msg" \
+              --arg content "$content" \
+              '{
+                message: $message,
+                content: $content,
+                committer: {
+                  name: "github-actions[bot]",
+                  email: "41898282+github-actions[bot]@users.noreply.github.com"
+                }
+              }' > "$payload"
             http_out="$(gh api \
               --method PUT \
               "repos/${AUDIT_REPO}/contents/${dest_path}" \
-              --field "message=${msg}" \
-              --field "content=${content}" \
-              --field "committer[name]=github-actions[bot]" \
-              --field "committer[email]=41898282+github-actions[bot]@users.noreply.github.com" \
+              --input "$payload" \
               2>&1)" || {
+                rm -f "$payload"
                 if echo "$http_out" | grep -q "already exists"; then
                   echo "Already exists: ${dest_path} — skipping."
                   return 0
@@ -110,6 +123,7 @@ jobs:
                 echo "ERROR uploading ${dest_path}: $http_out" >&2
                 return 1
               }
+            rm -f "$payload"
             echo "Persisted ${dest_path} to ${AUDIT_REPO}"
           }
 
