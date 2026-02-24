@@ -97,6 +97,10 @@ jobs:
             local dest_path="$2"
             local msg="$3"
             local content http_out payload
+            if gh api "repos/${AUDIT_REPO}/contents/${dest_path}" >/dev/null 2>&1; then
+              echo "Already exists: ${dest_path} — skipping."
+              return 0
+            fi
             content="$(base64 < "$src" | tr -d '\n')"
             payload="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-upload.XXXXXX.json")"
             jq -n \
@@ -116,7 +120,7 @@ jobs:
               --input "$payload" \
               2>&1)" || {
                 rm -f "$payload"
-                if echo "$http_out" | grep -q "already exists"; then
+                if echo "$http_out" | grep -Eqi "already exists|HTTP/[0-9.]+ 422|sha wasn't supplied"; then
                   echo "Already exists: ${dest_path} — skipping."
                   return 0
                 fi

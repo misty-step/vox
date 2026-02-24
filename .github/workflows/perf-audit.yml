@@ -129,6 +129,9 @@ jobs:
             AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
               --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
           fi
+          if [ -z "$AVAILABLE_SHAS" ]; then
+            echo "No baseline index from ${AUDIT_REPO}; continuing without persisted history."
+          fi
 
           # Master baseline history: last 15 master commits with persisted baselines.
           # Provides cross-PR trend context so the chart isn't reset each PR.
@@ -266,6 +269,12 @@ jobs:
 
           SHA="${GITHUB_SHA}"
           AUDIT_REPO="${PERF_AUDIT_REPO}"
+          DEST_PATH="audit/${SHA}.json"
+
+          if gh api "repos/${AUDIT_REPO}/contents/${DEST_PATH}" >/dev/null 2>&1; then
+            echo "Already exists: ${DEST_PATH} — skipping."
+            exit 0
+          fi
 
           # Base64 encode and upload via Contents API (create, idempotent on 422).
           PAYLOAD="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-upload.XXXXXX.json")"
@@ -284,14 +293,14 @@ jobs:
 
           if HTTP_OUT="$(gh api \
             --method PUT \
-            "repos/${AUDIT_REPO}/contents/audit/${SHA}.json" \
+            "repos/${AUDIT_REPO}/contents/${DEST_PATH}" \
             --input "$PAYLOAD" \
             2>&1)"; then
-            echo "Persisted audit/${SHA}.json to ${AUDIT_REPO}"
-          elif echo "$HTTP_OUT" | grep -q "already exists"; then
-            echo "Already exists: audit/${SHA}.json — skipping."
+            echo "Persisted ${DEST_PATH} to ${AUDIT_REPO}"
+          elif echo "$HTTP_OUT" | grep -Eqi "already exists|HTTP/[0-9.]+ 422|sha wasn't supplied"; then
+            echo "Already exists: ${DEST_PATH} — skipping."
           else
-            echo "ERROR uploading audit/${SHA}.json: $HTTP_OUT" >&2
+            echo "ERROR uploading ${DEST_PATH}: $HTTP_OUT" >&2
             rm -f "$PAYLOAD"
             exit 1
           fi
