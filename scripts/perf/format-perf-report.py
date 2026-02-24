@@ -804,39 +804,49 @@ def maybe_generate_llm_synthesis(
         f"Data:\n{json.dumps(payload, separators=(',', ':'))}"
     )
 
-    request_body = {
-        "model": "google/gemini-2.5-flash-lite",
-        "messages": [
-            {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 220,
-    }
+    synthesis_models = [
+        os.getenv("VOX_PERF_SYNTH_MODEL_PRIMARY", "google/gemini-3-flash-preview").strip(),
+        os.getenv("VOX_PERF_SYNTH_MODEL_FALLBACK", "google/gemini-2.5-flash").strip(),
+    ]
 
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(request_body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    for model in synthesis_models:
+        if not model:
+            continue
+        request_body = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 220,
+        }
 
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read().decode("utf-8")
-        decoded = json.loads(raw)
-        content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
-        if isinstance(content, list):
-            content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
-        if not isinstance(content, str):
-            return None
-        cleaned = content.strip()
-        return cleaned[:1800] if cleaned else None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
-        return None
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(request_body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                raw = resp.read().decode("utf-8")
+            decoded = json.loads(raw)
+            content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
+            if isinstance(content, list):
+                content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+            if not isinstance(content, str):
+                continue
+            cleaned = content.strip()
+            if cleaned:
+                return cleaned[:1800]
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+            continue
+    return None
 
 
 def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:

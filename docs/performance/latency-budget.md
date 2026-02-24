@@ -73,15 +73,14 @@ Outputs (dated):
 
 CI runs a live perf audit (real STT + rewrite) and posts a PR comment report.
 
-Durable JSON artifacts are persisted on the `perf-audit` branch:
+Durable JSON artifacts are persisted in `misty-step/vox-perf-audit`:
 - Baselines for `master`: `audit/<commit>.json`
 - PR heads: `audit/pr/<pr-number>/<commit>.json`
 
 Quick fetch example:
 
 ```bash
-git fetch origin perf-audit
-git show origin/perf-audit:audit/<commit>.json
+gh api -H "Accept: application/vnd.github.raw" repos/misty-step/vox-perf-audit/contents/audit/<commit>.json
 ```
 
 See `docs/performance/README.md` and `.github/workflows/perf-audit.yml`.

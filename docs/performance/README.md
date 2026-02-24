@@ -46,10 +46,12 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Includes per-phase trend charts for generation, STT, rewrite, encode, and paste p95.
 - Includes actionable synthesis tying regressions to stage deltas (`stt|rewrite|encode`) and touched files.
 - Includes optional LLM synthesis (OpenRouter) for concise hypothesis + next validation step; report generation fails open if the call is unavailable.
+- LLM synthesis model order defaults to `google/gemini-3-flash-preview` then `google/gemini-2.5-flash` fallback (override via `VOX_PERF_SYNTH_MODEL_PRIMARY` / `VOX_PERF_SYNTH_MODEL_FALLBACK`).
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.
 - On PR runs, persists `head.json` to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit) via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
-- PR artifact routing (`<pr>`, `<commit>`) is derived from trusted `workflow_run` event metadata, not from artifact JSON fields.
+- PR artifact routing (`<pr>`, `<commit>`) is derived from trusted GitHub metadata (`workflow_run` + commit→PR API fallback), not from artifact JSON fields.
+- A scheduled/manual backfill workflow (`.github/workflows/perf-audit-backfill.yml`) reconciles missed PR artifacts by replaying recent `Perf: Audit` runs.
 
 ## Perf Audit Store
 
