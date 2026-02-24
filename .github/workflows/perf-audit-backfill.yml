@@ -1,0 +1,66 @@
+name: 'Perf: Backfill Audit Store'
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'How many days of pull_request perf runs to scan'
+        required: false
+        default: '14'
+      max_runs:
+        description: 'Max completed pull_request runs to inspect (1-100)'
+        required: false
+        default: '100'
+      dry_run:
+        description: 'Do not write, only print planned uploads'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '35 07 * * *'
+
+env:
+  PERF_AUDIT_REPO: misty-step/vox-perf-audit
+
+jobs:
+  backfill:
+    name: Backfill Missing PR Perf JSON
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Backfill To vox-perf-audit
+        env:
+          GH_TOKEN: ${{ secrets.PERF_AUDIT_TOKEN }}
+          SOURCE_REPO: ${{ github.repository }}
+          INPUT_DAYS: ${{ inputs.days }}
+          INPUT_MAX_RUNS: ${{ inputs.max_runs }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::PERF_AUDIT_TOKEN not set; cannot backfill vox-perf-audit."
+            exit 1
+          fi
+
+          DAYS="${INPUT_DAYS:-14}"
+          MAX_RUNS="${INPUT_MAX_RUNS:-100}"
+          DRY_RUN_FLAG=""
+          if [ "${INPUT_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          bash scripts/perf/backfill-perf-audit.sh \
+            --source-repo "${SOURCE_REPO}" \
+            --audit-repo "${PERF_AUDIT_REPO}" \
+            --days "${DAYS}" \
+            --max-runs "${MAX_RUNS}" \
+            ${DRY_RUN_FLAG}

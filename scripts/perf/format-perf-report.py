@@ -554,7 +554,7 @@ def render_stage_metric_chart(
     lines.append("")
 
 
-def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot]) -> None:
+def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot], max_rows: int = 60) -> None:
     if not lane_history:
         lines.append("**Run timeline**")
         lines.append("")
@@ -564,15 +564,23 @@ def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot]) -> N
 
     start_label = run_timestamp_label(lane_history[0])
     end_label = run_timestamp_label(lane_history[-1])
+    series_runs = lane_history[-max(1, max_rows):]
+    start_index = len(lane_history) - len(series_runs) + 1
     lines.append("**Run timeline (oldest → newest)**")
     lines.append("")
-    lines.append(f"{len(lane_history)} runs from {start_label} to {end_label}.")
+    if len(series_runs) < len(lane_history):
+        lines.append(
+            f"{len(lane_history)} runs from {start_label} to {end_label} "
+            f"(showing latest {len(series_runs)})."
+        )
+    else:
+        lines.append(f"{len(lane_history)} runs from {start_label} to {end_label}.")
     lines.append("")
     lines.append("| idx | generatedAt (UTC) | source | commit | raw p95 | clean p95 | polish p95 | clean Δ vs prev |")
     lines.append("| ---: | --- | --- | --- | ---: | ---: | ---: | --- |")
 
     previous_clean: Optional[float] = None
-    for index, snapshot in enumerate(lane_history, start=1):
+    for index, snapshot in enumerate(series_runs, start=start_index):
         raw = snapshot.levels.get("raw")
         clean = snapshot.levels.get("clean")
         polish = snapshot.levels.get("polish")
@@ -804,39 +812,49 @@ def maybe_generate_llm_synthesis(
         f"Data:\n{json.dumps(payload, separators=(',', ':'))}"
     )
 
-    request_body = {
-        "model": "google/gemini-2.5-flash-lite",
-        "messages": [
-            {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 220,
-    }
+    synthesis_models = [
+        os.getenv("VOX_PERF_SYNTH_MODEL_PRIMARY", "google/gemini-3-flash-preview").strip(),
+        os.getenv("VOX_PERF_SYNTH_MODEL_FALLBACK", "google/gemini-2.5-flash").strip(),
+    ]
 
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(request_body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    for model in synthesis_models:
+        if not model:
+            continue
+        request_body = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 220,
+        }
 
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            raw = resp.read().decode("utf-8")
-        decoded = json.loads(raw)
-        content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
-        if isinstance(content, list):
-            content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
-        if not isinstance(content, str):
-            return None
-        cleaned = content.strip()
-        return cleaned[:1800] if cleaned else None
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
-        return None
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(request_body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                raw = resp.read().decode("utf-8")
+            decoded = json.loads(raw)
+            content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
+            if isinstance(content, list):
+                content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+            if not isinstance(content, str):
+                continue
+            cleaned = content.strip()
+            if cleaned:
+                return cleaned[:1800]
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, UnicodeDecodeError):
+            continue
+    return None
 
 
 def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
@@ -919,7 +937,7 @@ def render_lane_detail(
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
-    render_run_timeline(lines, lane_history)
+    render_run_timeline(lines, lane_history, max_rows=max(10, history_max))
 
     render_fixture_table(lines, snapshot)
 
