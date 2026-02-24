@@ -26,21 +26,18 @@ Last updated: February 2026
 
 ## Recommendation
 
-**Primary (Clean): `gemini-2.5-flash-lite` (Gemini direct)**
-- Fastest production model (392 tok/s, 0.29s time-to-first-token)
-- Thinking disabled by default (no wasted reasoning tokens)
-- 1M context window
-- Very affordable
+**Primary (Clean): `inception/mercury` (OpenRouter)**
+- Lowest p95 latency in the latest in-repo bakeoff (`rewrite-model-bakeoff-2026-02-24-gemini-vs-mercury-20260224.md`)
+- Stable non-empty outputs across clean samples in that run
 
-**Primary (Polish): `x-ai/grok-4.1-fast` (OpenRouter)**
-- Best polish pass-rate in Promptfoo bakeoff (10/10 on `evals/datasets/polish.yaml`)
-- Very low cost relative to premium models
-- Good latency despite higher-quality rewrites
+**Primary (Polish): `inception/mercury` (OpenRouter)**
+- Lowest p95 latency in the same bakeoff
+- Fewer malformed outputs than `gemini-2.5-flash-lite` in that run
 
 Implementation note: rewriting is model-routed via `ModelRoutedRewriteProvider`:
 - Gemini models go to Gemini direct when configured
 - Non-Google models (with provider prefix) go to OpenRouter
-- If OpenRouter is unavailable, polish falls back to Gemini so UX still works
+- If OpenRouter is unavailable, best-effort fallback uses Gemini (`gemini-2.5-flash-lite`) so UX still works
 
 **Fallback options (if Gemini has issues):**
 1. `openai/gpt-4.1-nano`
@@ -52,8 +49,8 @@ Implementation note: rewriting is model-routed via `ModelRoutedRewriteProvider`:
 See `docs/performance/rewrite-model-bakeoff-2026-02-09.md` for measured p50/p95 latency, cost, and `RewriteQualityGate` pass-rate across candidate models.
 
 Outcome:
-- `clean` default: `gemini-2.5-flash-lite`
-- `polish` default: `x-ai/grok-4.1-fast`
+- `clean` default: `inception/mercury`
+- `polish` default: `inception/mercury`
 
 Expanded bakeoff: `docs/performance/rewrite-model-bakeoff-2026-02-09-expanded.md`
 - Legacy naming: `Light` → `Clean`, `Aggressive` → `Polish`, `Enhance` → removed (legacy `enhance` maps to `clean`).

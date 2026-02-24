@@ -181,7 +181,7 @@ public enum ProviderAssembly {
             return ModelRoutedRewriteProvider(
                 gemini: instrumented,
                 openRouter: openRouter,
-                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
+                fallbackGeminiModel: ProcessingLevel.defaultGeminiFallbackModel
             )
         case let (nil, or?):
             return or
