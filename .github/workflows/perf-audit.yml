@@ -83,14 +83,16 @@ jobs:
             cp "$CODEPATH_HEAD" "$PRIMARY_HEAD"
           fi
 
-          # Combined history dir: per-PR runs + recent master baselines.
-          # Both sources are needed so the trend spans actual project history,
-          # not just the 2-3 commits in the current PR.
+          # Combined history dir: cross-PR runs + master baselines.
+          # This is intentionally longitudinal so perf comments can show
+          # trends over time (not just the current PR commit range).
           HISTORY_DIR="$OUT_DIR/history"
           mkdir -p "$HISTORY_DIR"
           BASE_JSON="$OUT_DIR/base.json"
           BASE_SHA_USED="$BASE_SHA"
           BASE_MODE="missing"
+          CHANGED_FILES="$OUT_DIR/changed-files.txt"
+          git diff --name-only "$BASE_SHA" "$GITHUB_SHA" > "$CHANGED_FILES" || true
 
           # Optional baseline: pulled from dedicated perf audit store (public, no token needed).
           AUDIT_REPO="${PERF_AUDIT_REPO}"
@@ -107,16 +109,6 @@ jobs:
               }
           }
 
-          # Fetch PR history artifacts for trend context.
-          while IFS= read -r path; do
-            [ -n "$path" ] || continue
-            fname="$(basename "$path")"
-            fetch_raw_content "$path" "$HISTORY_DIR/$fname" || true
-          done < <(
-            gh api "repos/${AUDIT_REPO}/contents/audit/pr/${PR_NUMBER}" \
-              --jq '.[].path' 2>/dev/null | head -n 80 || true
-          )
-
           # Pre-fetch baseline SHA listing once via Git Trees API.
           # Query the audit subtree directly to avoid huge root-tree payloads.
           _AUDIT_DEFAULT="$(gh api "repos/${AUDIT_REPO}" --jq '.default_branch' 2>/dev/null || echo 'main')"
@@ -125,15 +117,31 @@ jobs:
           if [ -n "$_AUDIT_TREE_SHA" ]; then
             AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_TREE_SHA}?recursive=1" \
               --jq '[.tree[] | select(.path | test("^[^/]+\\.json$")) | .path | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+            PR_HISTORY_PATHS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_TREE_SHA}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^pr/[0-9]+/.+\\.json$")) | .path] | join("\n")' 2>/dev/null || true)"
           else
             AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
               --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+            PR_HISTORY_PATHS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^audit/pr/[0-9]+/.+\\.json$")) | .path | ltrimstr("audit/")] | join("\n")' 2>/dev/null || true)"
           fi
           if [ -z "$AVAILABLE_SHAS" ]; then
             echo "No baseline index from ${AUDIT_REPO}; continuing without persisted history."
           fi
 
-          # Master baseline history: last 15 master commits with persisted baselines.
+          # Cross-PR history: include historical PR runs (bounded) for trend context.
+          PR_HISTORY_MAX=500
+          PR_HISTORY_TOTAL="$(printf '%s\n' "$PR_HISTORY_PATHS" | sed '/^$/d' | wc -l | tr -d ' ')"
+          if [ "${PR_HISTORY_TOTAL:-0}" -gt "$PR_HISTORY_MAX" ]; then
+            echo "PR history has ${PR_HISTORY_TOTAL} files; truncating to ${PR_HISTORY_MAX}."
+          fi
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            fname="$(printf '%s' "$path" | tr '/' '_')"
+            fetch_raw_content "audit/${path}" "$HISTORY_DIR/pr-${fname}" || true
+          done < <(printf '%s\n' "$PR_HISTORY_PATHS" | sed '/^$/d' | tail -n "$PR_HISTORY_MAX")
+
+          # Master baseline history: last 60 master commits with persisted baselines.
           # Provides cross-PR trend context so the chart isn't reset each PR.
           # Uses git log for correct chronological ordering (SHA sort ≠ time order).
           if [ -n "$AVAILABLE_SHAS" ]; then
@@ -144,7 +152,7 @@ jobs:
               if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$sha"; then
                 fetch_raw_content "audit/${sha}.json" "$HISTORY_DIR/master-${sha}.json" || true
                 _MASTER_COUNT=$((_MASTER_COUNT + 1))
-                [ "$_MASTER_COUNT" -ge 15 ] && break
+                [ "$_MASTER_COUNT" -ge 60 ] && break
               fi
             done < <(git log --first-parent origin/master --format="%H" 2>/dev/null | head -n 200 || true)
           fi
@@ -174,9 +182,11 @@ jobs:
             --head "$PRIMARY_HEAD"
             --head-sha "$GITHUB_SHA"
             --history-dir "$HISTORY_DIR"
+            --history-max 60
             --requested-base-sha "$BASE_SHA"
             --base-sha "$BASE_SHA_USED"
             --base-mode "$BASE_MODE"
+            --changed-files "$CHANGED_FILES"
             --out "$OUT_DIR/report.md"
           )
           if [ -f "$CODEPATH_HEAD" ] && [ -f "$PROVIDER_HEAD" ]; then

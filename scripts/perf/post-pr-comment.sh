@@ -24,14 +24,17 @@ if [ -z "${GITHUB_REPOSITORY:-}" ]; then
   exit 2
 fi
 
-# Delete previous perf comment if it exists (match marker).
-COMMENT_ID="$(gh api \
+# Delete all prior perf comments if they exist (match marker).
+COMMENT_IDS="$(gh api \
   repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments \
   --jq '.[] | select(.body | contains("<!-- vox-perf-audit -->")) | .id' \
-  2>/dev/null | head -1 || true)"
+  2>/dev/null || true)"
 
-if [ -n "$COMMENT_ID" ]; then
-  gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" -X DELETE 2>/dev/null || true
+if [ -n "$COMMENT_IDS" ]; then
+  while IFS= read -r comment_id; do
+    [ -n "$comment_id" ] || continue
+    gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" -X DELETE 2>/dev/null || true
+  done <<< "$COMMENT_IDS"
 fi
 
 gh pr comment "$PR_NUMBER" --body-file "$REPORT_PATH"
