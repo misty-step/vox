@@ -4,6 +4,13 @@ import XCTest
 @testable import VoxProviders
 
 final class AudioConverterTests: XCTestCase {
+    func test_isOpusConversionAvailable_isStableAcrossCalls() async {
+        let firstResult = await AudioConverter.isOpusConversionAvailable()
+        let secondResult = await AudioConverter.isOpusConversionAvailable()
+
+        XCTAssertEqual(firstResult, secondResult)
+    }
+
     func test_convertCAFToOpus_outputIsSmallerThanInput() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 60.0)
         defer { try? FileManager.default.removeItem(at: cafURL) }

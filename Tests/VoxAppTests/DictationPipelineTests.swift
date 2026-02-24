@@ -507,6 +507,43 @@ struct DictationPipelineTests {
         #expect(!FileManager.default.fileExists(atPath: convertedURL.path))
     }
 
+    @Test("Process skips Opus conversion when converter is unavailable")
+    func process_opusUnavailable_usesCAF() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let rewriter = MockRewriteProvider()
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .raw
+        let convertedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("converted-\(UUID().uuidString)")
+            .appendingPathExtension("ogg")
+        FileManager.default.createFile(atPath: convertedURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: convertedURL) }
+        let converter = MockAudioConverter(outputURL: convertedURL)
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: rewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: true,
+            isOpusConversionEnabled: { false },
+            convertCAFToOpus: { inputURL in
+                try await converter.convert(inputURL)
+            },
+            opusBypassThreshold: 0
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "hello world")
+        #expect(converter.callCount == 0)
+        #expect(stt.callCount == 1)
+        #expect(stt.lastAudioURL == audioURL)
+    }
+
     @Test("Process with clean processing - rewrite succeeds")
     func test_process_cleanRewrite_succeeds() async throws {
         let stt = MockSTTProvider()

@@ -62,6 +62,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     private let enableOpus: Bool
     private let opusBypassThreshold: Int
     private let enableRewriteCache: Bool
+    private let isOpusConversionEnabled: @Sendable () async -> Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
     // Internal seam for tests/benchmarks; default path uses CapturedAudioInspector.
     private let audioFrameValidator: @Sendable (URL) throws -> Void
@@ -79,6 +80,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         prefs: PreferencesReading? = nil,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
+        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = {
+            await AudioConverter.isOpusConversionAvailable()
+        },
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
@@ -95,6 +99,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             rewriteCache: .shared,
             enableRewriteCache: enableRewriteCache,
             enableOpus: enableOpus,
+            isOpusConversionEnabled: isOpusConversionEnabled,
             convertCAFToOpus: convertCAFToOpus,
             opusBypassThreshold: opusBypassThreshold,
             pipelineTimeout: pipelineTimeout,
@@ -112,6 +117,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         rewriteCache: RewriteResultCache,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
+        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = {
+            await AudioConverter.isOpusConversionAvailable()
+        },
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { inputURL in
             try await AudioConverter.convertCAFToOpus(from: inputURL)
         },
@@ -132,6 +140,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         self.enableRewriteCache = enableRewriteCache
         self.enableOpus = enableOpus
         self.opusBypassThreshold = opusBypassThreshold
+        self.isOpusConversionEnabled = isOpusConversionEnabled
         self.convertCAFToOpus = convertCAFToOpus
         self.pipelineTimeout = pipelineTimeout
         self.rewriteStageTimeouts = rewriteStageTimeouts
@@ -157,15 +166,19 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         if enableOpus, isCAF, timing.originalSizeBytes >= opusBypassThreshold {
             let encodeStart = CFAbsoluteTimeGetCurrent()
             do {
-                let opusURL = try await convertCAFToOpus(audioURL)
-                let attrs = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
-                timing.encodedSizeBytes = attrs?[.size] as? Int ?? 0
-                if timing.encodedSizeBytes > 0 {
-                    uploadURL = opusURL
+                if await isOpusConversionEnabled() {
+                    let opusURL = try await convertCAFToOpus(audioURL)
+                    let attrs = try? FileManager.default.attributesOfItem(atPath: opusURL.path)
+                    timing.encodedSizeBytes = attrs?[.size] as? Int ?? 0
+                    if timing.encodedSizeBytes > 0 {
+                        uploadURL = opusURL
+                    } else {
+                        print("[Pipeline] Opus conversion produced empty output, using CAF fallback")
+                        uploadURL = audioURL
+                        SecureFileDeleter.delete(at: opusURL)
+                    }
                 } else {
-                    print("[Pipeline] Opus conversion produced empty output, using CAF fallback")
                     uploadURL = audioURL
-                    SecureFileDeleter.delete(at: opusURL)
                 }
             } catch {
                 print("[Pipeline] Opus conversion failed: \(error.localizedDescription), using CAF fallback")

@@ -365,6 +365,11 @@ extension DiagnosticsStore {
         var fields = additional
         fields["error_code"] = .string(errorCode(for: error))
         fields["error_type"] = .string(String(describing: type(of: error)))
+        if let audioConversionError = error as? AudioConversionError {
+            for (key, value) in audioConversionError.diagnosticsPayload {
+                fields[key] = value
+            }
+        }
         return fields
     }
 
@@ -453,8 +458,27 @@ private extension AudioConversionError {
             return "launch_failed"
         case .conversionFailed:
             return "conversion_failed"
+        case .converterUnavailable:
+            return "converter_unavailable"
         case .emptyOutput:
             return "empty_output"
+        }
+    }
+
+    var diagnosticsPayload: [String: DiagnosticsValue] {
+        switch self {
+        case .launchFailed(let underlying):
+            return ["launch_error": .string(underlying.localizedDescription)]
+        case .conversionFailed(_, let stderr):
+            var fields: [String: DiagnosticsValue] = [:]
+            if let stderr {
+                fields["conversion_stderr"] = .string(stderr)
+            }
+            return fields
+        case .converterUnavailable(let reason):
+            return ["converter_unavailable_reason": .string(reason)]
+        case .emptyOutput:
+            return ["conversion_output_empty": .bool(true)]
         }
     }
 }
