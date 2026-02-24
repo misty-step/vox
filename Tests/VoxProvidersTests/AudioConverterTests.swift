@@ -11,6 +11,19 @@ final class AudioConverterTests: XCTestCase {
         XCTAssertEqual(firstResult, secondResult)
     }
 
+    func test_opusConversionAvailability_returnsAvailabilityAndReason() async {
+        let status = await AudioConverter.opusConversionAvailability()
+        let cachedAvailable = await AudioConverter.isOpusConversionAvailable()
+
+        if status.isAvailable {
+            XCTAssertNil(status.unavailableReason)
+        } else {
+            XCTAssertNotNil(status.unavailableReason)
+            XCTAssertFalse(status.unavailableReason!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        XCTAssertEqual(status.isAvailable, cachedAvailable)
+    }
+
     func test_convertCAFToOpus_outputIsSmallerThanInput() async throws {
         let cafURL = try makeTestCAF(durationSeconds: 60.0)
         defer { try? FileManager.default.removeItem(at: cafURL) }

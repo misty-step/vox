@@ -468,15 +468,24 @@ private extension AudioConversionError {
     var diagnosticsPayload: [String: DiagnosticsValue] {
         switch self {
         case .launchFailed(let underlying):
-            return ["launch_error": .string(underlying.localizedDescription)]
-        case .conversionFailed(_, let stderr):
-            var fields: [String: DiagnosticsValue] = [:]
+            return [
+                "conversion_tool": .string(AudioConverter.conversionExecutableName),
+                "launch_error": .string(underlying.localizedDescription),
+            ]
+        case .conversionFailed(let exitCode, let stderr):
+            var fields: [String: DiagnosticsValue] = [
+                "conversion_tool": .string(AudioConverter.conversionExecutableName),
+                "conversion_exit_code": .int(Int(exitCode)),
+            ]
             if let stderr {
                 fields["conversion_stderr"] = .string(stderr)
             }
             return fields
         case .converterUnavailable(let reason):
-            return ["converter_unavailable_reason": .string(reason)]
+            return [
+                "conversion_tool": .string(AudioConverter.conversionExecutableName),
+                "converter_unavailable_reason": .string(reason),
+            ]
         case .emptyOutput:
             return ["conversion_output_empty": .bool(true)]
         }

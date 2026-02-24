@@ -51,6 +51,18 @@ private func formatBytes(_ bytes: Int) -> String {
     return String(format: "%.1fMB", Double(bytes) / (1024 * 1024))
 }
 
+private actor OpusConversionUnavailableLogger {
+    private var hasLogged = false
+
+    func shouldLogUnavailableMessage() -> Bool {
+        if hasLogged {
+            return false
+        }
+        hasLogged = true
+        return true
+    }
+}
+
 public final class DictationPipeline: DictationProcessing, TranscriptRecoveryProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
@@ -64,6 +76,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     private let enableRewriteCache: Bool
     private let isOpusConversionEnabled: @Sendable () async -> Bool
     private let convertCAFToOpus: @Sendable (URL) async throws -> URL
+    private static let opusConversionUnavailableLogger = OpusConversionUnavailableLogger()
     // Internal seam for tests/benchmarks; default path uses CapturedAudioInspector.
     private let audioFrameValidator: @Sendable (URL) throws -> Void
     // Invoked once per process call. On failures it receives partial stage timings.
@@ -178,10 +191,24 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         SecureFileDeleter.delete(at: opusURL)
                     }
                 } else {
+                    if await Self.opusConversionUnavailableLogger.shouldLogUnavailableMessage(),
+                       let unavailable = await AudioConverter.opusConversionAvailability().unavailableReason {
+                        print("[Pipeline] Opus unavailable: \(unavailable)")
+                    }
                     uploadURL = audioURL
                 }
             } catch {
-                print("[Pipeline] Opus conversion failed: \(error.localizedDescription), using CAF fallback")
+                print("[Pipeline] Opus conversion skipped, using CAF fallback")
+                #if DEBUG
+                print("[Pipeline] Opus conversion failed: \(error.localizedDescription)")
+                #endif
+                DiagnosticsStore.recordAsync(
+                    name: "opus_conversion_fallback",
+                    fields: DiagnosticsStore.errorFields(
+                        for: error,
+                        additional: ["conversion_stage": .string("opus")]
+                    )
+                )
                 uploadURL = audioURL
             }
             timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
