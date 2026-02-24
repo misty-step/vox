@@ -12,7 +12,7 @@ fi
 
 expect_contains() {
   local needle="$1"
-  if ! rg -n --fixed-strings "$needle" "$workflow" >/dev/null; then
+  if ! grep -nF "$needle" "$workflow" >/dev/null; then
     echo "[cerberus-lint] Expected line missing: $needle" >&2
     exit 1
   fi
@@ -20,7 +20,7 @@ expect_contains() {
 
 expect_absent() {
   local pattern="$1"
-  if rg -n "$pattern" "$workflow" >/dev/null; then
+  if grep -nE "$pattern" "$workflow" >/dev/null; then
     echo "[cerberus-lint] Forbidden legacy token matched: $pattern" >&2
     exit 1
   fi
