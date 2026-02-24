@@ -68,9 +68,38 @@ public final class OpenRouterClient: RewriteProvider {
         systemPrompt: String,
         model: String
     ) async throws -> RewriteResult {
-        let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         // OpenRouter requires provider-prefixed model names (e.g. "google/gemini-2.5-flash-lite")
         let routerModel = model.contains("/") ? model : "google/\(model)"
+
+        do {
+            return try await performRequest(
+                transcript: transcript,
+                systemPrompt: systemPrompt,
+                routerModel: routerModel,
+                requireParameters: true
+            )
+        } catch {
+            guard shouldRetryWithRelaxedProviderParameters(after: error) else {
+                throw error
+            }
+
+            print("[Rewrite] \(routerModel) has no strict-route endpoints; retrying with relaxed provider parameters")
+            return try await performRequest(
+                transcript: transcript,
+                systemPrompt: systemPrompt,
+                routerModel: routerModel,
+                requireParameters: false
+            )
+        }
+    }
+
+    private func performRequest(
+        transcript: String,
+        systemPrompt: String,
+        routerModel: String,
+        requireParameters: Bool
+    ) async throws -> RewriteResult {
+        let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
 
         let body: [String: Any] = [
             "model": routerModel,
@@ -84,7 +113,7 @@ public final class OpenRouterClient: RewriteProvider {
             "provider": [
                 "sort": "latency",
                 "allow_fallbacks": true,
-                "require_parameters": true
+                "require_parameters": requireParameters
             ]
         ]
 
@@ -138,6 +167,15 @@ public final class OpenRouterClient: RewriteProvider {
             return true
         }
         return isModelUnavailable(error)
+    }
+
+    private func shouldRetryWithRelaxedProviderParameters(after error: Error) -> Bool {
+        guard case let .invalidRequest(message)? = error as? RewriteError else {
+            return false
+        }
+
+        let normalized = message.lowercased()
+        return normalized.contains("no endpoints") && normalized.contains("requested parameters")
     }
 
     private func isRetryable(_ error: Error) -> Bool {

@@ -74,6 +74,45 @@ struct OpenRouterClientTests {
         #expect(reasoning["enabled"] as? Bool == false)
     }
 
+    @Test("Retries same model with relaxed provider parameters when strict routing has no endpoints")
+    func retryWithRelaxedProviderParameters() async throws {
+        let attempts = Capture(0)
+        let requireParametersValues = Capture<[Bool]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let provider = body["provider"] as? [String: Any],
+               let requireParameters = provider["require_parameters"] as? Bool {
+                requireParametersValues.mutate { $0.append(requireParameters) }
+            }
+
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"relaxed-provider-success"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(apiKey: "test-key", session: makeStubbedSession())
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
+
+        #expect(result == "relaxed-provider-success")
+        #expect(attempts.value == 2)
+        #expect(requireParametersValues.value == [true, false])
+    }
+
     @Test("Model usage callback reports served model from response")
     func test_modelUsage_reportsServedModelWhenResponseIncludesModel() async throws {
         let usage = Capture<[(model: String, isFallback: Bool)]>([])
@@ -376,8 +415,8 @@ struct OpenRouterClientTests {
         #expect(models.value == ["primary/model", "fallback/model"])
     }
 
-    @Test("No-endpoints routing message falls back without explicit model token")
-    func noEndpointsRoutingMessageFallsBack() async throws {
+    @Test("No-endpoints routing message retries same model with relaxed parameters")
+    func noEndpointsRoutingMessageRetriesSameModel() async throws {
         let models = Capture<[String]>([])
 
         URLProtocolStub.requestHandler = { request in
@@ -411,7 +450,7 @@ struct OpenRouterClientTests {
         let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
 
         #expect(result == "fallback via no-endpoints")
-        #expect(models.value == ["primary/model", "fallback/model"])
+        #expect(models.value == ["primary/model", "primary/model"])
     }
 
     @Test("Does not fall back on non-model invalid request")
