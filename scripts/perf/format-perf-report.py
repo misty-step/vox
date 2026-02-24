@@ -554,7 +554,7 @@ def render_stage_metric_chart(
     lines.append("")
 
 
-def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot]) -> None:
+def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot], max_rows: int = 60) -> None:
     if not lane_history:
         lines.append("**Run timeline**")
         lines.append("")
@@ -564,15 +564,23 @@ def render_run_timeline(lines: list[str], lane_history: list[LaneSnapshot]) -> N
 
     start_label = run_timestamp_label(lane_history[0])
     end_label = run_timestamp_label(lane_history[-1])
+    series_runs = lane_history[-max(1, max_rows):]
+    start_index = len(lane_history) - len(series_runs) + 1
     lines.append("**Run timeline (oldest → newest)**")
     lines.append("")
-    lines.append(f"{len(lane_history)} runs from {start_label} to {end_label}.")
+    if len(series_runs) < len(lane_history):
+        lines.append(
+            f"{len(lane_history)} runs from {start_label} to {end_label} "
+            f"(showing latest {len(series_runs)})."
+        )
+    else:
+        lines.append(f"{len(lane_history)} runs from {start_label} to {end_label}.")
     lines.append("")
     lines.append("| idx | generatedAt (UTC) | source | commit | raw p95 | clean p95 | polish p95 | clean Δ vs prev |")
     lines.append("| ---: | --- | --- | --- | ---: | ---: | ---: | --- |")
 
     previous_clean: Optional[float] = None
-    for index, snapshot in enumerate(lane_history, start=1):
+    for index, snapshot in enumerate(series_runs, start=start_index):
         raw = snapshot.levels.get("raw")
         clean = snapshot.levels.get("clean")
         polish = snapshot.levels.get("polish")
@@ -844,7 +852,7 @@ def maybe_generate_llm_synthesis(
             cleaned = content.strip()
             if cleaned:
                 return cleaned[:1800]
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError):
             continue
     return None
 
@@ -929,7 +937,7 @@ def render_lane_detail(
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
     render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
-    render_run_timeline(lines, lane_history)
+    render_run_timeline(lines, lane_history, max_rows=max(10, history_max))
 
     render_fixture_table(lines, snapshot)
 
