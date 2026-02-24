@@ -852,7 +852,7 @@ def maybe_generate_llm_synthesis(
             cleaned = content.strip()
             if cleaned:
                 return cleaned[:1800]
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, UnicodeDecodeError):
             continue
     return None
 
