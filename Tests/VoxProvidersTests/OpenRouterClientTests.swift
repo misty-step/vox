@@ -304,6 +304,103 @@ struct OpenRouterClientTests {
         #expect(models.value == ["primary/model", "fallback/one", "fallback/two"])
     }
 
+    @Test("Model unavailable falls back to Mercury coder alias")
+    func fallbackToMercuryCoderAliasOnModelUnavailable() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"Model inception/mercury not found"}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"mercury-coder result"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(apiKey: "test-key", session: makeStubbedSession())
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "inception/mercury")
+
+        #expect(result == "mercury-coder result")
+        #expect(models.value == ["inception/mercury", "inception/mercury-coder"])
+    }
+
+    @Test("Model unavailable falls back to configured fallback models")
+    func modelUnavailableFallsBackToConfiguredModels() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found for model primary/model"}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"fallback result"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "fallback result")
+        #expect(models.value == ["primary/model", "fallback/model"])
+    }
+
+    @Test("Does not fall back on non-model invalid request")
+    func noFallbackOnGenericInvalidRequest() async throws {
+        let counter = Capture(0)
+        URLProtocolStub.requestHandler = { request in
+            counter.mutate { $0 += 1 }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"error":{"message":"messages are required"}}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+
+        await #expect(throws: RewriteError.self) {
+            _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+        }
+        #expect(counter.value == 1)
+    }
+
     // MARK: - HTTP Headers
 
     @Test("Sets required headers")

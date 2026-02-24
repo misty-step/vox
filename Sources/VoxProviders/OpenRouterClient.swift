@@ -20,7 +20,7 @@ public final class OpenRouterClient: RewriteProvider {
     }
 
     public func rewrite(transcript: String, systemPrompt: String, model: String) async throws -> String {
-        let models = [model] + fallbackModels
+        let models = modelChain(primary: model)
         var lastError: Error?
 
         for (index, currentModel) in models.enumerated() {
@@ -45,7 +45,7 @@ public final class OpenRouterClient: RewriteProvider {
             } catch {
                 let elapsed = CFAbsoluteTimeGetCurrent() - start
                 lastError = error
-                if index < models.count - 1, isRetryable(error) {
+                if index < models.count - 1, shouldTryNextModel(after: error) {
                     print("[Rewrite] \(currentModel) failed (\(String(format: "%.2f", elapsed))s), trying fallback: \(errorSummary(error))")
                     continue
                 }
@@ -115,11 +115,29 @@ public final class OpenRouterClient: RewriteProvider {
                 resolvedModel = routerModel
             }
             return RewriteResult(content: content, servedModel: resolvedModel)
-        case 401: throw RewriteError.auth
-        case 429: throw RewriteError.throttled
-        case 502, 503: throw RewriteError.network("HTTP \(httpResponse.statusCode)")
-        default: throw RewriteError.unknown("HTTP \(httpResponse.statusCode)")
+        case 400, 404, 422:
+            throw RewriteError.invalidRequest(extractErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)")
+        case 401:
+            throw RewriteError.auth
+        case 402:
+            throw RewriteError.quotaExceeded
+        case 429:
+            throw RewriteError.throttled
+        case 500...599:
+            throw RewriteError.network("HTTP \(httpResponse.statusCode)")
+        default:
+            if let detail = extractErrorMessage(from: data), !detail.isEmpty {
+                throw RewriteError.unknown("HTTP \(httpResponse.statusCode): \(detail)")
+            }
+            throw RewriteError.unknown("HTTP \(httpResponse.statusCode)")
         }
+    }
+
+    private func shouldTryNextModel(after error: Error) -> Bool {
+        if isRetryable(error) {
+            return true
+        }
+        return isModelUnavailable(error)
     }
 
     private func isRetryable(_ error: Error) -> Bool {
@@ -129,8 +147,10 @@ public final class OpenRouterClient: RewriteProvider {
             return error is URLError
         }
         switch rewriteError {
-        case .throttled, .network: return true
-        case .auth, .invalidRequest, .quotaExceeded, .timeout: return false
+        case .throttled, .network:
+            return true
+        case .auth, .invalidRequest, .quotaExceeded, .timeout:
+            return false
         case .unknown(let msg):
             if let code = Int(msg.replacingOccurrences(of: "HTTP ", with: "")),
                (500...599).contains(code) {
@@ -138,6 +158,56 @@ public final class OpenRouterClient: RewriteProvider {
             }
             return false
         }
+    }
+
+    private func isModelUnavailable(_ error: Error) -> Bool {
+        guard case let .invalidRequest(message)? = error as? RewriteError else {
+            return false
+        }
+        let normalized = message.lowercased()
+        let hasModelSignal = normalized.contains("model")
+        let unavailableSignals = ["not found", "unknown", "no endpoints", "not available", "does not exist", "unsupported"]
+        return hasModelSignal && unavailableSignals.contains(where: normalized.contains)
+    }
+
+    private func modelChain(primary: String) -> [String] {
+        var chain = [primary]
+
+        // OpenRouter model alias bridge: some accounts expose Mercury as `inception/mercury-coder`.
+        // Keep requested model as primary, then try coder alias before generic fallbacks.
+        if primary == "inception/mercury" {
+            chain.append("inception/mercury-coder")
+        }
+
+        chain.append(contentsOf: fallbackModels)
+
+        var seen = Set<String>()
+        return chain.filter { seen.insert($0).inserted }
+    }
+
+    private func extractErrorMessage(from data: Data) -> String? {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if
+            let error = object["error"] as? [String: Any],
+            let message = error["message"] as? String,
+            !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return message
+        }
+
+        if
+            let message = object["message"] as? String,
+            !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return message
+        }
+
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func errorSummary(_ error: Error) -> String {
