@@ -42,7 +42,8 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Runs both lanes per PR with two fixtures (`short`, `medium`) and warmup exclusion.
 - Uses weighted fixture aggregation (by audio bytes) with per-fixture breakdown.
 - Includes longitudinal trend context across persisted PR + master runs.
-- Includes a run timeline table (timestamp, source PR/master, commit, per-level p95) and a chart.
+- Includes a run timeline table (timestamp, source PR/master, commit, per-level p95) and charts.
+- Includes per-phase trend charts for generation, STT, rewrite, encode, and paste p95.
 - Includes actionable synthesis tying regressions to stage deltas (`stt|rewrite|encode`) and touched files.
 - Includes optional LLM synthesis (OpenRouter) for concise hypothesis + next validation step; report generation fails open if the call is unavailable.
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.

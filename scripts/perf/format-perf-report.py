@@ -42,6 +42,7 @@ class LevelStats:
     stt: Dist
     rewrite: Dist
     encode: Dist
+    paste: Dist
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,10 @@ def stage_related_files(changed_files: list[str], stage: str, limit: int = 4) ->
             r"sources/voxmac/.*(audioencoder|audiorecorder|capturedaudioinspector)",
             r"sources/voxappkit/dictationpipeline\.swift",
         ),
+        "paste": (
+            r"sources/voxmac/.*(clipboardpaster|hud)",
+            r"sources/voxappkit/.*(dictationpipeline|voxsession)",
+        ),
     }
     patterns = stage_patterns.get(stage, ())
     if not patterns:
@@ -193,8 +198,8 @@ def variability(dist: Dist) -> float:
     return max(0.0, dist.p95 - dist.p50)
 
 
-def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist) -> str:
-    candidates = [("STT", stt.p95), ("Rewrite", rewrite.p95), ("Encode", encode.p95)]
+def dominant_stage(generation: Dist, stt: Dist, rewrite: Dist, encode: Dist, paste: Dist) -> str:
+    candidates = [("STT", stt.p95), ("Rewrite", rewrite.p95), ("Encode", encode.p95), ("Paste", paste.p95)]
     name, value = max(candidates, key=lambda item: item[1])
     share = (value / generation.p95 * 100) if generation.p95 > 0 else 0.0
     return f"{name} ({fmt_ms(value)}, {share:.0f}%)"
@@ -253,6 +258,7 @@ def level_stats_from_entry(level_entry: dict[str, Any]) -> LevelStats:
         stt=dist_from_level(level_entry, "sttMs"),
         rewrite=dist_from_level(level_entry, "rewriteMs"),
         encode=dist_from_level(level_entry, "encodeMs"),
+        paste=dist_from_level(level_entry, "pasteMs"),
     )
 
 
@@ -350,6 +356,7 @@ def build_snapshot(run: dict[str, Any]) -> Optional[LaneSnapshot]:
                 stt=weighted_dist([row.stt for row in level_rows], weights),
                 rewrite=weighted_dist([row.rewrite for row in level_rows], weights),
                 encode=weighted_dist([row.encode for row in level_rows], weights),
+                paste=weighted_dist([row.paste for row in level_rows], weights),
             )
     else:
         aggregated_levels = top_level_map
@@ -426,7 +433,23 @@ def trend_series(
             values.append(row.rewrite.p95)
         elif metric == "encode":
             values.append(row.encode.p95)
+        elif metric == "paste":
+            values.append(row.paste.p95)
     return values[-max_points:]
+
+
+def metric_value(row: LevelStats, metric: str) -> float:
+    if metric == "generation":
+        return row.generation.p95
+    if metric == "stt":
+        return row.stt.p95
+    if metric == "rewrite":
+        return row.rewrite.p95
+    if metric == "encode":
+        return row.encode.p95
+    if metric == "paste":
+        return row.paste.p95
+    return 0.0
 
 
 def lane_snapshots(history_snapshots: list[LaneSnapshot], lane: str) -> list[LaneSnapshot]:
@@ -479,6 +502,54 @@ def render_mermaid_trend_chart(lines: list[str], lane_history: list[LaneSnapshot
     lines.append(f"    line \"raw\" [{', '.join(str(value) for value in raw_values)}]")
     lines.append(f"    line \"clean\" [{', '.join(str(value) for value in clean_values)}]")
     lines.append(f"    line \"polish\" [{', '.join(str(value) for value in polish_values)}]")
+    lines.append("```")
+    lines.append("")
+
+
+def render_stage_metric_chart(
+    lines: list[str],
+    lane_history: list[LaneSnapshot],
+    lane: str,
+    metric: str,
+    title: str,
+    max_points: int = 30,
+) -> None:
+    if len(lane_history) < 2:
+        return
+
+    series_runs = lane_history[-max_points:]
+    level_names = ["raw", "clean", "polish"]
+    level_series: dict[str, list[int]] = {}
+    has_signal = False
+    for level in level_names:
+        points: list[int] = []
+        for snapshot in series_runs:
+            row = snapshot.levels.get(level)
+            value = int(round(metric_value(row, metric))) if row else 0
+            points.append(value)
+            if value > 0:
+                has_signal = True
+        level_series[level] = points
+
+    if not has_signal:
+        return
+
+    all_values = [value for points in level_series.values() for value in points]
+    y_max = max(all_values) if all_values else 0
+    y_upper = max(200, ((y_max + 99) // 100) * 100)
+    x_axis = ", ".join(str(index + 1) for index in range(len(series_runs)))
+    lane_title = "Provider" if lane == "provider" else "Codepath"
+
+    lines.append(f"**{title} (p95 by run order)**")
+    lines.append("")
+    lines.append("```mermaid")
+    lines.append("xychart-beta")
+    lines.append(f'    title "{lane_title} {title} p95 trend (ms)"')
+    lines.append(f"    x-axis \"Run\" [{x_axis}]")
+    lines.append(f"    y-axis \"ms\" 0 --> {y_upper}")
+    for level in level_names:
+        points = level_series[level]
+        lines.append(f"    line \"{level}\" [{', '.join(str(value) for value in points)}]")
     lines.append("```")
     lines.append("")
 
@@ -636,6 +707,7 @@ def render_actionable_signals(
             "stt": row.stt.p95 - base_row.stt.p95,
             "rewrite": row.rewrite.p95 - base_row.rewrite.p95,
             "encode": row.encode.p95 - base_row.encode.p95,
+            "paste": row.paste.p95 - base_row.paste.p95,
         }
         dominant_stage = max(stage_deltas, key=lambda stage: stage_deltas[stage])
         dominant_delta = stage_deltas[dominant_stage]
@@ -804,12 +876,12 @@ def render_lane_detail(
     )
     lines.append("")
 
-    lines.append("| Level | p50 | p95 | spread | STT p95 | Rewrite p95 | Encode p95 | Dominant |")
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    lines.append("| Level | p50 | p95 | spread | STT p95 | Rewrite p95 | Encode p95 | Paste p95 | Dominant |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for level in LEVELS:
         row = snapshot.levels.get(level)
         if row is None:
-            lines.append(f"| {level} | — | — | — | — | — | — | — |")
+            lines.append(f"| {level} | — | — | — | — | — | — | — | — |")
             continue
         lines.append(
             f"| {level} | {fmt_ms(row.generation.p50)} | {fmt_ms(row.generation.p95)} | "
@@ -817,7 +889,8 @@ def render_lane_detail(
             f"{fmt_ms(row.stt.p95)} | "
             f"{fmt_ms(row.rewrite.p95)} | "
             f"{fmt_ms(row.encode.p95)} | "
-            f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode)} |"
+            f"{fmt_ms(row.paste.p95)} | "
+            f"{dominant_stage(row.generation, row.stt, row.rewrite, row.encode, row.paste)} |"
         )
     lines.append("")
 
@@ -842,6 +915,10 @@ def render_lane_detail(
 
     lane_history = lane_snapshots(history_snapshots, snapshot.lane)
     render_mermaid_trend_chart(lines, lane_history, snapshot.lane)
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "stt", "STT")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
+    render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
     render_run_timeline(lines, lane_history)
 
     render_fixture_table(lines, snapshot)
