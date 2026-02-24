@@ -376,6 +376,44 @@ struct OpenRouterClientTests {
         #expect(models.value == ["primary/model", "fallback/model"])
     }
 
+    @Test("No-endpoints routing message falls back without explicit model token")
+    func noEndpointsRoutingMessageFallsBack() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"fallback via no-endpoints"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "fallback via no-endpoints")
+        #expect(models.value == ["primary/model", "fallback/model"])
+    }
+
     @Test("Does not fall back on non-model invalid request")
     func noFallbackOnGenericInvalidRequest() async throws {
         let counter = Capture(0)
