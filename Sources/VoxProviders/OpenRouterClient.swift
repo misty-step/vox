@@ -165,9 +165,16 @@ public final class OpenRouterClient: RewriteProvider {
             return false
         }
         let normalized = message.lowercased()
-        let hasModelSignal = normalized.contains("model")
-        let unavailableSignals = ["not found", "unknown", "no endpoints", "not available", "does not exist", "unsupported"]
-        return hasModelSignal && unavailableSignals.contains(where: normalized.contains)
+        let unavailableSignals = [
+            "no endpoints",
+            "not found",
+            "unknown model",
+            "model not found",
+            "not available",
+            "does not exist",
+            "unsupported",
+        ]
+        return unavailableSignals.contains(where: normalized.contains)
     }
 
     private func modelChain(primary: String) -> [String] {
