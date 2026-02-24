@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -675,6 +678,95 @@ def render_actionable_signals(
     lines.append("")
 
 
+def maybe_generate_llm_synthesis(
+    primary_snapshot: LaneSnapshot,
+    base_snapshot: Optional[LaneSnapshot],
+    codepath_snapshot: Optional[LaneSnapshot],
+    changed_files: list[str],
+) -> Optional[str]:
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not api_key:
+        return None
+
+    level_rows: list[dict[str, Any]] = []
+    for level in LEVELS:
+        current = primary_snapshot.levels.get(level)
+        if current is None:
+            continue
+        base = (
+            base_snapshot.levels.get(level)
+            if base_snapshot and base_snapshot.lane == primary_snapshot.lane
+            else None
+        )
+        level_rows.append(
+            {
+                "level": level,
+                "generation_p95_ms": int(round(current.generation.p95)),
+                "stt_p95_ms": int(round(current.stt.p95)),
+                "rewrite_p95_ms": int(round(current.rewrite.p95)),
+                "encode_p95_ms": int(round(current.encode.p95)),
+                "delta_vs_base_ms": (
+                    int(round(current.generation.p95 - base.generation.p95))
+                    if base is not None
+                    else None
+                ),
+            }
+        )
+
+    payload = {
+        "lane": primary_snapshot.lane,
+        "head": short_sha(primary_snapshot.run.get("commitSHA")),
+        "base": short_sha(base_snapshot.run.get("commitSHA")) if base_snapshot else None,
+        "levels": level_rows,
+        "codepath_present": codepath_snapshot is not None,
+        "changed_files": changed_files[:30],
+    }
+
+    prompt = (
+        "You are a performance reviewer for a CI benchmark report. "
+        "Return exactly 3 short bullets:\n"
+        "1) most likely cause of regression/speedup (stage + confidence),\n"
+        "2) strongest evidence from the provided metrics,\n"
+        "3) one concrete next validation step.\n"
+        "Do not mention unavailable data. Keep each bullet under 28 words.\n\n"
+        f"Data:\n{json.dumps(payload, separators=(',', ':'))}"
+    )
+
+    request_body = {
+        "model": "google/gemini-2.5-flash-lite",
+        "messages": [
+            {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 220,
+    }
+
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8")
+        decoded = json.loads(raw)
+        content = decoded.get("choices", [{}])[0].get("message", {}).get("content")
+        if isinstance(content, list):
+            content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+        if not isinstance(content, str):
+            return None
+        cleaned = content.strip()
+        return cleaned[:1800] if cleaned else None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        return None
+
+
 def render_fixture_table(lines: list[str], snapshot: LaneSnapshot) -> None:
     if not snapshot.fixtures:
         return
@@ -865,6 +957,17 @@ def main() -> None:
             codepath_snapshot=codepath_snapshot,
             changed_files=changed_files,
         )
+        llm_synthesis = maybe_generate_llm_synthesis(
+            primary_snapshot=primary_snapshot,
+            base_snapshot=base_snapshot,
+            codepath_snapshot=codepath_snapshot,
+            changed_files=changed_files,
+        )
+        if llm_synthesis:
+            lines.append("### LLM Synthesis (Experimental)")
+            lines.append("")
+            lines.append(llm_synthesis)
+            lines.append("")
 
     # ── Provider details (collapsible) ───────────────────────────────────────
     if provider_snapshot:

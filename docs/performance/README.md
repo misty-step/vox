@@ -44,6 +44,7 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Includes longitudinal trend context across persisted PR + master runs.
 - Includes a run timeline table (timestamp, source PR/master, commit, per-level p95) and a chart.
 - Includes actionable synthesis tying regressions to stage deltas (`stt|rewrite|encode`) and touched files.
+- Includes optional LLM synthesis (OpenRouter) for concise hypothesis + next validation step; report generation fails open if the call is unavailable.
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.
 - On PR runs, persists `head.json` to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit) via `.github/workflows/perf-audit-persist.yml`: `audit/pr/<pr>/<commit>.json`.
