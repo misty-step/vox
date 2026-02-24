@@ -6,6 +6,9 @@ on:
   push:
     branches: [master]
 
+env:
+  PERF_AUDIT_REPO: misty-step/vox-perf-audit
+
 jobs:
   pr:
     name: Perf Audit (PR Comment)
@@ -89,38 +92,81 @@ jobs:
           BASE_SHA_USED="$BASE_SHA"
           BASE_MODE="missing"
 
-          # Optional baseline: pulled from perf-audit branch if present.
-          git fetch origin perf-audit || true
-          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            # Per-PR history (shows how this PR evolved across pushes)
-            while IFS= read -r path; do
-              [ -n "$path" ] || continue
-              dest="$HISTORY_DIR/pr-$(basename "$path")"
-              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
-            done < <(git ls-tree -r --name-only origin/perf-audit "audit/pr/${PR_NUMBER}" | head -n 80)
+          # Optional baseline: pulled from dedicated perf audit store (public, no token needed).
+          AUDIT_REPO="${PERF_AUDIT_REPO}"
 
-            # Master baseline history (recent 15 commits merged to master).
-            # Provides cross-PR trend context so the chart isn't reset each PR.
-            while IFS= read -r path; do
-              [ -n "$path" ] || continue
-              dest="$HISTORY_DIR/master-$(basename "$path")"
-              git show "origin/perf-audit:${path}" > "$dest" 2>/dev/null || rm -f "$dest"
-            done < <(git ls-tree -r --name-only origin/perf-audit "audit" | grep -v "^audit/pr/" | sort | tail -15)
+          fetch_raw_content() {
+            local path="$1"
+            local dest="$2"
+            gh api \
+              -H "Accept: application/vnd.github.raw" \
+              "repos/${AUDIT_REPO}/contents/${path}" > "$dest" 2>/dev/null \
+              || {
+                rm -f "$dest"
+                return 1
+              }
+          }
 
-            if [ -f "$PROVIDER_HEAD" ]; then
-              if git show "origin/perf-audit:audit/${BASE_SHA}.json" >"$BASE_JSON" 2>/dev/null; then
-                BASE_SHA_USED="$BASE_SHA"
-                BASE_MODE="exact"
-              else
-                while IFS= read -r candidate; do
-                  [ -n "$candidate" ] || continue
-                  if git show "origin/perf-audit:audit/${candidate}.json" >"$BASE_JSON" 2>/dev/null; then
+          # Fetch PR history artifacts for trend context.
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            fname="$(basename "$path")"
+            fetch_raw_content "$path" "$HISTORY_DIR/$fname" || true
+          done < <(
+            gh api "repos/${AUDIT_REPO}/contents/audit/pr/${PR_NUMBER}" \
+              --jq '.[].path' 2>/dev/null | head -n 80 || true
+          )
+
+          # Pre-fetch baseline SHA listing once via Git Trees API.
+          # Query the audit subtree directly to avoid huge root-tree payloads.
+          _AUDIT_DEFAULT="$(gh api "repos/${AUDIT_REPO}" --jq '.default_branch' 2>/dev/null || echo 'main')"
+          _AUDIT_TREE_SHA="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}" \
+            --jq '.tree[] | select(.path=="audit" and .type=="tree") | .sha' 2>/dev/null | head -n 1 || true)"
+          if [ -n "$_AUDIT_TREE_SHA" ]; then
+            AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_TREE_SHA}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^[^/]+\\.json$")) | .path | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+          else
+            AVAILABLE_SHAS="$(gh api "repos/${AUDIT_REPO}/git/trees/${_AUDIT_DEFAULT}?recursive=1" \
+              --jq '[.tree[] | select(.path | test("^audit/[^/]+\\.json$")) | .path | ltrimstr("audit/") | rtrimstr(".json")] | join("\n")' 2>/dev/null || true)"
+          fi
+          if [ -z "$AVAILABLE_SHAS" ]; then
+            echo "No baseline index from ${AUDIT_REPO}; continuing without persisted history."
+          fi
+
+          # Master baseline history: last 15 master commits with persisted baselines.
+          # Provides cross-PR trend context so the chart isn't reset each PR.
+          # Uses git log for correct chronological ordering (SHA sort ≠ time order).
+          if [ -n "$AVAILABLE_SHAS" ]; then
+            git fetch --no-tags origin master >/dev/null 2>&1 || true
+            _MASTER_COUNT=0
+            while IFS= read -r sha; do
+              [ -n "$sha" ] || continue
+              if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$sha"; then
+                fetch_raw_content "audit/${sha}.json" "$HISTORY_DIR/master-${sha}.json" || true
+                _MASTER_COUNT=$((_MASTER_COUNT + 1))
+                [ "$_MASTER_COUNT" -ge 15 ] && break
+              fi
+            done < <(git log --first-parent origin/master --format="%H" 2>/dev/null | head -n 200 || true)
+          fi
+
+          if [ -f "$PROVIDER_HEAD" ]; then
+            # Try exact base SHA first.
+            if fetch_raw_content "audit/${BASE_SHA}.json" "$BASE_JSON" && [ -s "$BASE_JSON" ]; then
+              BASE_SHA_USED="$BASE_SHA"
+              BASE_MODE="exact"
+            else
+              # Walk ancestry for nearest persisted ancestor.
+              # Uses pre-fetched AVAILABLE_SHAS; 0 extra API calls for the intersection.
+              while IFS= read -r candidate; do
+                [ -n "$candidate" ] || continue
+                if printf '%s\n' "$AVAILABLE_SHAS" | grep -qxF "$candidate"; then
+                  if fetch_raw_content "audit/${candidate}.json" "$BASE_JSON" && [ -s "$BASE_JSON" ]; then
                     BASE_SHA_USED="$candidate"
                     BASE_MODE="nearest_ancestor"
                     break
                   fi
-                done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
-              fi
+                fi
+              done < <(git rev-list --max-count=400 "$BASE_SHA" 2>/dev/null || true)
             fi
           fi
 
@@ -158,7 +204,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -209,34 +255,56 @@ jobs:
             --commit "${GITHUB_SHA}" \
             --label "ci-master-codepath"
 
-      - name: Persist To perf-audit Branch
+      - name: Persist To vox-perf-audit
         if: always() && hashFiles('perf-out/head.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.PERF_AUDIT_TOKEN }}
         run: |
           set -euo pipefail
 
-          SHA="${GITHUB_SHA}"
-
-          git fetch origin perf-audit || true
-
-          WORKTREE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vox-perf-audit.XXXXXX")"
-          if git show-ref --verify --quiet refs/remotes/origin/perf-audit; then
-            git worktree add "$WORKTREE_DIR" origin/perf-audit
-          else
-            git worktree add "$WORKTREE_DIR" --detach
-            cd "$WORKTREE_DIR"
-            git checkout --orphan perf-audit
-            git rm -rf . >/dev/null 2>&1 || true
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "PERF_AUDIT_TOKEN not set; skipping persist to vox-perf-audit."
+            exit 0
           fi
 
-          cd "$WORKTREE_DIR"
-          mkdir -p audit
-          cp "${GITHUB_WORKSPACE}/perf-out/head.json" "audit/${SHA}.json"
+          SHA="${GITHUB_SHA}"
+          AUDIT_REPO="${PERF_AUDIT_REPO}"
+          DEST_PATH="audit/${SHA}.json"
 
-          git add "audit/${SHA}.json"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "perf(audit): ${SHA}" || exit 0
-          git push origin HEAD:perf-audit
+          if gh api "repos/${AUDIT_REPO}/contents/${DEST_PATH}" >/dev/null 2>&1; then
+            echo "Already exists: ${DEST_PATH} — skipping."
+            exit 0
+          fi
+
+          # Base64 encode and upload via Contents API (create, idempotent on 422).
+          PAYLOAD="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-upload.XXXXXX.json")"
+          CONTENT="$(base64 < perf-out/head.json | tr -d '\n')"
+          jq -n \
+            --arg message "perf(audit): ${SHA}" \
+            --arg content "$CONTENT" \
+            '{
+              message: $message,
+              content: $content,
+              committer: {
+                name: "github-actions[bot]",
+                email: "41898282+github-actions[bot]@users.noreply.github.com"
+              }
+            }' > "$PAYLOAD"
+
+          if HTTP_OUT="$(gh api \
+            --method PUT \
+            "repos/${AUDIT_REPO}/contents/${DEST_PATH}" \
+            --input "$PAYLOAD" \
+            2>&1)"; then
+            echo "Persisted ${DEST_PATH} to ${AUDIT_REPO}"
+          elif echo "$HTTP_OUT" | grep -Eqi "already exists|HTTP/[0-9.]+ 422|sha wasn't supplied"; then
+            echo "Already exists: ${DEST_PATH} — skipping."
+          else
+            echo "ERROR uploading ${DEST_PATH}: $HTTP_OUT" >&2
+            rm -f "$PAYLOAD"
+            exit 1
+          fi
+          rm -f "$PAYLOAD"
 
       - name: Upload Artifacts
         if: always()
