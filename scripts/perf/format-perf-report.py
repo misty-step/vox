@@ -809,7 +809,8 @@ def collect_critical_metrics(
             if base_row:
                 base_noise = max(variability(provider_row.generation), variability(base_row.generation))
                 status = change_status(provider_row.generation.p95, base_row.generation.p95, noise=base_noise)
-                provider_statuses.append(status)
+                if level in {"clean", "polish"}:
+                    provider_statuses.append(status)
                 provider_entry["vs_base"] = {
                     "status": status,
                     "delta_ms": int(round(provider_row.generation.p95 - base_row.generation.p95)),
