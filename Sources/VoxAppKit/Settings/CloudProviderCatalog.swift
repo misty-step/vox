@@ -35,14 +35,14 @@ enum CloudProviderCatalog {
         CloudProviderKey(
             id: "gemini",
             title: "Gemini",
-            detail: "Primary rewrite provider.",
+            detail: "Used for Gemini model IDs and as best-effort fallback.",
             keyPath: \.geminiAPIKey,
             keychainKey: .geminiAPIKey
         ),
         CloudProviderKey(
             id: "openrouter",
             title: "OpenRouter",
-            detail: "Fallback rewrite provider.",
+            detail: "Used for non-Gemini model IDs (e.g. Mercury).",
             keyPath: \.openRouterAPIKey,
             keychainKey: .openRouterAPIKey
         ),
@@ -64,8 +64,20 @@ enum CloudProviderCatalog {
     }
 
     static func rewriteSummary(configuredProviderTitles: [String]) -> String {
-        if configuredProviderTitles.isEmpty { return "Raw transcript" }
-        return configuredProviderTitles.joined(separator: " → ")
+        let configured = Set(configuredProviderTitles)
+        let hasGemini = configured.contains("Gemini")
+        let hasOpenRouter = configured.contains("OpenRouter")
+
+        switch (hasGemini, hasOpenRouter) {
+        case (false, false):
+            return "Raw transcript"
+        case (true, false):
+            return "Gemini"
+        case (false, true):
+            return "OpenRouter"
+        case (true, true):
+            return "Model-routed (OpenRouter for non-Gemini models; Gemini for Gemini models/fallback)"
+        }
     }
 
     private static func configuredTitles(

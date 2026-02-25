@@ -363,7 +363,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         fields: ["cache_hit": .bool(true)]
                     )
                 } else {
-                    let prompt = RewritePrompts.prompt(for: level)
+                    let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
                     guard let rewriteTimeoutSeconds = rewriteStageTimeouts.seconds(for: level) else {
                         throw VoxError.internalError("Rewrite timeout requested for level: \(level)")
                     }

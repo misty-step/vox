@@ -18,15 +18,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let prefs = PreferencesStore.shared
         let hasElevenLabs = !prefs.elevenLabsAPIKey.isEmpty
-        let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
         let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
         print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Apple Speech ✓")
-        let hasGemini = !prefs.geminiAPIKey.isEmpty
-        let rewriteChain = [
-            hasGemini ? "Gemini" : nil,
-            hasOpenRouter ? "OpenRouter" : nil,
-        ].compactMap { $0 }.joined(separator: " → ")
-        print("[Vox] Rewrite: \(rewriteChain.isEmpty ? "–" : rewriteChain)")
+        print("[Vox] Rewrite routing: \(CloudProviderCatalog.rewriteSummary(prefs: prefs))")
+        if prefs.processingLevel != .raw {
+            print("[Vox] Rewrite default model (\(prefs.processingLevel.rawValue)): \(prefs.processingLevel.defaultModel)")
+        }
         print("[Vox] Initial processing level: \(prefs.processingLevel.rawValue)")
 
         let diagnosticsContext = DiagnosticsContext.current(prefs: prefs)

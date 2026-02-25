@@ -392,7 +392,7 @@ private struct BenchmarkRunner {
         for model in config.models {
             for entry in corpus {
                 for iteration in 1...config.iterations {
-                    let prompt = RewritePrompts.prompt(for: entry.level)
+                    let prompt = RewritePrompts.prompt(for: entry.level, transcript: entry.transcript)
                     let startedAt = DispatchTime.now().uptimeNanoseconds
 
                     let record: BenchmarkInvocation
