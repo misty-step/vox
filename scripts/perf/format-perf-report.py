@@ -617,21 +617,25 @@ def render_summary_section(
     for level in LEVELS:
         row = snapshot.levels.get(level)
         if row is None:
-            table_rows.append(f"| {level} | — | — | — |")
+            table_rows.append(f"| {level} | — | — | — | — |")
             continue
 
         p95_str = fmt_ms(row.generation.p95)
+        confidence = confidence_label(row.iterations, variability(row.generation), row.generation.p95)
 
-        # vs base (master snapshot)
+        # vs base (master snapshot), noise-gated by within-run spread.
         base_row = (
             base_snapshot.levels.get(level)
             if base_snapshot and base_snapshot.lane == snapshot.lane
             else None
         )
         if base_row:
-            base_status = change_status(row.generation.p95, base_row.generation.p95)
+            base_noise = max(variability(row.generation), variability(base_row.generation))
+            base_status = change_status(row.generation.p95, base_row.generation.p95, noise=base_noise)
             vs_base = fmt_change(row.generation.p95, base_row.generation.p95)
-            if base_status == "regressed":
+            if base_status == "neutral":
+                vs_base = "neutral"
+            elif base_status == "regressed":
                 vs_base = f"**{vs_base}** ⚠️"
                 regressions.append(f"{level} (vs base)")
         else:
@@ -652,14 +656,17 @@ def render_summary_section(
         else:
             vs_trend = f"{len(series)} pt"
 
-        table_rows.append(f"| {level} | {p95_str} | {vs_base} | {vs_trend} |")
+        table_rows.append(f"| {level} | {p95_str} | {vs_base} | {vs_trend} | {confidence} |")
 
     verdict = "no regressions" if not regressions else f"regression: {', '.join(regressions)}"
     lines.append(f"## ⚡ Perf — {verdict}")
     lines.append("")
-    lines.append("| level | p95 | vs base | vs trend |")
-    lines.append("| --- | ---: | --- | --- |")
+    lines.append("| level | p95 | vs base | vs trend | confidence |")
+    lines.append("| --- | ---: | --- | --- | --- |")
     lines.extend(table_rows)
+    lines.append("")
+    lines.append("> **vs base** = compared to persisted master baseline at PR base SHA (or nearest persisted ancestor).")
+    lines.append("> **vs trend** = compared to previous run in this lane/level history window, with noise gating.")
     lines.append("")
 
     # One-line context footer
@@ -884,6 +891,8 @@ def render_lane_detail(
     snapshot: LaneSnapshot,
     history_snapshots: list[LaneSnapshot],
     history_max: int,
+    timeline_max: int,
+    render_mermaid_charts: bool,
     base_snapshot: Optional[LaneSnapshot] = None,
 ) -> None:
     """Detailed per-lane tables: stage breakdown, trend history, fixture breakdown, routing."""
@@ -932,12 +941,16 @@ def render_lane_detail(
     lines.append("")
 
     lane_history = lane_snapshots(history_snapshots, snapshot.lane)
-    render_mermaid_trend_chart(lines, lane_history, snapshot.lane)
-    render_stage_metric_chart(lines, lane_history, snapshot.lane, "stt", "STT")
-    render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
-    render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
-    render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
-    render_run_timeline(lines, lane_history, max_rows=max(10, history_max))
+    if render_mermaid_charts:
+        render_mermaid_trend_chart(lines, lane_history, snapshot.lane)
+        render_stage_metric_chart(lines, lane_history, snapshot.lane, "stt", "STT")
+        render_stage_metric_chart(lines, lane_history, snapshot.lane, "rewrite", "Rewrite")
+        render_stage_metric_chart(lines, lane_history, snapshot.lane, "encode", "Encode")
+        render_stage_metric_chart(lines, lane_history, snapshot.lane, "paste", "Paste")
+    else:
+        lines.append("_Mermaid charts omitted in CI for readability and render reliability._")
+        lines.append("")
+    render_run_timeline(lines, lane_history, max_rows=max(6, timeline_max))
 
     render_fixture_table(lines, snapshot)
 
@@ -987,7 +1000,9 @@ def main() -> None:
     ap.add_argument("--base-mode", required=False, default="missing", help="exact|nearest_ancestor|missing")
     ap.add_argument("--head-sha", required=False, help="Head SHA display override")
     ap.add_argument("--history-dir", required=False, help="Directory containing prior perf JSON files (PR + master history)")
-    ap.add_argument("--history-max", required=False, type=int, default=60, help="Max points per trend series")
+    ap.add_argument("--history-max", required=False, type=int, default=24, help="Max points per trend series")
+    ap.add_argument("--timeline-max", required=False, type=int, default=16, help="Max rows in run timeline table")
+    ap.add_argument("--render-mermaid-charts", action="store_true", help="Render Mermaid charts in report details")
     ap.add_argument("--changed-files", required=False, help="Optional path to changed-files list from git diff")
     args = ap.parse_args()
 
@@ -1023,6 +1038,8 @@ def main() -> None:
     trend_runs = dedupe_and_sort_runs(history_runs + current_runs)
     history_snapshots = [snapshot for run in trend_runs if (snapshot := build_snapshot(run)) is not None]
     history_max = max(2, args.history_max)
+    timeline_max = max(6, args.timeline_max)
+    render_mermaid_charts = bool(args.render_mermaid_charts)
 
     provider_snapshot = snapshots.get("provider")
     codepath_snapshot = snapshots.get("codepath")
@@ -1072,6 +1089,8 @@ def main() -> None:
             provider_snapshot,
             history_snapshots,
             history_max,
+            timeline_max=timeline_max,
+            render_mermaid_charts=render_mermaid_charts,
             base_snapshot=base_snapshot,
         )
         lines.append("<details>")
@@ -1097,6 +1116,8 @@ def main() -> None:
             codepath_snapshot,
             history_snapshots,
             history_max,
+            timeline_max=timeline_max,
+            render_mermaid_charts=render_mermaid_charts,
         )
         lines.append("<details>")
         lines.append("<summary>Codepath Perf (deterministic mock) — stage breakdown, trend history</summary>")

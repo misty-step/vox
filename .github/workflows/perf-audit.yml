@@ -15,6 +15,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: macos-14
     timeout-minutes: 20
+    concurrency:
+      group: perf-audit-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       contents: read
       pull-requests: write
@@ -182,7 +185,8 @@ jobs:
             --head "$PRIMARY_HEAD"
             --head-sha "$GITHUB_SHA"
             --history-dir "$HISTORY_DIR"
-            --history-max 60
+            --history-max 24
+            --timeline-max 16
             --requested-base-sha "$BASE_SHA"
             --base-sha "$BASE_SHA_USED"
             --base-mode "$BASE_MODE"
@@ -194,6 +198,9 @@ jobs:
           fi
           if [ -s "$BASE_JSON" ]; then
             FORMAT_ARGS+=(--base "$BASE_JSON")
+          fi
+          if [ "${VOX_PERF_RENDER_MERMAID:-0}" = "1" ]; then
+            FORMAT_ARGS+=(--render-mermaid-charts)
           fi
 
           python3 scripts/perf/format-perf-report.py "${FORMAT_ARGS[@]}"

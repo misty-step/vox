@@ -38,14 +38,15 @@ python3 scripts/perf/format-perf-report.py \
 
 Workflow: `.github/workflows/perf-audit.yml`
 
-- Posts a PR comment report on every PR.
+- Upserts a single sticky PR comment report on every PR run (edits in place; deduplicates old perf comments).
 - Runs both lanes per PR with two fixtures (`short`, `medium`) and warmup exclusion.
 - Uses weighted fixture aggregation (by audio bytes) with per-fixture breakdown.
 - Includes longitudinal trend context across persisted PR + master runs.
-- Includes a run timeline table (timestamp, source PR/master, commit, per-level p95) and charts.
-- Includes per-phase trend charts for generation, STT, rewrite, encode, and paste p95.
+- Includes a compact run timeline table (latest N runs; default 16) with source PR/master, commit, and per-level p95.
+- Mermaid charts are disabled by default in CI for readability/render reliability; enable with `VOX_PERF_RENDER_MERMAID=1`.
 - Includes actionable synthesis tying regressions to stage deltas (`stt|rewrite|encode`) and touched files.
 - Includes optional LLM synthesis (OpenRouter) for concise hypothesis + next validation step; report generation fails open if the call is unavailable.
+- Summary table semantics: `vs base` compares to persisted master baseline at PR base SHA (or nearest persisted ancestor), `vs trend` compares to the previous run in the current trend window.
 - LLM synthesis model order defaults to `google/gemini-3-flash-preview` then `google/gemini-2.5-flash` fallback (override via `VOX_PERF_SYNTH_MODEL_PRIMARY` / `VOX_PERF_SYNTH_MODEL_FALLBACK`).
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.
