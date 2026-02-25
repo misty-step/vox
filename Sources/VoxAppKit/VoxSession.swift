@@ -120,9 +120,10 @@ public final class VoxSession: ObservableObject {
 
     private func makePipeline(dictationID: String) -> DictationProcessing {
         let recoveryStore = self.recoveryStore
+        let config = assemblyConfig(dictationID: dictationID)
         return DictationPipeline(
-            stt: makeSTTProvider(),
-            rewriter: makeRewriteProvider(),
+            stt: makeSTTProvider(config: config),
+            rewriter: makeRewriteProvider(config: config),
             paster: ClipboardPaster(),
             prefs: prefs,
             rewriteCache: .shared,
@@ -160,8 +161,8 @@ public final class VoxSession: ObservableObject {
         )
     }
 
-    private func makeRewriteProvider() -> RewriteProvider {
-        let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: assemblyConfig())
+    private func makeRewriteProvider(config: ProviderAssemblyConfig) -> RewriteProvider {
+        let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: config)
 
         // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
         // Falls through to cloud if unavailable or on error.
@@ -181,7 +182,7 @@ public final class VoxSession: ObservableObject {
         return cloudRewrite
     }
 
-    private func makeSTTProvider() -> STTProvider {
+    private func makeSTTProvider(config: ProviderAssemblyConfig) -> STTProvider {
         // macOS 26+: SpeechTranscriber (on-device, newer API) with AppleSpeechClient fallback.
         // SpeechTranscriber requires the macOS 26 SDK (Xcode 26+); gate with canImport(FoundationModels)
         // as a proxy for that SDK being present.
@@ -200,7 +201,7 @@ public final class VoxSession: ObservableObject {
         appleSTT = AppleSpeechClient()
         #endif
 
-        let cloudResult = ProviderAssembly.makeCloudSTTProvider(config: assemblyConfig())
+        let cloudResult = ProviderAssembly.makeCloudSTTProvider(config: config)
 
         let chain: STTProvider
         if cloudResult.entries.isEmpty {
@@ -231,12 +232,85 @@ public final class VoxSession: ObservableObject {
         )
     }
 
-    private func assemblyConfig() -> ProviderAssemblyConfig {
+    private func assemblyConfig(dictationID: String) -> ProviderAssemblyConfig {
         ProviderAssemblyConfig(
             elevenLabsAPIKey: prefs.elevenLabsAPIKey,
             deepgramAPIKey: prefs.deepgramAPIKey,
             geminiAPIKey: prefs.geminiAPIKey,
-            openRouterAPIKey: prefs.openRouterAPIKey
+            openRouterAPIKey: prefs.openRouterAPIKey,
+            openRouterOnModelUsed: { model, isFallback in
+                DiagnosticsStore.recordAsync(
+                    name: DiagnosticsEventNames.rewriteModelUsed,
+                    sessionID: dictationID,
+                    fields: [
+                        "provider": .string("openrouter"),
+                        "served_model": .string(model),
+                        "is_fallback_model": .bool(isFallback),
+                    ]
+                )
+
+                #if DEBUG
+                print("[RewriteDiag] provider=openrouter event=model_used served_model=\(model) fallback_model=\(isFallback)")
+                #endif
+            },
+            openRouterOnDiagnostic: { diagnostic in
+                var fields: [String: DiagnosticsValue] = [
+                    "provider": .string("openrouter"),
+                    "outcome": .string(diagnostic.outcome.rawValue),
+                    "requested_model": .string(diagnostic.requestedModel),
+                    "router_model": .string(diagnostic.routerModel),
+                    "attempt": .int(diagnostic.attempt),
+                    "is_fallback_model": .bool(diagnostic.isFallbackModel),
+                    "routing_mode": .string(diagnostic.routingMode.rawValue),
+                ]
+                if let servedModel = diagnostic.servedModel {
+                    fields["served_model"] = .string(servedModel)
+                }
+                if let elapsedMs = diagnostic.elapsedMs {
+                    fields["elapsed_ms"] = .int(elapsedMs)
+                }
+                if let httpStatusCode = diagnostic.httpStatusCode {
+                    fields["http_status"] = .int(httpStatusCode)
+                }
+                if let errorCode = diagnostic.errorCode {
+                    fields["error_code"] = .string(errorCode)
+                }
+                if let errorMessage = diagnostic.errorMessage {
+                    fields["error_message"] = .string(errorMessage)
+                }
+
+                DiagnosticsStore.recordAsync(
+                    name: DiagnosticsEventNames.rewriteOpenRouterAttempt,
+                    sessionID: dictationID,
+                    fields: fields
+                )
+
+                #if DEBUG
+                var logParts: [String] = [
+                    "provider=openrouter",
+                    "event=attempt",
+                    "outcome=\(diagnostic.outcome.rawValue)",
+                    "requested=\(diagnostic.requestedModel)",
+                    "router=\(diagnostic.routerModel)",
+                    "attempt=\(diagnostic.attempt)",
+                    "fallback_model=\(diagnostic.isFallbackModel)",
+                    "routing=\(diagnostic.routingMode.rawValue)",
+                ]
+                if let servedModel = diagnostic.servedModel {
+                    logParts.append("served=\(servedModel)")
+                }
+                if let elapsedMs = diagnostic.elapsedMs {
+                    logParts.append("elapsed_ms=\(elapsedMs)")
+                }
+                if let httpStatusCode = diagnostic.httpStatusCode {
+                    logParts.append("http_status=\(httpStatusCode)")
+                }
+                if let errorCode = diagnostic.errorCode {
+                    logParts.append("error_code=\(errorCode)")
+                }
+                print("[RewriteDiag] " + logParts.joined(separator: " "))
+                #endif
+            }
         )
     }
 

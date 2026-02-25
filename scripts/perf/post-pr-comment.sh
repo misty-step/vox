@@ -24,17 +24,35 @@ if [ -z "${GITHUB_REPOSITORY:-}" ]; then
   exit 2
 fi
 
-# Delete all prior perf comments if they exist (match marker).
-COMMENT_IDS="$(gh api \
-  repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments \
-  --jq '.[] | select(.body | contains("<!-- vox-perf-audit -->")) | .id' \
+MARKER="<!-- vox-perf-audit -->"
+
+# Gather all perf-audit comments across all pages, then keep one sticky comment.
+COMMENT_ROWS="$(gh api --paginate \
+  "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+  --jq ".[] | select(.body | contains(\"${MARKER}\")) | [.id, .updated_at] | @tsv" \
   2>/dev/null || true)"
 
-if [ -n "$COMMENT_IDS" ]; then
-  while IFS= read -r comment_id; do
-    [ -n "$comment_id" ] || continue
-    gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" -X DELETE 2>/dev/null || true
-  done <<< "$COMMENT_IDS"
+PRIMARY_COMMENT_ID=""
+if [ -n "$COMMENT_ROWS" ]; then
+  PRIMARY_COMMENT_ID="$(printf '%s\n' "$COMMENT_ROWS" | sort -k2 | tail -n 1 | cut -f1)"
 fi
 
-gh pr comment "$PR_NUMBER" --body-file "$REPORT_PATH"
+if [ -n "$PRIMARY_COMMENT_ID" ]; then
+  PAYLOAD="$(mktemp "${RUNNER_TEMP:-/tmp}/vox-perf-comment.XXXXXX.json")"
+  jq -Rs '{body: .}' "$REPORT_PATH" > "$PAYLOAD"
+  gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${PRIMARY_COMMENT_ID}" \
+    --method PATCH \
+    --input "$PAYLOAD" >/dev/null
+  rm -f "$PAYLOAD"
+else
+  gh pr comment "$PR_NUMBER" --body-file "$REPORT_PATH" >/dev/null
+fi
+
+# Delete duplicates if any remain.
+if [ -n "$COMMENT_ROWS" ]; then
+  while IFS=$'\t' read -r comment_id _updated_at; do
+    [ -n "$comment_id" ] || continue
+    [ "$comment_id" = "$PRIMARY_COMMENT_ID" ] && continue
+    gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" -X DELETE >/dev/null 2>&1 || true
+  done <<< "$COMMENT_ROWS"
+fi

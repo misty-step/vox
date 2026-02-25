@@ -52,8 +52,8 @@ struct OpenRouterClientTests {
         #expect(provider["require_parameters"] as? Bool == true)
     }
 
-    @Test("Request includes reasoning disabled")
-    func reasoningDisabled() async throws {
+    @Test("Request omits reasoning field for strict-route compatibility")
+    func reasoningOmittedForCompatibility() async throws {
         let captured = Capture<[String: Any]?>(nil)
         URLProtocolStub.requestHandler = { request in
             let data = bodyData(from: request)
@@ -70,8 +70,89 @@ struct OpenRouterClientTests {
         _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
 
         let body = try #require(captured.value)
-        let reasoning = try #require(body["reasoning"] as? [String: Any])
-        #expect(reasoning["enabled"] as? Bool == false)
+        #expect(body["reasoning"] == nil)
+    }
+
+    @Test("Retries same model with relaxed provider parameters when strict routing has no endpoints")
+    func retryWithRelaxedProviderParameters() async throws {
+        let attempts = Capture(0)
+        let requireParametersValues = Capture<[Bool]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let provider = body["provider"] as? [String: Any],
+               let requireParameters = provider["require_parameters"] as? Bool {
+                requireParametersValues.mutate { $0.append(requireParameters) }
+            }
+
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"relaxed-provider-success"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(apiKey: "test-key", session: makeStubbedSession())
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
+
+        #expect(result == "relaxed-provider-success")
+        #expect(attempts.value == 2)
+        #expect(requireParametersValues.value == [true, false])
+    }
+
+    @Test("Diagnostic callback captures strict-failure to relaxed-routing recovery")
+    func diagnosticsCaptureStrictFailureThenRelaxedSuccess() async throws {
+        let events = Capture<[OpenRouterRewriteDiagnostic]>([])
+        let attempts = Capture(0)
+
+        URLProtocolStub.requestHandler = { request in
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"inception/mercury","choices":[{"message":{"content":"ok"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onDiagnostic: { event in
+                events.mutate { $0.append(event) }
+            }
+        )
+
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "inception/mercury")
+        #expect(result == "ok")
+
+        let outcomes = events.value.map { $0.outcome }
+        #expect(outcomes == [.failure, .relaxedRetry, .success])
+        #expect(events.value[0].routingMode == .strictParameters)
+        #expect(events.value[0].httpStatusCode == 404)
+        #expect(events.value[2].routingMode == .relaxedParameters)
+        #expect(events.value[2].servedModel == "inception/mercury")
     }
 
     @Test("Model usage callback reports served model from response")
@@ -302,6 +383,141 @@ struct OpenRouterClientTests {
 
         #expect(result == "third time")
         #expect(models.value == ["primary/model", "fallback/one", "fallback/two"])
+    }
+
+    @Test("Model unavailable falls back to Mercury coder alias")
+    func fallbackToMercuryCoderAliasOnModelUnavailable() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"Model inception/mercury not found"}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"mercury-coder result"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(apiKey: "test-key", session: makeStubbedSession())
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "inception/mercury")
+
+        #expect(result == "mercury-coder result")
+        #expect(models.value == ["inception/mercury", "inception/mercury-coder"])
+    }
+
+    @Test("Model unavailable falls back to configured fallback models")
+    func modelUnavailableFallsBackToConfiguredModels() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found for model primary/model"}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"fallback result"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "fallback result")
+        #expect(models.value == ["primary/model", "fallback/model"])
+    }
+
+    @Test("No-endpoints routing message retries same model with relaxed parameters")
+    func noEndpointsRoutingMessageRetriesSameModel() async throws {
+        let models = Capture<[String]>([])
+
+        URLProtocolStub.requestHandler = { request in
+            let data = bodyData(from: request)
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                models.mutate { $0.append(body["model"] as? String ?? "") }
+            }
+
+            if models.value.count == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"choices":[{"message":{"content":"fallback via no-endpoints"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+
+        #expect(result == "fallback via no-endpoints")
+        #expect(models.value == ["primary/model", "primary/model"])
+    }
+
+    @Test("Does not fall back on non-model invalid request")
+    func noFallbackOnGenericInvalidRequest() async throws {
+        let counter = Capture(0)
+        URLProtocolStub.requestHandler = { request in
+            counter.mutate { $0 += 1 }
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"error":{"message":"messages are required"}}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            fallbackModels: ["fallback/model"]
+        )
+
+        await #expect(throws: RewriteError.self) {
+            _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "primary/model")
+        }
+        #expect(counter.value == 1)
     }
 
     // MARK: - HTTP Headers

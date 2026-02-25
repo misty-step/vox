@@ -29,6 +29,10 @@ public struct ProviderAssemblyConfig: Sendable {
     /// Perf-audit uses this to record per-call model usage.
     public let openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)?
 
+    /// Optional callback forwarded to `OpenRouterClient.onDiagnostic`.
+    /// Emits structured attempt/success/failure routing details for diagnostics.
+    public let openRouterOnDiagnostic: (@Sendable (OpenRouterRewriteDiagnostic) -> Void)?
+
     public init(
         elevenLabsAPIKey: String,
         deepgramAPIKey: String,
@@ -36,7 +40,8 @@ public struct ProviderAssemblyConfig: Sendable {
         openRouterAPIKey: String,
         sttInstrument: @escaping @Sendable (String, String, any STTProvider) -> any STTProvider = { _, _, p in p },
         rewriteInstrument: @escaping @Sendable (String, any RewriteProvider) -> any RewriteProvider = { _, p in p },
-        openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)? = nil
+        openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)? = nil,
+        openRouterOnDiagnostic: (@Sendable (OpenRouterRewriteDiagnostic) -> Void)? = nil
     ) {
         func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
         self.elevenLabsAPIKey = trimmed(elevenLabsAPIKey)
@@ -46,6 +51,7 @@ public struct ProviderAssemblyConfig: Sendable {
         self.sttInstrument = sttInstrument
         self.rewriteInstrument = rewriteInstrument
         self.openRouterOnModelUsed = openRouterOnModelUsed
+        self.openRouterOnDiagnostic = openRouterOnDiagnostic
     }
 }
 
@@ -170,7 +176,8 @@ public enum ProviderAssembly {
             : OpenRouterClient(
                 apiKey: config.openRouterAPIKey,
                 fallbackModels: openRouterFallbackModels,
-                onModelUsed: config.openRouterOnModelUsed
+                onModelUsed: config.openRouterOnModelUsed,
+                onDiagnostic: config.openRouterOnDiagnostic
             )
 
         switch (gemini, openRouter) {
@@ -181,7 +188,7 @@ public enum ProviderAssembly {
             return ModelRoutedRewriteProvider(
                 gemini: instrumented,
                 openRouter: openRouter,
-                fallbackGeminiModel: ProcessingLevel.defaultCleanRewriteModel
+                fallbackGeminiModel: ProcessingLevel.defaultGeminiFallbackModel
             )
         case let (nil, or?):
             return or

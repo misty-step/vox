@@ -356,6 +356,12 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     #if DEBUG
                     print("[Pipeline] Rewrite cache hit")
                     #endif
+                    recordRewriteStageOutcome(
+                        level: level,
+                        model: model,
+                        outcome: "cache_hit",
+                        fields: ["cache_hit": .bool(true)]
+                    )
                 } else {
                     let prompt = RewritePrompts.prompt(for: level)
                     guard let rewriteTimeoutSeconds = rewriteStageTimeouts.seconds(for: level) else {
@@ -376,6 +382,11 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     if trimmedCandidate.isEmpty {
                         print("[Pipeline] Rewrite returned empty, using raw transcript")
                         output = transcript
+                        recordRewriteStageOutcome(
+                            level: level,
+                            model: model,
+                            outcome: "empty_raw_fallback"
+                        )
                     } else {
                         output = candidate
                         if enableRewriteCache {
@@ -386,6 +397,12 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                                 model: model
                             )
                         }
+                        recordRewriteStageOutcome(
+                            level: level,
+                            model: model,
+                            outcome: "success",
+                            fields: ["cache_hit": .bool(false)]
+                        )
                     }
                 }
             } catch is CancellationError {
@@ -394,9 +411,21 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                 let waited = CFAbsoluteTimeGetCurrent() - rewriteStart
                 print("[Pipeline] Rewrite timed out after \(String(format: "%.2f", waited))s, using raw transcript")
                 output = transcript
+                recordRewriteStageOutcome(
+                    level: level,
+                    model: model,
+                    outcome: "timeout_raw_fallback",
+                    fields: ["elapsed_ms": .int(Int(waited * 1000))]
+                )
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(rewriteFailureSummary(error))")
                 output = transcript
+                recordRewriteStageOutcome(
+                    level: level,
+                    model: model,
+                    outcome: "error_raw_fallback",
+                    fields: DiagnosticsStore.errorFields(for: error)
+                )
             }
             rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
         }
@@ -422,6 +451,27 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             print("[Pipeline] Processing level: \(level.rawValue) (model: \(level.defaultModel))")
         }
         #endif
+    }
+
+    private func recordRewriteStageOutcome(
+        level: ProcessingLevel,
+        model: String,
+        outcome: String,
+        fields: [String: DiagnosticsValue] = [:]
+    ) {
+        var payload: [String: DiagnosticsValue] = [
+            "processing_level": .string(level.rawValue),
+            "model": .string(model),
+            "outcome": .string(outcome),
+        ]
+        for (key, value) in fields {
+            payload[key] = value
+        }
+
+        DiagnosticsStore.recordAsync(
+            name: DiagnosticsEventNames.rewriteStageOutcome,
+            fields: payload
+        )
     }
 
 }

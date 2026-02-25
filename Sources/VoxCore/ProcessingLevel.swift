@@ -20,12 +20,15 @@ public enum ProcessingLevel: String, Codable, CaseIterable, Sendable {
 
     /// Default rewrite model for Clean.
     /// Keep centralized so rollback is a one-file change.
-    public static let defaultCleanRewriteModel = "gemini-2.5-flash-lite"
+    public static let defaultCleanRewriteModel = "inception/mercury"
 
     /// Default rewrite model for Polish.
-    /// Same model as Clean — gemini-2.5-flash-lite wins on latency and quality for both levels.
-    /// See docs/performance/rewrite-model-lockdown-2026-02-23.md for bakeoff evidence.
-    public static let defaultPolishRewriteModel = "gemini-2.5-flash-lite"
+    /// Same model as Clean.
+    public static let defaultPolishRewriteModel = "inception/mercury"
+
+    /// Gemini model used for best-effort fallback when an OpenRouter-only model is requested
+    /// but OpenRouter is unavailable and Gemini is configured.
+    public static let defaultGeminiFallbackModel = "gemini-2.5-flash-lite"
 
     public var defaultModel: String {
         switch self {

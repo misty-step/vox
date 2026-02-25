@@ -27,6 +27,9 @@ jobs:
       - name: Lint
         run: ./scripts/lint.sh
 
+      - name: Lint Cerberus workflow policy
+        run: ./scripts/lint-cerberus-workflow.sh
+
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 

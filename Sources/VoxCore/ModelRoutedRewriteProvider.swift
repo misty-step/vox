@@ -27,6 +27,9 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
         if let geminiModel = geminiModelName(from: model) {
             // Prefer direct Gemini when available for Gemini models.
             if let gemini {
+                #if DEBUG
+                logRoute(path: "gemini_direct", requestedModel: model, targetModel: geminiModel)
+                #endif
                 do {
                     return try await gemini.rewrite(
                         transcript: transcript,
@@ -38,7 +41,7 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
                 } catch {
                     if let openRouter {
                         #if DEBUG
-                        print("[Rewrite] Gemini direct failed: \(errorSummary(error)), falling back to OpenRouter")
+                        print("[RewriteRoute] path=gemini_direct_to_openrouter requested=\(model) error=\(errorSummary(error))")
                         #endif
                         return try await openRouter.rewrite(
                             transcript: transcript,
@@ -51,6 +54,9 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
             }
 
             if let openRouter {
+                #if DEBUG
+                logRoute(path: "gemini_via_openrouter", requestedModel: model, targetModel: model)
+                #endif
                 return try await openRouter.rewrite(
                     transcript: transcript,
                     systemPrompt: systemPrompt,
@@ -63,6 +69,9 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
 
         // Non-Gemini model ids (e.g. "x-ai/grok-4.1-fast") require OpenRouter.
         if let openRouter {
+            #if DEBUG
+            logRoute(path: "openrouter_primary", requestedModel: model, targetModel: model)
+            #endif
             do {
                 return try await openRouter.rewrite(
                     transcript: transcript,
@@ -75,7 +84,7 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
                 // Best-effort fallback: if OpenRouter is down but Gemini is configured, keep the UX working.
                 if let gemini {
                     #if DEBUG
-                    print("[Rewrite] OpenRouter failed: \(errorSummary(error)), falling back to Gemini '\(fallbackGeminiModel)'")
+                    print("[RewriteRoute] path=openrouter_to_gemini requested=\(model) fallback_model=\(fallbackGeminiModel) error=\(errorSummary(error))")
                     #endif
                     return try await gemini.rewrite(
                         transcript: transcript,
@@ -89,7 +98,7 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
 
         if let gemini {
             #if DEBUG
-            print("[Rewrite] No OpenRouter configured for '\(model)'; falling back to Gemini '\(fallbackGeminiModel)'")
+            print("[RewriteRoute] path=no_openrouter_fallback_to_gemini requested=\(model) fallback_model=\(fallbackGeminiModel)")
             #endif
             return try await gemini.rewrite(
                 transcript: transcript,
@@ -109,6 +118,12 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
         }
         return nil
     }
+
+    #if DEBUG
+    private func logRoute(path: String, requestedModel: String, targetModel: String) {
+        print("[RewriteRoute] path=\(path) requested=\(requestedModel) target=\(targetModel)")
+    }
+    #endif
 
     private func errorSummary(_ error: Error) -> String {
         if let r = error as? RewriteError { return r.localizedDescription }
