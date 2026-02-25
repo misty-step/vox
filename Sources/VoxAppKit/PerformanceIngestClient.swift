@@ -3,6 +3,9 @@ import Foundation
 enum DiagnosticsEventNames {
     static let pipelineTiming = "pipeline_timing"
     static let shareTrigger = "share_triggered"
+    static let rewriteOpenRouterAttempt = "rewrite_openrouter_attempt"
+    static let rewriteModelUsed = "rewrite_model_used"
+    static let rewriteStageOutcome = "rewrite_stage_outcome"
 }
 
 /// Best-effort performance telemetry uploader.

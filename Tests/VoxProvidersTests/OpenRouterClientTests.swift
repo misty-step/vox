@@ -52,8 +52,8 @@ struct OpenRouterClientTests {
         #expect(provider["require_parameters"] as? Bool == true)
     }
 
-    @Test("Request includes reasoning disabled")
-    func reasoningDisabled() async throws {
+    @Test("Request omits reasoning field for strict-route compatibility")
+    func reasoningOmittedForCompatibility() async throws {
         let captured = Capture<[String: Any]?>(nil)
         URLProtocolStub.requestHandler = { request in
             let data = bodyData(from: request)
@@ -70,8 +70,7 @@ struct OpenRouterClientTests {
         _ = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "test/model")
 
         let body = try #require(captured.value)
-        let reasoning = try #require(body["reasoning"] as? [String: Any])
-        #expect(reasoning["enabled"] as? Bool == false)
+        #expect(body["reasoning"] == nil)
     }
 
     @Test("Retries same model with relaxed provider parameters when strict routing has no endpoints")
@@ -111,6 +110,49 @@ struct OpenRouterClientTests {
         #expect(result == "relaxed-provider-success")
         #expect(attempts.value == 2)
         #expect(requireParametersValues.value == [true, false])
+    }
+
+    @Test("Diagnostic callback captures strict-failure to relaxed-routing recovery")
+    func diagnosticsCaptureStrictFailureThenRelaxedSuccess() async throws {
+        let events = Capture<[OpenRouterRewriteDiagnostic]>([])
+        let attempts = Capture(0)
+
+        URLProtocolStub.requestHandler = { request in
+            attempts.mutate { $0 += 1 }
+            if attempts.value == 1 {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    {"error":{"message":"No endpoints found that can handle the requested parameters."}}
+                    """.utf8)
+                )
+            }
+
+            return (
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                Data("""
+                {"model":"inception/mercury","choices":[{"message":{"content":"ok"}}]}
+                """.utf8)
+            )
+        }
+
+        let client = OpenRouterClient(
+            apiKey: "test-key",
+            session: makeStubbedSession(),
+            onDiagnostic: { event in
+                events.mutate { $0.append(event) }
+            }
+        )
+
+        let result = try await client.rewrite(transcript: "hello", systemPrompt: "fix", model: "inception/mercury")
+        #expect(result == "ok")
+
+        let outcomes = events.value.map { $0.outcome }
+        #expect(outcomes == [.failure, .relaxedRetry, .success])
+        #expect(events.value[0].routingMode == .strictParameters)
+        #expect(events.value[0].httpStatusCode == 404)
+        #expect(events.value[2].routingMode == .relaxedParameters)
+        #expect(events.value[2].servedModel == "inception/mercury")
     }
 
     @Test("Model usage callback reports served model from response")
