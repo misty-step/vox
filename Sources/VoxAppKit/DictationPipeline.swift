@@ -82,6 +82,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     // Invoked when a transcript is successfully processed and pasted.
     // Async so callers can persist state (e.g. recovery snapshot) before process() returns.
     private let onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)?
+    // Debug-only hooks for live transcript/rewrite inspection.
+    private let onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)?
+    private let onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)?
+    private let onPipelineLog: (@Sendable (_ message: String) -> Void)?
 
     @MainActor
     public convenience init(
@@ -100,7 +104,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         opusBypassThreshold: Int = 200_000,
         pipelineTimeout: TimeInterval = 120,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
-        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)? = nil
+        onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)? = nil,
+        onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)? = nil,
+        onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)? = nil,
+        onPipelineLog: (@Sendable (_ message: String) -> Void)? = nil
     ) {
         self.init(
             stt: stt,
@@ -115,7 +122,10 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             opusBypassThreshold: opusBypassThreshold,
             pipelineTimeout: pipelineTimeout,
             timingHandler: timingHandler,
-            onProcessedTranscript: onProcessedTranscript
+            onProcessedTranscript: onProcessedTranscript,
+            onRawTranscript: onRawTranscript,
+            onRewriteResult: onRewriteResult,
+            onPipelineLog: onPipelineLog
         )
     }
 
@@ -139,6 +149,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         rewriteStageTimeouts: RewriteStageTimeouts = .default,
         timingHandler: (@Sendable (PipelineTiming) -> Void)? = nil,
         onProcessedTranscript: (@Sendable (_ rawTranscript: String, _ outputText: String, _ processingLevel: ProcessingLevel) async -> Void)? = nil,
+        onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)? = nil,
+        onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)? = nil,
+        onPipelineLog: (@Sendable (_ message: String) -> Void)? = nil,
         audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { url in
             try CapturedAudioInspector.ensureHasAudioFrames(at: url)
         }
@@ -157,6 +170,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         self.rewriteStageTimeouts = rewriteStageTimeouts
         self.timingHandler = timingHandler
         self.onProcessedTranscript = onProcessedTranscript
+        self.onRawTranscript = onRawTranscript
+        self.onRewriteResult = onRewriteResult
+        self.onPipelineLog = onPipelineLog
         self.audioFrameValidator = audioFrameValidator
     }
 
@@ -248,6 +264,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         print("[Pipeline] STT complete (\(transcript.count) chars)")
         #endif
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
+        onRawTranscript?(transcript)
 
         let level = await MainActor.run { prefs.processingLevel }
         timing.processingLevel = level
@@ -318,6 +335,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
 
         let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw VoxError.noTranscript }
+        onRawTranscript?(transcript)
         timing.processingLevel = processingLevel
         logActiveProcessingLevel(processingLevel)
         let processed = try await rewriteAndPaste(
@@ -356,6 +374,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     #if DEBUG
                     print("[Pipeline] Rewrite cache hit")
                     #endif
+                    onPipelineLog?("rewrite cache hit (level=\(level.rawValue), model=\(model))")
                     recordRewriteStageOutcome(
                         level: level,
                         model: model,
@@ -381,6 +400,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     let trimmedCandidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
                     if trimmedCandidate.isEmpty {
                         print("[Pipeline] Rewrite returned empty, using raw transcript")
+                        onPipelineLog?("rewrite returned empty; using raw transcript (level=\(level.rawValue))")
                         output = transcript
                         recordRewriteStageOutcome(
                             level: level,
@@ -410,6 +430,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             } catch is RewriteStageTimeoutError {
                 let waited = CFAbsoluteTimeGetCurrent() - rewriteStart
                 print("[Pipeline] Rewrite timed out after \(String(format: "%.2f", waited))s, using raw transcript")
+                onPipelineLog?("rewrite timed out after \(Int(waited * 1000))ms; using raw transcript")
                 output = transcript
                 recordRewriteStageOutcome(
                     level: level,
@@ -419,6 +440,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                 )
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(rewriteFailureSummary(error))")
+                onPipelineLog?("rewrite failed; using raw transcript (\(rewriteFailureSummary(error)))")
                 output = transcript
                 recordRewriteStageOutcome(
                     level: level,
@@ -432,11 +454,13 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
 
         let finalText = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !finalText.isEmpty else { throw VoxError.noTranscript }
+        onRewriteResult?(level, finalText)
 
         let pasteStart = CFAbsoluteTimeGetCurrent()
         #if DEBUG
         print("[Pipeline] Pasting \(finalText.count) chars")
         #endif
+        onPipelineLog?("pasting \(finalText.count) chars")
         try await paster.paste(text: finalText)
         let pasteTime = CFAbsoluteTimeGetCurrent() - pasteStart
 
@@ -444,13 +468,17 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     }
 
     private func logActiveProcessingLevel(_ level: ProcessingLevel) {
-        #if DEBUG
         if level == .raw {
+            onPipelineLog?("processing level raw (rewrite disabled)")
+            #if DEBUG
             print("[Pipeline] Processing level: raw (rewrite disabled)")
+            #endif
         } else {
+            onPipelineLog?("processing level \(level.rawValue) (model: \(level.defaultModel))")
+            #if DEBUG
             print("[Pipeline] Processing level: \(level.rawValue) (model: \(level.defaultModel))")
+            #endif
         }
-        #endif
     }
 
     private func recordRewriteStageOutcome(

@@ -11,6 +11,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var session: VoxSession?
     private var hotkeyMonitor: HotkeyMonitor?
     private let onboarding = OnboardingStore()
+    private var debugWorkbenchWindowController: DebugWorkbenchWindowController?
+    private var debugWorkbenchSink: DebugWorkbenchSink?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Clean up recovery audio older than 24 hours
@@ -59,7 +61,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         PermissionManager.promptForAccessibilityIfNeeded()
 
-        let session = VoxSession(sessionExtension: OnboardingSessionExtension(onboarding: onboarding))
+        #if DEBUG
+        if DebugWorkbenchRuntime.isEnabled() {
+            let store = DebugWorkbenchStore.shared
+            let controller = DebugWorkbenchWindowController(store: store)
+            controller.showWindow(nil)
+            debugWorkbenchWindowController = controller
+            debugWorkbenchSink = DebugWorkbenchSink.live(store: store)
+            print("[Vox] Debug workbench enabled")
+        }
+        #endif
+
+        let session = VoxSession(
+            sessionExtension: OnboardingSessionExtension(onboarding: onboarding),
+            recoveryStore: .shared,
+            debugSink: debugWorkbenchSink
+        )
         self.session = session
 
         settingsWindowController = SettingsWindowController(
