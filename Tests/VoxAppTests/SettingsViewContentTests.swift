@@ -54,7 +54,9 @@ struct SettingsViewContentTests {
         let summary = CloudProviderCatalog.rewriteSummary(
             configuredProviderTitles: ["Gemini", "OpenRouter"]
         )
-        #expect(summary == "Gemini → OpenRouter")
+        #expect(summary.contains("Model-routed"))
+        #expect(summary.contains("OpenRouter"))
+        #expect(summary.contains("Gemini"))
     }
 
     @Test("Rewrite summary falls back to raw transcript when no providers configured")

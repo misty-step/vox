@@ -18,15 +18,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let prefs = PreferencesStore.shared
         let hasElevenLabs = !prefs.elevenLabsAPIKey.isEmpty
-        let hasOpenRouter = !prefs.openRouterAPIKey.isEmpty
         let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
+        let hasGemini = !prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasOpenRouter = !prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Apple Speech ✓")
-        let hasGemini = !prefs.geminiAPIKey.isEmpty
-        let rewriteChain = [
-            hasGemini ? "Gemini" : nil,
-            hasOpenRouter ? "OpenRouter" : nil,
-        ].compactMap { $0 }.joined(separator: " → ")
-        print("[Vox] Rewrite: \(rewriteChain.isEmpty ? "–" : rewriteChain)")
+        print("[Vox] Rewrite routing: \(CloudProviderCatalog.rewriteSummary(prefs: prefs))")
+        if prefs.processingLevel != .raw {
+            let requestedModel = prefs.processingLevel.defaultModel
+            let requestedModelIsGemini = requestedModel.hasPrefix("gemini-") || requestedModel.hasPrefix("google/gemini-")
+            let effectiveModel = (!hasOpenRouter && hasGemini && !requestedModelIsGemini)
+                ? ProcessingLevel.defaultGeminiFallbackModel
+                : requestedModel
+            let effectiveSuffix = effectiveModel == requestedModel
+                ? ""
+                : " (effective fallback)"
+
+            print("[Vox] Rewrite requested model (\(prefs.processingLevel.rawValue)): \(requestedModel)")
+            print("[Vox] Rewrite effective model hint (\(prefs.processingLevel.rawValue)): \(effectiveModel)\(effectiveSuffix)")
+        }
         print("[Vox] Initial processing level: \(prefs.processingLevel.rawValue)")
 
         let diagnosticsContext = DiagnosticsContext.current(prefs: prefs)
