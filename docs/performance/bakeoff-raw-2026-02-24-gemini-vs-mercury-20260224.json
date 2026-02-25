@@ -1,0 +1,427 @@
+{
+  "timestamp": "2026-02-24T21:12:37Z",
+  "iterations": 1,
+  "models": [
+    "google/gemini-2.5-flash-lite",
+    "inception/mercury"
+  ],
+  "levels": [
+    "clean",
+    "polish"
+  ],
+  "corpus_size": 20,
+  "results": {
+    "clean": {
+      "google/gemini-2.5-flash-lite": [
+        {
+          "entry_id": "clean-01",
+          "iteration": 1,
+          "text": "Today I want to talk about the release plan for Vox. What do we ship first and what do we cut?",
+          "latency": 1.665958249999676,
+          "cost": 0,
+          "ratio": 0.9215686274509803,
+          "levenshtein": 0.7745098039215687,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-02",
+          "iteration": 1,
+          "text": "The bug is that the app records, but sometimes the paste doesn't happen. I think it's permissions, but I'm not sure.",
+          "latency": 1.1966417909934535,
+          "cost": 0,
+          "ratio": 0.9508196721311475,
+          "levenshtein": 0.8442622950819672,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "clean-03",
+          "iteration": 1,
+          "text": "We should probably add a small warning if the API key is missing and maybe say exactly which key, not just \"missing key.\"",
+          "latency": 1.0260798329982208,
+          "cost": 0,
+          "ratio": 1.0341880341880343,
+          "levenshtein": 0.9669421487603306,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-04",
+          "iteration": 1,
+          "text": "I tried it on Bluetooth headphones, and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 2.050359832996037,
+          "cost": 0,
+          "ratio": 0.9834710743801653,
+          "levenshtein": 0.9338842975206612,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-05",
+          "iteration": 1,
+          "text": "Note to self: Check the pipeline timing logs: encode, STT, rewrite, paste, and total. Make sure they add up.",
+          "latency": 3.9489063750006608,
+          "cost": 0,
+          "ratio": 1.0384615384615385,
+          "levenshtein": 0.8981481481481481,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-06",
+          "iteration": 1,
+          "text": "The docs are out of date, and we should update them before release.",
+          "latency": 0.5458780000044499,
+          "cost": 0,
+          "ratio": 1.0806451612903225,
+          "levenshtein": 0.8656716417910448,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-07",
+          "iteration": 1,
+          "text": "The goal is fast rewrite, no settings. The user should not choose models at all.",
+          "latency": 0.6480206250053016,
+          "cost": 0,
+          "ratio": 0.8421052631578947,
+          "levenshtein": 0.7894736842105263,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-08",
+          "iteration": 1,
+          "text": "I think we need retries on throttling, but not infinite retries. Maybe exponential backoff with jitter.",
+          "latency": 0.5776430839978275,
+          "cost": 0,
+          "ratio": 1.03,
+          "levenshtein": 0.970873786407767,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-09",
+          "iteration": 1,
+          "text": "Add a benchmark command that anyone can run with an OpenRouter API key and it should output a markdown report.",
+          "latency": 3.627222666000307,
+          "cost": 0,
+          "ratio": 1.0377358490566038,
+          "levenshtein": 0.9636363636363636,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-10",
+          "iteration": 1,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 2.2031902910021017,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        }
+      ],
+      "inception/mercury": [
+        {
+          "entry_id": "clean-01",
+          "iteration": 1,
+          "text": "Okay today I want to talk about the release plan for Vox.\n\nWhat we ship first and what we cut.",
+          "latency": 1.610075083000993,
+          "cost": 0,
+          "ratio": 0.9215686274509803,
+          "levenshtein": 0.8725490196078431,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-02",
+          "iteration": 1,
+          "text": "The bug is that the app records but sometimes the paste doesn't happen, and I think it's permissions, but I'm not sure.",
+          "latency": 1.1505779170038295,
+          "cost": 0,
+          "ratio": 0.9754098360655737,
+          "levenshtein": 0.8770491803278688,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "clean-03",
+          "iteration": 1,
+          "text": "We should probably add a small warning if the API key is missing and maybe say exactly which key, not just missing key.",
+          "latency": 0.7466162089986028,
+          "cost": 0,
+          "ratio": 1.017094017094017,
+          "levenshtein": 0.9831932773109243,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-04",
+          "iteration": 1,
+          "text": "I tried it on Bluetooth headphones and it sounded fine, but the transcript had random commas and weird capitalization.",
+          "latency": 0.582473292000941,
+          "cost": 0,
+          "ratio": 0.9752066115702479,
+          "levenshtein": 0.9421487603305785,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-05",
+          "iteration": 1,
+          "text": "Note to self check the pipeline timing logs encode stt rewrite paste and total and make sure they add up.",
+          "latency": 0.5682432500034338,
+          "cost": 0,
+          "ratio": 1.0096153846153846,
+          "levenshtein": 0.9904761904761905,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-06",
+          "iteration": 1,
+          "text": "The docs are out of date and we should update it before release.",
+          "latency": 0.47549625000101514,
+          "cost": 0,
+          "ratio": 1.032258064516129,
+          "levenshtein": 0.9375,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-07",
+          "iteration": 1,
+          "text": "The goal is fast rewrite, no settings; the user should not choose models at all.",
+          "latency": 0.450904499994067,
+          "cost": 0,
+          "ratio": 0.8421052631578947,
+          "levenshtein": 0.7894736842105263,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-08",
+          "iteration": 1,
+          "text": "I think we need retries on throttling but not infinite retries, maybe exponential backoff with jitter.",
+          "latency": 0.7325734999976703,
+          "cost": 0,
+          "ratio": 1.02,
+          "levenshtein": 0.9803921568627451,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-09",
+          "iteration": 1,
+          "text": "Add a benchmark command that anyone can run with OpenRouter API key and it should output a markdown report.",
+          "latency": 0.5765716670066467,
+          "cost": 0,
+          "ratio": 1.009433962264151,
+          "levenshtein": 0.9906542056074766,
+          "content_overlap": 1.0
+        },
+        {
+          "entry_id": "clean-10",
+          "iteration": 1,
+          "text": "The app should never log actual transcript content in production logs, just character counts.",
+          "latency": 0.8079226669942727,
+          "cost": 0,
+          "ratio": 1.021978021978022,
+          "levenshtein": 0.978494623655914,
+          "content_overlap": 1.0
+        }
+      ]
+    },
+    "polish": {
+      "google/gemini-2.5-flash-lite": [
+        {
+          "entry_id": "polish-01",
+          "iteration": 1,
+          "text": "The application's perceived slowness is likely due to the rewrite step, rather than the speech-to-text (STT) process. This rewrite step experiences delays because it waits for the large language model (LLM), which can sometimes take up to two seconds to respond.",
+          "latency": 0.9395761249979842,
+          "cost": 0,
+          "ratio": 1.4555555555555555,
+          "levenshtein": 0.3969465648854962,
+          "content_overlap": 0.4583333333333333
+        },
+        {
+          "entry_id": "polish-02",
+          "iteration": 1,
+          "text": "The primary challenge with introducing more settings is the potential for overwhelming users, transforming the interface into a complex maze and rendering support intractable. Therefore, the objective is to establish defaults that are inherently effective and suitable for the majority of users.",
+          "latency": 2.1728385829992476,
+          "cost": 0,
+          "ratio": 2.107142857142857,
+          "levenshtein": 0.36949152542372876,
+          "content_overlap": 0.46153846153846156
+        },
+        {
+          "entry_id": "polish-03",
+          "iteration": 1,
+          "text": "To effectively measure performance in a bake-off, we should focus on P50 and P95 metrics, in addition to the average. This approach is crucial because the long tail of performance, often not reflected in averages, is what most significantly impacts user satisfaction and causes frustration.",
+          "latency": 1.2349794580004527,
+          "cost": 0,
+          "ratio": 2.685185185185185,
+          "levenshtein": 0.32068965517241377,
+          "content_overlap": 0.7692307692307693
+        },
+        {
+          "entry_id": "polish-04",
+          "iteration": 1,
+          "text": "For clean mode, the primary goal is to retain the original wording while improving punctuation and removing filler words such as \"um\" and \"uh.\"",
+          "latency": 2.147872624998854,
+          "cost": 0,
+          "ratio": 1.2434782608695651,
+          "levenshtein": 0.5594405594405594,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "polish-05",
+          "iteration": 1,
+          "text": "To ensure optimal performance, we should select a model that balances speed and stability. If the resulting quality is unsatisfactory, we will implement a rollback strategy by adjusting the processing level defaults within a single configuration file.",
+          "latency": 0.8659193339990452,
+          "cost": 0,
+          "ratio": 1.767605633802817,
+          "levenshtein": 0.4462151394422311,
+          "content_overlap": 0.4666666666666667
+        },
+        {
+          "entry_id": "polish-06",
+          "iteration": 1,
+          "text": "**Report Summary: Performance and Cost Analysis by Level**\n\nThis report provides a scannable overview of performance and cost across different levels, including latency, pass rate, and a final recommendation for each.\n\n**Level 1**\n\n*   **Latency:** [Insert Latency Data]\n*   **Cost:** [Insert Cost Data]\n*   **Pass Rate:** [Insert Pass Rate Data]\n*   **Recommendation:** [Insert Recommendation]\n\n**Level 2**\n\n*   **Latency:**",
+          "latency": 2.797210915996402,
+          "cost": 0,
+          "ratio": 3.373015873015873,
+          "levenshtein": 0.24235294117647055,
+          "content_overlap": 0.5384615384615384
+        },
+        {
+          "entry_id": "polish-07",
+          "iteration": 1,
+          "text": "Create a small, executable program that interfaces with OpenRouter. This program should be designed to:\n\n1.  **Call OpenRouter:** Integrate with the OpenRouter API to receive responses.\n2.  **Write JSON:** Output the received data in JSON format.\n3.  **Write Markdown:** Also output the received data in Markdown format.",
+          "latency": 1.7697429999971064,
+          "cost": 0,
+          "ratio": 3.0476190476190474,
+          "levenshtein": 0.22812500000000002,
+          "content_overlap": 0.45454545454545453
+        },
+        {
+          "entry_id": "polish-08",
+          "iteration": 1,
+          "text": "If a model is missing or encounters an error, the process should be recorded, but the run must continue to completion. This allows for the capture and analysis of partial results.",
+          "latency": 2.614022791996831,
+          "cost": 0,
+          "ratio": 1.5982142857142858,
+          "levenshtein": 0.4860335195530726,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "polish-09",
+          "iteration": 1,
+          "text": "We should maintain transcripts within the repository, ensuring they contain no user data. Additionally, the corpus should remain small to minimize operational costs.",
+          "latency": 2.508303958995384,
+          "cost": 0,
+          "ratio": 1.3095238095238095,
+          "levenshtein": 0.49090909090909096,
+          "content_overlap": 0.4375
+        },
+        {
+          "entry_id": "polish-10",
+          "iteration": 1,
+          "text": "After new defaults are selected, we should:\n\n*   Update the documentation.\n*   ",
+          "latency": 2.24865733399929,
+          "cost": 0,
+          "ratio": 0.6810344827586207,
+          "levenshtein": 0.3620689655172413,
+          "content_overlap": 0.3333333333333333
+        }
+      ],
+      "inception/mercury": [
+        {
+          "entry_id": "polish-01",
+          "iteration": 1,
+          "text": "**App Performance Observation**\n\n- The app feels slow.\n- The slowdown is not caused by the speech\u2011to\u2011text (STT) component.\n- Instead, it occurs during the rewrite step, where the system waits for the large language model (LLM) to finish.\n- The LLM response can take up to two seconds in some cases.",
+          "latency": 1.2065065830029198,
+          "cost": 0,
+          "ratio": 1.6555555555555554,
+          "levenshtein": 0.4093959731543624,
+          "content_overlap": 0.5416666666666666
+        },
+        {
+          "entry_id": "polish-02",
+          "iteration": 1,
+          "text": "**Issue with Excessive Settings**\n\n- **Complexity**: Introducing additional settings turns the system into a labyrinth of options.\n- **Support Challenges**: This complexity makes troubleshooting and providing support practically impossible.\n\n**Desired Solution**\n\n- **Effective Defaults**: Implement default configurations that are already well\u2011balanced and user\u2011friendly, eliminating the need for extensive customization.",
+          "latency": 0.8618178329998045,
+          "cost": 0,
+          "ratio": 3.0142857142857142,
+          "levenshtein": 0.2511848341232228,
+          "content_overlap": 0.46153846153846156
+        },
+        {
+          "entry_id": "polish-03",
+          "iteration": 1,
+          "text": "**Performance Metrics for a Bakeoff**\n\n- **Primary metrics**: Use the 50th percentile (p50) and the 95th percentile (p95) instead of only the average.\n- **Rationale**: The long\u2011tail behavior\u2014rare but extreme latency or error cases\u2014most frequently frustrates users.",
+          "latency": 0.902553917003388,
+          "cost": 0,
+          "ratio": 2.4444444444444446,
+          "levenshtein": 0.303030303030303,
+          "content_overlap": 0.5384615384615384
+        },
+        {
+          "entry_id": "polish-04",
+          "iteration": 1,
+          "text": "In clean mode, the text should retain its original wording while only correcting punctuation and eliminating filler words such as \u201cum\u201d and \u201cuh.\u201d",
+          "latency": 0.8007219169958262,
+          "cost": 0,
+          "ratio": 1.2521739130434784,
+          "levenshtein": 0.5,
+          "content_overlap": 0.5833333333333334
+        },
+        {
+          "entry_id": "polish-05",
+          "iteration": 1,
+          "text": "**Model Selection and Rollback Strategy**\n\n- **Primary criterion:** Choose a model that is both fast and stable.  \n- **Quality monitoring:** If the model\u2019s output quality degrades,  \n  - **Rollback mechanism:** Adjust the processing\u2011level defaults contained in a single configuration file.",
+          "latency": 0.6410461659979774,
+          "cost": 0,
+          "ratio": 2.035211267605634,
+          "levenshtein": 0.39446366782006925,
+          "content_overlap": 0.5333333333333333
+        },
+        {
+          "entry_id": "polish-06",
+          "iteration": 1,
+          "text": "**Report Design Requirements**\n\n- The report must be easy to scan.\n- Include a separate table for each level.\n- Each table should list the following metrics: latency, cost, and pass rate.\n- Follow each table with a concise recommendation line.",
+          "latency": 1.119439791997138,
+          "cost": 0,
+          "ratio": 1.9285714285714286,
+          "levenshtein": 0.44855967078189296,
+          "content_overlap": 0.8461538461538461
+        },
+        {
+          "entry_id": "polish-07",
+          "iteration": 1,
+          "text": "Create a lightweight executable that:\n\n- Calls OpenRouter\n- Writes output in JSON and Markdown formats  \n\nAvoid building a large framework.",
+          "latency": 1.1991165409999667,
+          "cost": 0,
+          "ratio": 1.3238095238095238,
+          "levenshtein": 0.302158273381295,
+          "content_overlap": 0.6363636363636364
+        },
+        {
+          "entry_id": "polish-08",
+          "iteration": 1,
+          "text": "**Handling Missing or Faulty Models**\n\n- **Record the issue**: Log when a model is missing or encounters an error.\n- **Continue the run**: Do not halt the entire process; proceed with the remaining tasks.\n- **Capture partial results**: Preserve any outputs generated before the failure for analysis.",
+          "latency": 1.1868857499939622,
+          "cost": 0,
+          "ratio": 2.669642857142857,
+          "levenshtein": 0.26086956521739135,
+          "content_overlap": 0.5
+        },
+        {
+          "entry_id": "polish-09",
+          "iteration": 1,
+          "text": "**Repository Management Strategy**\n\n- Store synthetic transcripts within the repository.\n- Exclude any user data from these transcripts.\n- Keep the corpus compact to reduce operational costs.",
+          "latency": 0.8757552089955425,
+          "cost": 0,
+          "ratio": 1.5158730158730158,
+          "levenshtein": 0.3403141361256544,
+          "content_overlap": 0.4375
+        },
+        {
+          "entry_id": "polish-10",
+          "iteration": 1,
+          "text": "**Next Steps After Selecting New Defaults**\n\n- **Update Documentation** \u2013 Incorporate the new default settings into all relevant documentation.  \n- **Run Strict Build** \u2013 Perform a full strict build to verify compilation integrity.  \n- **Execute Strict Tests** \u2013 Run the complete suite of strict tests to confirm that no functionality is broken.  \n\nThese actions will help maintain system stability and prevent regressions.",
+          "latency": 0.9477017080062069,
+          "cost": 0,
+          "ratio": 3.646551724137931,
+          "levenshtein": 0.22695035460992907,
+          "content_overlap": 0.6
+        }
+      ]
+    }
+  }
+}
