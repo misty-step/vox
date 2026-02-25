@@ -42,11 +42,13 @@ Workflow: `.github/workflows/perf-audit.yml`
 - Runs both lanes per PR with two fixtures (`short`, `medium`) and warmup exclusion.
 - Uses weighted fixture aggregation (by audio bytes) with per-fixture breakdown.
 - Includes longitudinal trend context across persisted PR + master runs.
+- Top-level comment starts with a concise TL;DR and a dual-lane scorecard (`provider` + `codepath`) for `clean` and `polish`.
+- Heavy quantitative sections are collapsed under `<details>` (scorecard internals, trend/routing tables, and LLM payload inputs).
 - Includes a compact run timeline table (latest N runs; default 16) with source PR/master, commit, and per-level p95.
 - Mermaid charts are disabled by default in CI for readability/render reliability; enable with `VOX_PERF_RENDER_MERMAID=1`.
 - Includes actionable synthesis tying regressions to stage deltas (`stt|rewrite|encode`) and touched files.
-- Includes optional LLM synthesis (OpenRouter) for concise hypothesis + next validation step; report generation fails open if the call is unavailable.
-- Summary table semantics: `vs base` compares to persisted master baseline at PR base SHA (or nearest persisted ancestor), `vs trend` compares to the previous run in the current trend window.
+- Includes optional LLM TL;DR synthesis (OpenRouter) from a reduced critical-metrics payload; report generation fails open if the call is unavailable.
+- Summary semantics: `vs base` compares to persisted master baseline at PR base SHA (or nearest persisted ancestor); `vs deployed median` uses recent master-only provider history (codepath uses recent lane median).
 - LLM synthesis model order defaults to `google/gemini-3-flash-preview` then `google/gemini-2.5-flash` fallback (override via `VOX_PERF_SYNTH_MODEL_PRIMARY` / `VOX_PERF_SYNTH_MODEL_FALLBACK`).
 - Falls back to nearest persisted master ancestor when exact base SHA is unavailable.
 - On `master` pushes, writes a durable JSON artifact to [`misty-step/vox-perf-audit`](https://github.com/misty-step/vox-perf-audit): `audit/<commit>.json`.

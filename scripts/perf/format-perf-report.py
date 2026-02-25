@@ -232,6 +232,78 @@ def confidence_label(samples: int, spread: float, p95: float) -> str:
     return "low"
 
 
+def median(values: list[float]) -> Optional[float]:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def pct_delta(current: float, reference: float) -> Optional[float]:
+    if reference <= 0:
+        return None
+    return (current - reference) / reference * 100
+
+
+def fmt_signed_ms(delta: float) -> str:
+    rounded = int(round(delta))
+    if rounded == 0:
+        return "0ms"
+    sign = "+" if rounded > 0 else "-"
+    return f"{sign}{abs(rounded)}ms"
+
+
+def snapshot_identity(snapshot: LaneSnapshot) -> tuple[str, str, str]:
+    return (
+        str(snapshot.run.get("commitSHA") or ""),
+        str(snapshot.run.get("generatedAt") or ""),
+        snapshot.lane,
+    )
+
+
+def trend_series_filtered(
+    snapshots: list[LaneSnapshot],
+    lane: str,
+    level: str,
+    metric: str,
+    max_points: int,
+    source: Optional[str] = None,
+    exclude_snapshot: Optional[LaneSnapshot] = None,
+) -> list[float]:
+    values: list[float] = []
+    exclude_identity = snapshot_identity(exclude_snapshot) if exclude_snapshot else None
+
+    for snapshot in snapshots:
+        if snapshot.lane != lane:
+            continue
+        if source == "master" and run_source_label(snapshot) != "master":
+            continue
+        if source == "pr" and run_source_label(snapshot) == "master":
+            continue
+        if exclude_identity and snapshot_identity(snapshot) == exclude_identity:
+            continue
+
+        row = snapshot.levels.get(level)
+        if row is None:
+            continue
+
+        if metric == "generation":
+            values.append(row.generation.p95)
+        elif metric == "stt":
+            values.append(row.stt.p95)
+        elif metric == "rewrite":
+            values.append(row.rewrite.p95)
+        elif metric == "encode":
+            values.append(row.encode.p95)
+        elif metric == "paste":
+            values.append(row.paste.p95)
+
+    return values[-max_points:]
+
+
 def lane_name_for_run(run: dict[str, Any]) -> str:
     lane = str(run.get("lane") or "").strip().lower()
     if lane in {"provider", "codepath"}:
@@ -418,24 +490,13 @@ def trend_series(
     metric: str,
     max_points: int,
 ) -> list[float]:
-    values: list[float] = []
-    for snapshot in snapshots:
-        if snapshot.lane != lane:
-            continue
-        row = snapshot.levels.get(level)
-        if row is None:
-            continue
-        if metric == "generation":
-            values.append(row.generation.p95)
-        elif metric == "stt":
-            values.append(row.stt.p95)
-        elif metric == "rewrite":
-            values.append(row.rewrite.p95)
-        elif metric == "encode":
-            values.append(row.encode.p95)
-        elif metric == "paste":
-            values.append(row.paste.p95)
-    return values[-max_points:]
+    return trend_series_filtered(
+        snapshots,
+        lane=lane,
+        level=level,
+        metric=metric,
+        max_points=max_points,
+    )
 
 
 def metric_value(row: LevelStats, metric: str) -> float:
@@ -641,18 +702,28 @@ def render_summary_section(
         else:
             vs_base = "—"
 
-        # vs prev in trend window (noise-gated)
-        series = trend_series(history_snapshots, snapshot.lane, level, "generation", history_max)
-        if len(series) >= 2:
+        # vs deployed/reference median (noise-gated)
+        reference_source = "master" if snapshot.lane == "provider" else None
+        series = trend_series_filtered(
+            history_snapshots,
+            lane=snapshot.lane,
+            level=level,
+            metric="generation",
+            max_points=history_max,
+            source=reference_source,
+            exclude_snapshot=snapshot,
+        )
+        reference_median = median(series)
+        if reference_median is not None:
             spread = variability(row.generation)
-            trend_status = change_status(series[-1], series[-2], noise=spread)
+            trend_status = change_status(row.generation.p95, reference_median, noise=spread)
             if trend_status == "neutral":
                 vs_trend = "neutral"
             elif trend_status == "regressed":
-                vs_trend = f"**{fmt_change(series[-1], series[-2])}** ⚠️"
-                regressions.append(f"{level} (trend)")
+                vs_trend = f"**{fmt_change(row.generation.p95, reference_median)}** ⚠️"
+                regressions.append(f"{level} (deployed median)")
             else:
-                vs_trend = fmt_change(series[-1], series[-2])
+                vs_trend = fmt_change(row.generation.p95, reference_median)
         else:
             vs_trend = f"{len(series)} pt"
 
@@ -661,12 +732,12 @@ def render_summary_section(
     verdict = "no regressions" if not regressions else f"regression: {', '.join(regressions)}"
     lines.append(f"## ⚡ Perf — {verdict}")
     lines.append("")
-    lines.append("| level | p95 | vs base | vs trend | confidence |")
+    lines.append("| level | p95 | vs base | vs deployed median | confidence |")
     lines.append("| --- | ---: | --- | --- | --- |")
     lines.extend(table_rows)
     lines.append("")
     lines.append("> **vs base** = compared to persisted master baseline at PR base SHA (or nearest persisted ancestor).")
-    lines.append("> **vs trend** = compared to previous run in this lane/level history window, with noise gating.")
+    lines.append("> **vs deployed median** = provider lane uses recent master-only median; codepath lane uses recent lane median. Both are noise-gated.")
     lines.append("")
 
     # One-line context footer
@@ -684,6 +755,253 @@ def render_summary_section(
         lines.append(
             f"> trend coverage: {len(lane_history)} run(s) from {first_label} to {last_label}"
         )
+    lines.append("")
+
+
+def summarize_stage_delta(current: LevelStats, reference: LevelStats) -> tuple[str, float, float]:
+    deltas = {
+        "stt": current.stt.p95 - reference.stt.p95,
+        "rewrite": current.rewrite.p95 - reference.rewrite.p95,
+        "encode": current.encode.p95 - reference.encode.p95,
+        "paste": current.paste.p95 - reference.paste.p95,
+    }
+    stage, delta = max(deltas.items(), key=lambda item: abs(item[1]))
+    net = current.generation.p95 - reference.generation.p95
+    share = (abs(delta) / abs(net) * 100) if abs(net) > 0 else 0.0
+    return stage, delta, share
+
+
+def collect_critical_metrics(
+    provider_snapshot: Optional[LaneSnapshot],
+    codepath_snapshot: Optional[LaneSnapshot],
+    base_snapshot: Optional[LaneSnapshot],
+    history_snapshots: list[LaneSnapshot],
+    history_max: int,
+) -> dict[str, Any]:
+    level_metrics: dict[str, Any] = {}
+    provider_statuses: list[str] = []
+
+    for level in ["clean", "polish", "raw"]:
+        provider_row = provider_snapshot.levels.get(level) if provider_snapshot else None
+        codepath_row = codepath_snapshot.levels.get(level) if codepath_snapshot else None
+        base_row = (
+            base_snapshot.levels.get(level)
+            if provider_snapshot and base_snapshot and base_snapshot.lane == "provider"
+            else None
+        )
+
+        level_entry: dict[str, Any] = {
+            "provider": None,
+            "codepath": None,
+            "external_estimate_ms": None,
+        }
+
+        if provider_row:
+            provider_entry: dict[str, Any] = {
+                "p95_ms": int(round(provider_row.generation.p95)),
+                "confidence": confidence_label(
+                    provider_row.iterations,
+                    variability(provider_row.generation),
+                    provider_row.generation.p95,
+                ),
+            }
+
+            if base_row:
+                base_noise = max(variability(provider_row.generation), variability(base_row.generation))
+                status = change_status(provider_row.generation.p95, base_row.generation.p95, noise=base_noise)
+                provider_statuses.append(status)
+                provider_entry["vs_base"] = {
+                    "status": status,
+                    "delta_ms": int(round(provider_row.generation.p95 - base_row.generation.p95)),
+                    "delta_pct": pct_delta(provider_row.generation.p95, base_row.generation.p95),
+                }
+
+                stage, delta, share = summarize_stage_delta(provider_row, base_row)
+                provider_entry["dominant_stage_vs_base"] = {
+                    "stage": stage,
+                    "delta_ms": int(round(delta)),
+                    "share_pct": round(share, 1),
+                }
+
+            deployed_series = trend_series_filtered(
+                history_snapshots,
+                lane="provider",
+                level=level,
+                metric="generation",
+                max_points=history_max,
+                source="master",
+                exclude_snapshot=provider_snapshot,
+            )
+            deployed_median = median(deployed_series)
+            if deployed_median is not None:
+                deployed_noise = variability(provider_row.generation)
+                provider_entry["vs_deployed_median"] = {
+                    "status": change_status(provider_row.generation.p95, deployed_median, noise=deployed_noise),
+                    "delta_ms": int(round(provider_row.generation.p95 - deployed_median)),
+                    "delta_pct": pct_delta(provider_row.generation.p95, deployed_median),
+                    "sample_runs": len(deployed_series),
+                }
+
+            level_entry["provider"] = provider_entry
+
+        if codepath_row:
+            codepath_entry: dict[str, Any] = {
+                "p95_ms": int(round(codepath_row.generation.p95)),
+                "confidence": confidence_label(
+                    codepath_row.iterations,
+                    variability(codepath_row.generation),
+                    codepath_row.generation.p95,
+                ),
+            }
+            codepath_series = trend_series_filtered(
+                history_snapshots,
+                lane="codepath",
+                level=level,
+                metric="generation",
+                max_points=history_max,
+                exclude_snapshot=codepath_snapshot,
+            )
+            codepath_median = median(codepath_series)
+            if codepath_median is not None:
+                codepath_noise = variability(codepath_row.generation)
+                codepath_entry["vs_recent_median"] = {
+                    "status": change_status(codepath_row.generation.p95, codepath_median, noise=codepath_noise),
+                    "delta_ms": int(round(codepath_row.generation.p95 - codepath_median)),
+                    "delta_pct": pct_delta(codepath_row.generation.p95, codepath_median),
+                    "sample_runs": len(codepath_series),
+                }
+            level_entry["codepath"] = codepath_entry
+
+        if provider_row and codepath_row:
+            level_entry["external_estimate_ms"] = int(round(provider_row.generation.p95 - codepath_row.generation.p95))
+
+        level_metrics[level] = level_entry
+
+    deployed_provider_runs = [
+        snapshot
+        for snapshot in history_snapshots
+        if snapshot.lane == "provider" and run_source_label(snapshot) == "master"
+    ]
+    codepath_runs = [snapshot for snapshot in history_snapshots if snapshot.lane == "codepath"]
+
+    if any(status == "regressed" for status in provider_statuses):
+        verdict = "regressed"
+    elif any(status == "improved" for status in provider_statuses):
+        verdict = "improved"
+    else:
+        verdict = "neutral"
+
+    return {
+        "verdict": verdict,
+        "levels": level_metrics,
+        "coverage": {
+            "provider_master_runs": len(deployed_provider_runs),
+            "codepath_runs": len(codepath_runs),
+        },
+    }
+
+
+def render_executive_tldr(
+    lines: list[str],
+    critical_metrics: dict[str, Any],
+    llm_tldr: Optional[str],
+    head_sha: Optional[str],
+    base_sha: Optional[str],
+    base_mode: str,
+) -> None:
+    verdict = critical_metrics.get("verdict", "neutral")
+    verdict_icon = "✅" if verdict == "improved" else "⚠️" if verdict == "regressed" else "➖"
+
+    lines.append(f"## {verdict_icon} Perf TL;DR")
+    lines.append("")
+
+    if llm_tldr:
+        lines.append(llm_tldr)
+    else:
+        clean_provider = (critical_metrics.get("levels", {}).get("clean", {}) or {}).get("provider") or {}
+        polish_provider = (critical_metrics.get("levels", {}).get("polish", {}) or {}).get("provider") or {}
+        clean_codepath = (critical_metrics.get("levels", {}).get("clean", {}) or {}).get("codepath") or {}
+        polish_codepath = (critical_metrics.get("levels", {}).get("polish", {}) or {}).get("codepath") or {}
+
+        if clean_provider or polish_provider:
+            clean_p95 = clean_provider.get("p95_ms")
+            polish_p95 = polish_provider.get("p95_ms")
+            lines.append(
+                f"- Provider lane user-visible p95: clean={clean_p95 if clean_p95 is not None else '—'}ms, "
+                f"polish={polish_p95 if polish_p95 is not None else '—'}ms."
+            )
+        else:
+            lines.append("- Provider lane unavailable in this run; user-visible external-service impact cannot be evaluated.")
+
+        if clean_codepath or polish_codepath:
+            clean_cp = clean_codepath.get("p95_ms")
+            polish_cp = polish_codepath.get("p95_ms")
+            lines.append(
+                f"- Codepath lane p95 (internal-only): clean={clean_cp if clean_cp is not None else '—'}ms, "
+                f"polish={polish_cp if polish_cp is not None else '—'}ms."
+            )
+        else:
+            lines.append("- Codepath lane unavailable; internal/framework-only movement cannot be isolated.")
+
+        coverage = critical_metrics.get("coverage", {})
+        lines.append(
+            f"- Confidence context: provider master history={coverage.get('provider_master_runs', 0)} run(s), "
+            f"codepath history={coverage.get('codepath_runs', 0)} run(s)."
+        )
+    lines.append("")
+
+    lines.append("| level | provider p95 | vs base (master) | codepath p95 | ext est (provider-codepath) | dominant stage vs base |")
+    lines.append("| --- | ---: | --- | ---: | ---: | --- |")
+
+    for level in ["clean", "polish"]:
+        level_entry = critical_metrics.get("levels", {}).get(level, {})
+        provider = level_entry.get("provider") or {}
+        codepath = level_entry.get("codepath") or {}
+
+        provider_p95 = provider.get("p95_ms")
+        provider_text = f"{provider_p95}ms" if isinstance(provider_p95, int) else "—"
+
+        vs_base_entry = provider.get("vs_base") or {}
+        vs_base_status = vs_base_entry.get("status")
+        if vs_base_status in {"improved", "regressed"}:
+            vs_base_text = fmt_change(provider_p95, provider_p95 - vs_base_entry.get("delta_ms", 0)) if isinstance(provider_p95, int) else "—"
+            if vs_base_status == "regressed":
+                vs_base_text = f"{vs_base_text} ⚠️"
+        elif vs_base_status == "neutral":
+            vs_base_text = "neutral"
+        else:
+            vs_base_text = "—"
+
+        codepath_p95 = codepath.get("p95_ms")
+        codepath_text = f"{codepath_p95}ms" if isinstance(codepath_p95, int) else "—"
+
+        external_est = level_entry.get("external_estimate_ms")
+        external_text = fmt_signed_ms(float(external_est)) if isinstance(external_est, int) else "—"
+
+        dominant_entry = provider.get("dominant_stage_vs_base") or {}
+        dominant_stage = dominant_entry.get("stage")
+        dominant_delta = dominant_entry.get("delta_ms")
+        dominant_share = dominant_entry.get("share_pct")
+        if isinstance(dominant_stage, str) and isinstance(dominant_delta, int):
+            dominant_text = f"{dominant_stage} {fmt_signed_ms(float(dominant_delta))}"
+            if isinstance(dominant_share, (int, float)):
+                dominant_text += f" ({dominant_share:.0f}%)"
+        else:
+            dominant_text = "—"
+
+        lines.append(
+            f"| {level} | {provider_text} | {vs_base_text} | {codepath_text} | {external_text} | {dominant_text} |"
+        )
+
+    lines.append("")
+    base_ref = short_sha(base_sha) if base_sha else "—"
+    base_note = "" if base_mode == "exact" else f" ({base_mode})" if base_mode != "missing" else " (no baseline)"
+    coverage = critical_metrics.get("coverage", {})
+    lines.append(
+        f"> head `{short_sha(head_sha)}` · base `{base_ref}`{base_note} · "
+        f"deployed provider runs={coverage.get('provider_master_runs', 0)} · "
+        f"codepath runs={coverage.get('codepath_runs', 0)}"
+    )
     lines.append("")
 
 
@@ -713,7 +1031,11 @@ def render_actionable_signals(
         if base_row is None:
             continue
 
-        status = change_status(row.generation.p95, base_row.generation.p95)
+        status = change_status(
+            row.generation.p95,
+            base_row.generation.p95,
+            noise=max(variability(row.generation), variability(base_row.generation)),
+        )
         if status != "regressed":
             continue
 
@@ -765,57 +1087,20 @@ def render_actionable_signals(
     lines.append("")
 
 
-def maybe_generate_llm_synthesis(
-    primary_snapshot: LaneSnapshot,
-    base_snapshot: Optional[LaneSnapshot],
-    codepath_snapshot: Optional[LaneSnapshot],
-    changed_files: list[str],
-) -> Optional[str]:
+def maybe_generate_llm_synthesis(payload: dict[str, Any]) -> Optional[str]:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         return None
 
-    level_rows: list[dict[str, Any]] = []
-    for level in LEVELS:
-        current = primary_snapshot.levels.get(level)
-        if current is None:
-            continue
-        base = (
-            base_snapshot.levels.get(level)
-            if base_snapshot and base_snapshot.lane == primary_snapshot.lane
-            else None
-        )
-        level_rows.append(
-            {
-                "level": level,
-                "generation_p95_ms": int(round(current.generation.p95)),
-                "stt_p95_ms": int(round(current.stt.p95)),
-                "rewrite_p95_ms": int(round(current.rewrite.p95)),
-                "encode_p95_ms": int(round(current.encode.p95)),
-                "delta_vs_base_ms": (
-                    int(round(current.generation.p95 - base.generation.p95))
-                    if base is not None
-                    else None
-                ),
-            }
-        )
-
-    payload = {
-        "lane": primary_snapshot.lane,
-        "head": short_sha(primary_snapshot.run.get("commitSHA")),
-        "base": short_sha(base_snapshot.run.get("commitSHA")) if base_snapshot else None,
-        "levels": level_rows,
-        "codepath_present": codepath_snapshot is not None,
-        "changed_files": changed_files[:30],
-    }
-
     prompt = (
-        "You are a performance reviewer for a CI benchmark report. "
-        "Return exactly 3 short bullets:\n"
-        "1) most likely cause of regression/speedup (stage + confidence),\n"
-        "2) strongest evidence from the provided metrics,\n"
-        "3) one concrete next validation step.\n"
-        "Do not mention unavailable data. Keep each bullet under 28 words.\n\n"
+        "You are the lead-performance summarizer for a production app PR.\n"
+        "Return exactly 3 markdown bullets, each starting with '- '.\n"
+        "Bullets must be concise, quantitative, and evidence-based:\n"
+        "1) user-visible impact (provider lane clean/polish),\n"
+        "2) attribution (provider vs codepath + dominant stage),\n"
+        "3) confidence/risk + one next validation step.\n"
+        "Rules: use only provided data, include at least one numeric value per bullet, "
+        "no speculation, no preamble, each bullet <= 28 words.\n\n"
         f"Data:\n{json.dumps(payload, separators=(',', ':'))}"
     )
 
@@ -830,11 +1115,14 @@ def maybe_generate_llm_synthesis(
         request_body = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "Be concise, evidence-based, and avoid speculation."},
+                {
+                    "role": "system",
+                    "content": "Be strict, numeric, and avoid unsupported claims.",
+                },
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.1,
-            "max_tokens": 220,
+            "temperature": 0.0,
+            "max_tokens": 260,
         }
 
         req = urllib.request.Request(
@@ -856,6 +1144,12 @@ def maybe_generate_llm_synthesis(
                 content = "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
             if not isinstance(content, str):
                 continue
+
+            lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
+            bullet_lines = [line for line in lines if line.startswith("-")]
+            if len(bullet_lines) >= 3:
+                return "\n".join(bullet_lines[:3])
+
             cleaned = content.strip()
             if cleaned:
                 return cleaned[:1800]
@@ -1050,6 +1344,35 @@ def main() -> None:
 
     # ── Summary (always visible) ─────────────────────────────────────────────
     if primary_snapshot:
+        critical_metrics = collect_critical_metrics(
+            provider_snapshot=provider_snapshot,
+            codepath_snapshot=codepath_snapshot,
+            base_snapshot=base_snapshot,
+            history_snapshots=history_snapshots,
+            history_max=history_max,
+        )
+        llm_payload = {
+            "head": short_sha(head_sha),
+            "base": short_sha(resolved_base_sha) if resolved_base_sha else None,
+            "base_mode": base_mode,
+            "critical_metrics": critical_metrics,
+            "changed_files": changed_files[:20],
+        }
+        llm_tldr = maybe_generate_llm_synthesis(llm_payload)
+
+        render_executive_tldr(
+            lines,
+            critical_metrics=critical_metrics,
+            llm_tldr=llm_tldr,
+            head_sha=head_sha,
+            base_sha=resolved_base_sha,
+            base_mode=base_mode,
+        )
+
+        lines.append("<details>")
+        lines.append("<summary>Quantitative scorecard and synthesis inputs</summary>")
+        lines.append("")
+
         render_summary_section(
             lines,
             primary_snapshot,
@@ -1069,17 +1392,15 @@ def main() -> None:
             codepath_snapshot=codepath_snapshot,
             changed_files=changed_files,
         )
-        llm_synthesis = maybe_generate_llm_synthesis(
-            primary_snapshot=primary_snapshot,
-            base_snapshot=base_snapshot,
-            codepath_snapshot=codepath_snapshot,
-            changed_files=changed_files,
-        )
-        if llm_synthesis:
-            lines.append("### LLM Synthesis (Experimental)")
-            lines.append("")
-            lines.append(llm_synthesis)
-            lines.append("")
+
+        lines.append("**LLM payload (critical metrics)**")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(llm_payload, indent=2, sort_keys=True))
+        lines.append("```")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
 
     # ── Provider details (collapsible) ───────────────────────────────────────
     if provider_snapshot:
