@@ -115,12 +115,8 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     }
 
     /// Capability-aware first-launch default. Returns `.clean` when any AI rewrite key is
-    /// present, or on macOS 26+ where Foundation Models provides on-device rewrite.
-    /// Returns `.raw` otherwise so first-run Clean dictations never silently fall back.
+    /// present; returns `.raw` otherwise so first-run Clean dictations never silently fall back.
     static func capabilityAwareDefaultLevel(hasRewrite: Bool) -> ProcessingLevel {
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return .clean }
-        #endif
         return hasRewrite ? .clean : .raw
     }
 }

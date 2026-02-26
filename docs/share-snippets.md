@@ -8,7 +8,7 @@ Ready-to-post copy for organic sharing. Adjust as needed.
 
 **Show HN: Vox – fast, privacy-first dictation for macOS**
 
-> Vox is a menu bar dictation app that pipes audio through a resilient STT chain (ElevenLabs → Deepgram → Apple on-device) with optional LLM rewrite. No cloud dependency required; on-device mode works fully offline on macOS 26+.
+> Vox is a menu bar dictation app that pipes audio through a resilient STT chain (ElevenLabs → Deepgram → Apple on-device) with optional LLM rewrite. STT works without cloud keys; LLM rewrite requires Gemini or OpenRouter. On macOS 26+, SpeechTranscriber delivers on-device STT quality.
 >
 > Trigger: Option+Space. Result pastes directly into the focused field.
 >
@@ -22,7 +22,7 @@ Ready-to-post copy for organic sharing. Adjust as needed.
 >
 > Been building this for a while and figured I'd share. It's a menu bar app: hold Option+Space to record, release to transcribe and paste. Supports cloud STT (ElevenLabs, Deepgram) with Apple on-device fallback.
 >
-> Main differentiator: fully offline capable on macOS 26+ using Apple's SpeechTranscriber, and a sequential-fallback STT chain so it degrades gracefully instead of failing silently.
+> Main differentiator: on-device STT on macOS 26+ via Apple's SpeechTranscriber, and a sequential-fallback STT chain so it degrades gracefully instead of failing silently.
 >
 > GitHub: https://github.com/misty-step/vox
 

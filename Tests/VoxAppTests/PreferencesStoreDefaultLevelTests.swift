@@ -13,20 +13,9 @@ struct PreferencesStoreDefaultLevelTests {
         #expect(level == .clean)
     }
 
-    @Test("returns .raw on macOS < 26 without rewrite keys, .clean on macOS 26+")
-    func test_capabilityAwareDefaultLevel_returnsRawOnOldOS_whenNoRewrite() {
+    @Test("returns .raw without rewrite keys (no on-device rewrite fallback)")
+    func test_capabilityAwareDefaultLevel_returnsRaw_whenNoRewrite() {
         let level = PreferencesStore.capabilityAwareDefaultLevel(hasRewrite: false)
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            // Foundation Models runtime available → always .clean
-            #expect(level == .clean)
-        } else {
-            // SDK has FoundationModels but runtime is macOS < 26 → .raw
-            #expect(level == .raw)
-        }
-        #else
-        // No FoundationModels SDK, no rewrite keys → .raw to avoid silent fallback
         #expect(level == .raw)
-        #endif
     }
 }

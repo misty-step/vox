@@ -149,9 +149,6 @@ struct OnboardingChecklistView: View {
 
     private var rewriteReadiness: (isReady: Bool, note: String) {
         if hasRewrite { return (true, "ready") }
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return (true, "ready via on-device AI") }
-        #endif
         return (false, "needs AI rewrite key")
     }
 
