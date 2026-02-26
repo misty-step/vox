@@ -92,6 +92,8 @@ struct OnboardingChecklistView: View {
                     action: { showingCloudKeys = true }
                 )
 
+                modeReadinessView
+
                 ChecklistRow(
                     title: "Microphone selection",
                     status: "Selected: \(selectedMicrophoneText)",
@@ -142,6 +144,44 @@ struct OnboardingChecklistView: View {
             return "Rewrite ready; transcription on-device"
         case (false, false):
             return "On-device only"
+        }
+    }
+
+    private var isCleanReady: Bool {
+        if hasRewrite { return true }
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) { return true }
+        #endif
+        return false
+    }
+
+    private var cleanReadinessNote: String {
+        if hasRewrite { return "ready" }
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) { return "ready via on-device AI" }
+        #endif
+        return "needs AI rewrite key"
+    }
+
+    private var modeReadinessView: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            modeRow(label: "Raw", isReady: true, note: "always available")
+            modeRow(label: "Clean", isReady: isCleanReady, note: cleanReadinessNote)
+            modeRow(label: "Polish", isReady: isCleanReady, note: cleanReadinessNote)
+        }
+        .padding(.leading, 22)
+        .padding(.bottom, 2)
+    }
+
+    private func modeRow(label: String, isReady: Bool, note: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: isReady ? "checkmark" : "circle")
+                .foregroundStyle(isReady ? Color.green : Color.secondary)
+                .font(.caption2)
+                .frame(width: 10, alignment: .center)
+            Text("\(label): \(note)")
+                .font(.caption)
+                .foregroundStyle(isReady ? Color.primary : Color.secondary)
         }
     }
 
