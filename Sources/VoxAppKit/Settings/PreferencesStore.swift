@@ -33,6 +33,14 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
     @Published public private(set) var keyStatusCache: [KeychainHelper.Key: Bool] = [:]
 
     private init() {
+        // Read all keys once — reuse for both first-launch default and keyStatusCache.
+        let statuses: [KeychainHelper.Key: Bool] = [
+            .elevenLabsAPIKey: !Self.apiKey(env: "ELEVENLABS_API_KEY", keychain: .elevenLabsAPIKey).isEmpty,
+            .deepgramAPIKey: !Self.apiKey(env: "DEEPGRAM_API_KEY", keychain: .deepgramAPIKey).isEmpty,
+            .openRouterAPIKey: !Self.apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey).isEmpty,
+            .geminiAPIKey: !Self.apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey).isEmpty,
+        ]
+
         let stored = defaults.string(forKey: "processingLevel")
         if let stored, let level = ProcessingLevel(rawValue: stored) {
             processingLevel = level
@@ -43,20 +51,15 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         } else {
             // First launch (or unrecognized stored value): capability-aware default.
             // Avoids silently broken Clean dictations on macOS < 26 with no rewrite keys.
-            let hasRewrite = !Self.apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey).isEmpty
-                || !Self.apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey).isEmpty
+            let hasRewrite = statuses[.geminiAPIKey, default: false]
+                || statuses[.openRouterAPIKey, default: false]
             let level = Self.capabilityAwareDefaultLevel(hasRewrite: hasRewrite)
             processingLevel = level
             defaults.set(level.rawValue, forKey: "processingLevel")
         }
 
         selectedInputDeviceUID = defaults.string(forKey: "selectedInputDeviceUID")
-        keyStatusCache = [
-            .elevenLabsAPIKey: !Self.apiKey(env: "ELEVENLABS_API_KEY", keychain: .elevenLabsAPIKey).isEmpty,
-            .deepgramAPIKey: !Self.apiKey(env: "DEEPGRAM_API_KEY", keychain: .deepgramAPIKey).isEmpty,
-            .openRouterAPIKey: !Self.apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey).isEmpty,
-            .geminiAPIKey: !Self.apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey).isEmpty,
-        ]
+        keyStatusCache = statuses
     }
 
     public var elevenLabsAPIKey: String {

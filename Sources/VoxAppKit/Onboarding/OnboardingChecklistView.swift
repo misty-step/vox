@@ -147,27 +147,20 @@ struct OnboardingChecklistView: View {
         }
     }
 
-    private var isCleanReady: Bool {
-        if hasRewrite { return true }
+    private var cleanReadiness: (isReady: Bool, note: String) {
+        if hasRewrite { return (true, "ready") }
         #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return true }
+        if #available(macOS 26.0, *) { return (true, "ready via on-device AI") }
         #endif
-        return false
-    }
-
-    private var cleanReadinessNote: String {
-        if hasRewrite { return "ready" }
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return "ready via on-device AI" }
-        #endif
-        return "needs AI rewrite key"
+        return (false, "needs AI rewrite key")
     }
 
     private var modeReadinessView: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let readiness = cleanReadiness
+        return VStack(alignment: .leading, spacing: 3) {
             modeRow(label: "Raw", isReady: true, note: "always available")
-            modeRow(label: "Clean", isReady: isCleanReady, note: cleanReadinessNote)
-            modeRow(label: "Polish", isReady: isCleanReady, note: cleanReadinessNote)
+            modeRow(label: "Clean", isReady: readiness.isReady, note: readiness.note)
+            modeRow(label: "Polish", isReady: readiness.isReady, note: readiness.note)
         }
         .padding(.leading, 22)
         .padding(.bottom, 2)
