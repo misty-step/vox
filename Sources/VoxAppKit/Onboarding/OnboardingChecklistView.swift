@@ -147,7 +147,7 @@ struct OnboardingChecklistView: View {
         }
     }
 
-    private var cleanReadiness: (isReady: Bool, note: String) {
+    private var rewriteReadiness: (isReady: Bool, note: String) {
         if hasRewrite { return (true, "ready") }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) { return (true, "ready via on-device AI") }
@@ -156,7 +156,7 @@ struct OnboardingChecklistView: View {
     }
 
     private var modeReadinessView: some View {
-        let readiness = cleanReadiness
+        let readiness = rewriteReadiness
         return VStack(alignment: .leading, spacing: 3) {
             modeRow(label: "Raw", isReady: true, note: "always available")
             modeRow(label: "Clean", isReady: readiness.isReady, note: readiness.note)

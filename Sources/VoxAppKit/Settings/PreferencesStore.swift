@@ -51,6 +51,8 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         } else {
             // First launch (or unrecognized stored value): capability-aware default.
             // Avoids silently broken Clean dictations on macOS < 26 with no rewrite keys.
+            // ElevenLabs and Deepgram are STT keys — they do not enable rewrite, so they
+            // are excluded here even though they appear in `statuses`.
             let hasRewrite = statuses[.geminiAPIKey, default: false]
                 || statuses[.openRouterAPIKey, default: false]
             let level = Self.capabilityAwareDefaultLevel(hasRewrite: hasRewrite)
