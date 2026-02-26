@@ -439,6 +439,15 @@ struct VoxSessionDITests {
         #expect(!VoxSession.isRecorderBackendSelected(environment: ["VOX_AUDIO_BACKEND": "something-else"]))
     }
 
+    @Test("Rewrite key presence parsing")
+    func rewriteKeyPresenceParsing() {
+        #expect(!VoxSession.hasAnyRewriteKeysConfigured(geminiAPIKey: "", openRouterAPIKey: ""))
+        #expect(!VoxSession.hasAnyRewriteKeysConfigured(geminiAPIKey: "  ", openRouterAPIKey: "\n"))
+        #expect(VoxSession.hasAnyRewriteKeysConfigured(geminiAPIKey: "gem-key", openRouterAPIKey: ""))
+        #expect(VoxSession.hasAnyRewriteKeysConfigured(geminiAPIKey: "", openRouterAPIKey: "or-key"))
+        #expect(VoxSession.hasAnyRewriteKeysConfigured(geminiAPIKey: "  gem-key  ", openRouterAPIKey: ""))
+    }
+
     @Test("Injected recorder is used")
     @MainActor func injectedRecorder() {
         let recorder = MockRecorder()

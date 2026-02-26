@@ -178,19 +178,10 @@ public final class VoxSession: ObservableObject {
     private func makeRewriteProvider(config: ProviderAssemblyConfig) -> RewriteProvider {
         let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: config)
 
-        // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
-        // Falls through to cloud if unavailable or on error.
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *), AppleFoundationModelsClient.isAvailable {
-            return FallbackRewriteProvider(entries: [
-                .init(provider: AppleFoundationModelsClient(), label: "Apple Foundation Models"),
-                .init(provider: cloudRewrite, label: "Cloud"),
-            ])
-        }
-        #endif
-
-        if cloudRewrite is OpenRouterClient, prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !Self.hasAnyRewriteKeysConfigured(
+            geminiAPIKey: config.geminiAPIKey,
+            openRouterAPIKey: config.openRouterAPIKey
+        ) {
             print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
         }
         return cloudRewrite
@@ -373,6 +364,15 @@ public final class VoxSession: ObservableObject {
             .lowercased() ?? ""
         let disabled = raw == "1" || raw == "true" || raw == "yes"
         return !disabled
+    }
+
+    nonisolated static func hasAnyRewriteKeysConfigured(
+        geminiAPIKey: String,
+        openRouterAPIKey: String
+    ) -> Bool {
+        let gemini = geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openRouter = openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !gemini.isEmpty || !openRouter.isEmpty
     }
 
     private func recorderSupportsStreaming() -> Bool {
