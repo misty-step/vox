@@ -34,7 +34,7 @@ public final class AppleFoundationModelsClient: RewriteProvider {
         }
     }
 
-    private func mapGenerationError(_ error: LanguageModelSession.GenerationError) -> RewriteError {
+    func mapGenerationError(_ error: LanguageModelSession.GenerationError) -> RewriteError {
         switch error {
         case .rateLimited:
             return .throttled

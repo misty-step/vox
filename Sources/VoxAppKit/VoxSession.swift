@@ -129,6 +129,7 @@ public final class VoxSession: ObservableObject {
         return DictationPipeline(
             stt: makeSTTProvider(config: config),
             rewriter: makeRewriteProvider(config: config),
+            cleanRewriter: makeCleanRewriteProvider(config: config),
             paster: ClipboardPaster(),
             prefs: prefs,
             rewriteCache: .shared,
@@ -177,9 +178,17 @@ public final class VoxSession: ObservableObject {
 
     private func makeRewriteProvider(config: ProviderAssemblyConfig) -> RewriteProvider {
         let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: config)
+        if cloudRewrite is OpenRouterClient, prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
+        }
+        return cloudRewrite
+    }
 
-        // macOS 26+: try Apple Foundation Models first (on-device, private, zero-key)
-        // Falls through to cloud if unavailable or on error.
+    private func makeCleanRewriteProvider(config: ProviderAssemblyConfig) -> RewriteProvider {
+        let cloudRewrite = ProviderAssembly.makeRewriteProvider(config: config)
+
+        // macOS 26+: clean mode prefers on-device Foundation Models, with cloud fallback.
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *), AppleFoundationModelsClient.isAvailable {
             return FallbackRewriteProvider(entries: [
@@ -189,10 +198,6 @@ public final class VoxSession: ObservableObject {
         }
         #endif
 
-        if cloudRewrite is OpenRouterClient, prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
-        }
         return cloudRewrite
     }
 

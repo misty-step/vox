@@ -64,6 +64,7 @@ private actor OpusConversionUnavailableLogger {
 public final class DictationPipeline: DictationProcessing, TranscriptRecoveryProcessing {
     private let stt: STTProvider
     private let rewriter: RewriteProvider
+    private let cleanRewriter: RewriteProvider
     private let paster: TextPaster
     private let prefs: PreferencesReading
     private let rewriteCache: RewriteResultCache
@@ -91,6 +92,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     public convenience init(
         stt: STTProvider,
         rewriter: RewriteProvider,
+        cleanRewriter: RewriteProvider? = nil,
         paster: TextPaster,
         prefs: PreferencesReading? = nil,
         enableRewriteCache: Bool = false,
@@ -112,6 +114,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         self.init(
             stt: stt,
             rewriter: rewriter,
+            cleanRewriter: cleanRewriter,
             paster: paster,
             prefs: prefs,
             rewriteCache: .shared,
@@ -133,6 +136,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     init(
         stt: STTProvider,
         rewriter: RewriteProvider,
+        cleanRewriter: RewriteProvider? = nil,
         paster: TextPaster,
         prefs: PreferencesReading? = nil,
         rewriteCache: RewriteResultCache,
@@ -158,6 +162,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     ) {
         self.stt = stt
         self.rewriter = rewriter
+        self.cleanRewriter = cleanRewriter ?? rewriter
         self.paster = paster
         self.prefs = prefs ?? PreferencesStore.shared
         self.rewriteCache = rewriteCache
@@ -360,6 +365,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         var output = transcript
         var rewriteTime: TimeInterval = 0
         if level != .raw {
+            let activeRewriter = level == .clean ? cleanRewriter : rewriter
             let rewriteStart = CFAbsoluteTimeGetCurrent()
             let model = level.defaultModel
             do {
@@ -391,7 +397,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         context: .rewrite,
                         timeoutError: RewriteStageTimeoutError.deadlineExceeded
                     ) {
-                        try await self.rewriter.rewrite(
+                        try await activeRewriter.rewrite(
                             transcript: transcript,
                             systemPrompt: prompt,
                             model: model

@@ -613,6 +613,109 @@ struct DictationPipelineTests {
         #expect(paster.callCount == 1)
     }
 
+    @Test("Process with clean processing uses clean rewriter and falls back to cloud on failure")
+    func test_process_cleanProcessing_usesCleanRewriterWithCloudFallback() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let cleanPrimaryRewriter = MockRewriteProvider()
+        cleanPrimaryRewriter.results = [.failure(RewriteError.network("foundry unavailable"))]
+
+        let cloudRewriter = MockRewriteProvider()
+        cloudRewriter.results = [.success("Hello, cloud.")]
+
+        let cleanRewriter = FallbackRewriteProvider(entries: [
+            .init(provider: cleanPrimaryRewriter, label: "Clean Apple"),
+            .init(provider: cloudRewriter, label: "Cloud"),
+        ])
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: cloudRewriter,
+            cleanRewriter: cleanRewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "Hello, cloud.")
+        #expect(cleanPrimaryRewriter.callCount == 1)
+        #expect(cloudRewriter.callCount == 1)
+        #expect(paster.callCount == 1)
+    }
+
+    @Test("Process with polish processing bypasses clean rewriter")
+    func test_process_polishBypassesCleanRewriter() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let cleanRewriter = MockRewriteProvider()
+        cleanRewriter.results = [.failure(RewriteError.network("should not be used"))]
+
+        let cloudRewriter = MockRewriteProvider()
+        cloudRewriter.results = [.success("Hello, cloud.")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .polish
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: cloudRewriter,
+            cleanRewriter: cleanRewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        let result = try await pipeline.process(audioURL: audioURL)
+
+        #expect(result == "Hello, cloud.")
+        #expect(cleanRewriter.callCount == 0)
+        #expect(cloudRewriter.callCount == 1)
+        #expect(paster.callCount == 1)
+    }
+
+    @Test("Cancellation during clean rewrite skips cloud fallback")
+    func test_process_cleanRewriteCancellation_skipsFallback() async throws {
+        let stt = MockSTTProvider()
+        stt.results = [.success("hello world")]
+
+        let cleanRewriter = MockRewriteProvider()
+        cleanRewriter.results = [.failure(CancellationError())]
+
+        let cloudRewriter = MockRewriteProvider()
+        cloudRewriter.results = [.success("Fallback output")]
+
+        let paster = MockTextPaster()
+        let prefs = MockPreferences()
+        prefs.processingLevel = .clean
+
+        let pipeline = DictationPipeline(
+            stt: stt,
+            rewriter: cloudRewriter,
+            cleanRewriter: cleanRewriter,
+            paster: paster,
+            prefs: prefs,
+            enableOpus: false
+        )
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await pipeline.process(audioURL: audioURL)
+        }
+
+        #expect(stt.callCount == 1)
+        #expect(cleanRewriter.callCount == 1)
+        #expect(cloudRewriter.callCount == 0)
+        #expect(paster.callCount == 0)
+    }
+
     // MARK: - Error Handling Tests
 
     @Test("STT failure propagates error")

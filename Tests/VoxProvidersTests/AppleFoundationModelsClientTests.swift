@@ -1,5 +1,6 @@
 #if canImport(FoundationModels)
 import Foundation
+import FoundationModels
 import Testing
 @testable import VoxCore
 @testable import VoxProviders
@@ -41,6 +42,27 @@ struct AppleFoundationModelsClientTests {
         } catch {
             Issue.record("Expected RewriteError.unknown, got: \(error)")
         }
+    }
+
+    @Test("maps foundation model generation errors to rewrite errors")
+    func test_mapGenerationError_mapsKnownErrors() {
+        guard #available(macOS 26.0, *) else { return }
+        let client = AppleFoundationModelsClient()
+        let context = LanguageModelSession.GenerationError.Context(
+            debugDescription: "Fixture context"
+        )
+
+        let rateLimited = client.mapGenerationError(.rateLimited(context))
+        let assetsUnavailable = client.mapGenerationError(.assetsUnavailable(context))
+        let guardrailViolation = client.mapGenerationError(.guardrailViolation(context))
+        let exceededContextWindow = client.mapGenerationError(.exceededContextWindowSize(context))
+        let unsupportedLanguage = client.mapGenerationError(.unsupportedLanguageOrLocale(context))
+
+        #expect(rateLimited == RewriteError.throttled)
+        #expect(assetsUnavailable == RewriteError.unknown("Apple Intelligence assets unavailable. Download may be in progress."))
+        #expect(guardrailViolation == RewriteError.unknown("Content blocked by Apple safety filter"))
+        #expect(exceededContextWindow == RewriteError.invalidRequest("Input exceeds context window"))
+        #expect(unsupportedLanguage == RewriteError.unknown("Language or locale not supported by Apple Intelligence"))
     }
 }
 #endif
