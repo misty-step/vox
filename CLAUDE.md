@@ -65,7 +65,7 @@ Apple STT (macOS < 26): AppleSpeechClient
 
 ### Data Flow
 
-Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via FallbackRewriteProvider (macOS 26+: Apple Foundation Models first, then cloud) or ModelRoutedRewriteProvider (Gemini direct or OpenRouter) → ClipboardPaster inserts text → SecureFileDeleter cleans up
+Option+Space → VoxSession sets selected input as system default (compat path) → AudioRecorder (default backend: AVAudioEngine @ 16kHz/16-bit mono CAF with streaming chunk emission; legacy AVAudioRecorder opt-in via `VOX_AUDIO_BACKEND=recorder`) → streaming STT via Deepgram WebSocket (if Deepgram key present, kill switch: `VOX_DISABLE_STREAMING_STT=1`) with batch fallback → CapturedAudioInspector validates capture payload (`VoxError.emptyCapture` on zero frames) → optional Opus conversion (empty output falls back to CAF) → STT chain → optional rewrite via ProviderAssembly cloud routing (ModelRoutedRewriteProvider when Gemini+OpenRouter are both configured; otherwise direct provider) → ClipboardPaster inserts text → SecureFileDeleter cleans up
 
 ### State Machine
 
@@ -81,7 +81,7 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 **Quality gate**: `RewriteQualityGate` scores candidate/raw similarity (ratio + distance metrics) for evaluation and benchmarks only — removed from production path in #284 (clean: 0.6, polish: 0.3).
 
-**Availability gating (macOS 26+)**: `#if canImport(FoundationModels)` as compile-time SDK proxy + `@available(macOS 26.0, *)` runtime check. `SpeechTranscriberClient` and `AppleFoundationModelsClient` use this double-gate. On Xcode 16.2 CI the classes compile out entirely; on Xcode 26+ they're fully exercised.
+**Availability gating (macOS 26+)**: `#if canImport(FoundationModels)` as compile-time SDK proxy + `@available(macOS 26.0, *)` runtime check. `SpeechTranscriberClient` uses this double-gate. On Xcode 16.2 CI it compiles out; on Xcode 26+ it's fully exercised.
 
 **API key resolution**: env vars checked first (`ProcessInfo.environment`), then Keychain. Keys: `ELEVENLABS_API_KEY`, `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `GEMINI_API_KEY`. Optional STT throttle guard: `VOX_MAX_CONCURRENT_STT` (default `8`). Runtime overrides: `VOX_AUDIO_BACKEND=recorder` (opt out of AVAudioEngine default), `VOX_DISABLE_STREAMING_STT=1` (force batch-only STT), `VOX_STT_ROUTING=hedged` (opt in to parallel cloud race instead of sequential fallback). Diagnostics: `VOX_PERF_INGEST_URL` (HTTP endpoint for pipeline timing upload).
 
@@ -137,5 +137,13 @@ Audio regression guardrail:
 - **Security**: no transcript content in logs (char counts only); debug logs gated behind `#if DEBUG`
 - **Audio cleanup**: `SecureFileDeleter` — relies on FileVault; `preserveAudio()` returns `URL?` for error recovery dialog
 - **Simplicity gate** ([ADR-0001](docs/adr/0001-simplicity-first-design.md)): no new user-facing settings without ADR justification; no advanced tabs, threshold tuning, or model selection UI; defaults over options; no dark features (stored prefs without UI)
+
+## Triad Workflow (Quality, Simplicity, Speed)
+
+- Every issue and PR must state expected deltas for all three axes: `quality`, `simplicity`, `speed`.
+- Use triad labels on issues: exactly one from each axis (`quality:+|0|-`, `simplicity:+|0|-`, `speed:+|0|-`).
+- Mark each issue as `triad:no-brainer` or `triad:tradeoff`.
+- For tradeoffs, include explicit justification and latency budget notes in the issue body.
+- Prefer designs that keep rewrite critical path fast: move heavy context work off critical path.
 
 For detailed architecture, module guide, and navigation, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md).

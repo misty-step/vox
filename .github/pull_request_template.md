@@ -2,6 +2,9 @@
 
 - Problem:
 - Solution:
+- Triad impact: `quality ( + | 0 | - )`, `simplicity ( + | 0 | - )`, `speed ( + | 0 | - )`
+- Triad class: `no-brainer` or `tradeoff`
+- Tradeoff justification (required for `tradeoff`):
 
 ## Verification
 
@@ -13,3 +16,4 @@
 - [ ] Docs updated for behavior/interface changes (`README`, `docs/ARCHITECTURE.md`, ADRs, or postmortem when relevant)
 - [ ] If audio capture/conversion changed, `AudioRecorderBackendSelectionTests`, `AudioRecorderConversionTests`, `CapturedAudioInspectorTests`, and `VoxError.emptyCapture` fast-fail coverage in `DictationPipelineTests` were updated/validated
 - [ ] Simplicity gate checked ([ADR-0001](docs/adr/0001-simplicity-first-design.md)): no unnecessary user-facing settings
+- [ ] Triad gate checked: quality/simplicity/speed impact and latency budget documented in linked issue/PR

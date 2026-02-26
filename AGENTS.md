@@ -44,10 +44,14 @@
 - Screenshots/GIFs for UI changes (HUD, menu bar, settings).
 
 ## Issue Workflow
-- **Priority labels**: `horizon:now` > `horizon:next` > `horizon:soon` > `horizon:later`
-- **Area labels**: `area:ux`, `area:architecture`, `area:performance`, `area:security`, `area:infra`, `area:design`, `area:product`
-- **Type labels**: `type:refactor`, `type:epic`, `enhancement`, `bug`
-- Pick highest-priority unassigned issue (`horizon:now` first, then lower issue number).
+- **Priority labels**: `p0` > `p1` > `p2` > `p3`
+- **Horizon labels**: `now` > `next` > `later` (`blocked` only when externally blocked)
+- **Type labels**: `bug`, `feature`, `task`, `refactor`, `research`, `epic`
+- **Triad axis labels** (exactly one each): `speed:+|speed:0|speed:-`, `quality:+|quality:0|quality:-`, `simplicity:+|simplicity:0|simplicity:-`
+- **Triad class label** (exactly one): `triad:no-brainer` or `triad:tradeoff`
+- Every issue body must include `Triad Hypothesis` and `Tradeoff Justification`.
+- Use [`docs/TRIAD_PLAYBOOK.md`](docs/TRIAD_PLAYBOOK.md) as the default decision rubric.
+- Pick highest-priority unassigned issue (`now` first, then lower issue number).
 
 ## Definition of Done
 - `swift build -Xswiftc -warnings-as-errors` passes.
