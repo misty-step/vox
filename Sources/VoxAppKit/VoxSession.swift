@@ -31,7 +31,9 @@ public final class VoxSession: ObservableObject {
     private let recoveryStore: LastDictationRecoveryStore
     private let pipeline: DictationProcessing?
     private let streamingSTTProvider: StreamingSTTProvider?
+    private let debugSink: DebugWorkbenchSink?
     private var streamingSetupTask: Task<Void, Never>?
+    private var activeDictationID: String?
     private let streamingSetupTimeout: TimeInterval
     private let streamingFinalizeTimeout: TimeInterval
     private var levelTimer: Timer?
@@ -64,7 +66,8 @@ public final class VoxSession: ObservableObject {
             recoveryStore: .shared,
             streamingSTTProvider: streamingSTTProvider,
             streamingSetupTimeout: streamingSetupTimeout,
-            streamingFinalizeTimeout: streamingFinalizeTimeout
+            streamingFinalizeTimeout: streamingFinalizeTimeout,
+            debugSink: nil
         )
     }
 
@@ -80,7 +83,8 @@ public final class VoxSession: ObservableObject {
         recoveryStore: LastDictationRecoveryStore,
         streamingSTTProvider: StreamingSTTProvider? = nil,
         streamingSetupTimeout: TimeInterval = 3.0,
-        streamingFinalizeTimeout: TimeInterval = 90.0
+        streamingFinalizeTimeout: TimeInterval = 90.0,
+        debugSink: DebugWorkbenchSink? = nil
     ) {
         self.recorder = recorder ?? AudioRecorder()
         self.pipeline = pipeline
@@ -104,6 +108,7 @@ public final class VoxSession: ObservableObject {
         self.streamingSTTProvider = streamingSTTProvider
         self.streamingSetupTimeout = streamingSetupTimeout
         self.streamingFinalizeTimeout = streamingFinalizeTimeout
+        self.debugSink = debugSink
     }
 
     private var hasCloudProviders: Bool {
@@ -157,6 +162,15 @@ public final class VoxSession: ObservableObject {
                     finalText: outputText,
                     processingLevel: processingLevel
                 )
+            },
+            onRawTranscript: { [debugSink] rawTranscript in
+                debugSink?.setRawTranscript(requestID: dictationID, text: rawTranscript)
+            },
+            onRewriteResult: { [debugSink] level, outputText in
+                debugSink?.setRewrite(requestID: dictationID, level: level, text: outputText)
+            },
+            onPipelineLog: { [debugSink] message in
+                debugSink?.log(requestID: dictationID, message: message)
             }
         )
     }
@@ -429,9 +443,17 @@ public final class VoxSession: ObservableObject {
     }
 
     private func startRecording() async {
+        let requestID = UUID().uuidString
+        activeDictationID = requestID
+        debugSink?.startRequest(id: requestID, processingLevel: prefs.processingLevel)
+        debugSink?.updateStatus(id: requestID, status: .recording)
+        debugSink?.log(requestID: requestID, message: "recording authorization requested")
+
         do {
             try await sessionExtension.authorizeRecordingStart()
         } catch {
+            debugSink?.updateStatus(id: requestID, status: .failed)
+            debugSink?.log(requestID: requestID, message: "recording authorization failed: \(error.localizedDescription)")
             presentError(error.localizedDescription)
             return
         }
@@ -439,6 +461,8 @@ public final class VoxSession: ObservableObject {
         let granted = await requestMicrophoneAccess()
         guard granted else {
             await sessionExtension.didFailDictation(reason: "microphone_permission_denied")
+            debugSink?.updateStatus(id: requestID, status: .failed)
+            debugSink?.log(requestID: requestID, message: "microphone permission denied")
             presentError("Microphone permission is required.")
             return
         }
@@ -490,6 +514,8 @@ public final class VoxSession: ObservableObject {
             activeStreamingBridge = bridge
             recordingStartTime = CFAbsoluteTimeGetCurrent()
             state = .recording
+            debugSink?.updateStatus(id: requestID, status: .recording)
+            debugSink?.log(requestID: requestID, message: "recording started")
             hud.showRecording(average: 0, peak: 0)
             startLevelTimer()
         } catch {
@@ -500,8 +526,11 @@ public final class VoxSession: ObservableObject {
                 streamingRecorder.setAudioChunkHandler(nil)
             }
             await sessionExtension.didFailDictation(reason: "recording_start_failed")
+            debugSink?.updateStatus(id: requestID, status: .failed)
+            debugSink?.log(requestID: requestID, message: "recording start failed: \(error.localizedDescription)")
             presentError(error.localizedDescription)
             state = .idle
+            activeDictationID = nil
         }
     }
 
@@ -521,9 +550,14 @@ public final class VoxSession: ObservableObject {
             recordingDuration = 0
         }
 
-        let dictationID = UUID().uuidString
+        let dictationID = activeDictationID ?? UUID().uuidString
+        activeDictationID = nil
         let processingLevelAtStop = prefs.processingLevel.rawValue
         let hadStreamingBridgeAtStop = activeStreamingBridge != nil
+        debugSink?.startRequest(id: dictationID, processingLevel: prefs.processingLevel)
+        debugSink?.updateStatus(id: dictationID, status: .processing)
+        debugSink?.log(requestID: dictationID, message: "recording duration \(String(format: "%.2f", recordingDuration))s")
+        debugSink?.log(requestID: dictationID, message: "recording stopped; processing started (level=\(processingLevelAtStop))")
         DiagnosticsStore.recordAsync(
             name: "processing_started",
             sessionID: dictationID,
@@ -562,6 +596,8 @@ public final class VoxSession: ObservableObject {
                 sessionID: dictationID,
                 fields: DiagnosticsStore.errorFields(for: error)
             )
+            debugSink?.updateStatus(id: dictationID, status: .failed)
+            debugSink?.log(requestID: dictationID, message: "recording stop failed: \(error.localizedDescription)")
             state = .idle
             hud.hide()
             return
@@ -616,6 +652,8 @@ public final class VoxSession: ObservableObject {
                 )
             )
             succeeded = true
+            debugSink?.updateStatus(id: dictationID, status: .succeeded)
+            debugSink?.log(requestID: dictationID, message: "processing succeeded (output_chars=\(output.count))")
             let processingLevelOnSuccess = prefs.processingLevel.rawValue
             let outputChars = output.count
             DiagnosticsStore.recordAsync(
@@ -631,6 +669,8 @@ public final class VoxSession: ObservableObject {
             await sessionExtension.didFailDictation(reason: "processing_cancelled")
             SecureFileDeleter.delete(at: url)
             DiagnosticsStore.recordAsync(name: "processing_cancelled", sessionID: dictationID)
+            debugSink?.updateStatus(id: dictationID, status: .cancelled)
+            debugSink?.log(requestID: dictationID, message: "processing cancelled")
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
@@ -657,11 +697,16 @@ public final class VoxSession: ObservableObject {
                     ]
                 )
             )
+            debugSink?.updateStatus(id: dictationID, status: .failed)
+            debugSink?.log(requestID: dictationID, message: "processing failed: \(error.localizedDescription)")
         }
 
         if succeeded {
             SecureFileDeleter.delete(at: url)
             onRecoveryAvailabilityChange?(true)
+            Task {
+                await runDebugShadowRewritesIfNeeded(dictationID: dictationID)
+            }
             state = .idle
             hud.showSuccess()
         } else {
@@ -911,6 +956,61 @@ public final class VoxSession: ObservableObject {
         )
         state = .idle
         hud.showSuccess()
+    }
+
+    private func runDebugShadowRewritesIfNeeded(dictationID: String) async {
+        guard let debugSink else { return }
+        guard let snapshot = await recoveryStore.latestSnapshot() else {
+            debugSink.log(requestID: dictationID, message: "shadow rewrite skipped: no recovery snapshot")
+            return
+        }
+
+        let rawTranscript = snapshot.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawTranscript.isEmpty else {
+            debugSink.log(requestID: dictationID, message: "shadow rewrite skipped: empty raw transcript")
+            return
+        }
+
+        let levelsToRun: [ProcessingLevel]
+        switch snapshot.processingLevel {
+        case .raw:
+            levelsToRun = [.clean, .polish]
+        case .clean:
+            levelsToRun = [.polish]
+        case .polish:
+            levelsToRun = [.clean]
+        }
+
+        guard !levelsToRun.isEmpty else { return }
+
+        let provider = makeRewriteProvider(config: assemblyConfig(dictationID: dictationID))
+        for level in levelsToRun {
+            let model = level.defaultModel
+            debugSink.log(requestID: dictationID, message: "shadow rewrite start (level=\(level.rawValue), model=\(model))")
+            let prompt = RewritePrompts.prompt(for: level, transcript: rawTranscript)
+            do {
+                let rewritten = try await provider.rewrite(
+                    transcript: rawTranscript,
+                    systemPrompt: prompt,
+                    model: model
+                )
+                let normalized = rewritten.trimmingCharacters(in: .whitespacesAndNewlines)
+                if normalized.isEmpty {
+                    debugSink.setRewriteFailure(requestID: dictationID, level: level, reason: "empty")
+                    debugSink.log(requestID: dictationID, message: "shadow rewrite empty (level=\(level.rawValue))")
+                } else {
+                    debugSink.setRewrite(requestID: dictationID, level: level, text: rewritten)
+                    debugSink.log(requestID: dictationID, message: "shadow rewrite success (level=\(level.rawValue), chars=\(normalized.count))")
+                }
+            } catch {
+                debugSink.setRewriteFailure(
+                    requestID: dictationID,
+                    level: level,
+                    reason: DiagnosticsStore.errorCode(for: error)
+                )
+                debugSink.log(requestID: dictationID, message: "shadow rewrite failed (level=\(level.rawValue)): \(error.localizedDescription)")
+            }
+        }
     }
 
     private func presentError(_ message: String) {
