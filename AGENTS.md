@@ -49,7 +49,7 @@
 - **Type labels**: `bug`, `feature`, `task`, `refactor`, `research`, `epic`
 - **Triad axis labels** (exactly one each): `speed:+|speed:0|speed:-`, `quality:+|quality:0|quality:-`, `simplicity:+|simplicity:0|simplicity:-`
 - **Triad class label** (exactly one): `triad:no-brainer` or `triad:tradeoff`
-- Every issue body must include `Triad Hypothesis` and `Tradeoff Justification`.
+- Every issue body must include `Triad Hypothesis` and a `Tradeoff Justification` section (`N/A` allowed for `triad:no-brainer`).
 - Use [`docs/TRIAD_PLAYBOOK.md`](docs/TRIAD_PLAYBOOK.md) as the default decision rubric.
 - Pick highest-priority unassigned issue (`now` first, then lower issue number).
 
