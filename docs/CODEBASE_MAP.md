@@ -206,12 +206,7 @@ appleSTT (macOS < 26):
 ### Rewrite Provider Routing
 
 ```
-macOS 26+ with Apple Intelligence:
-  FallbackRewriteProvider
-    ├── AppleFoundationModelsClient (on-device, zero-key)
-    └── cloud chain (below)
-
-Cloud chain (all macOS versions):
+Cloud routing (all macOS versions):
   ModelRoutedRewriteProvider
     ├── gemini-* model → GeminiClient (fallback: OpenRouterClient)
     └── other model    → OpenRouterClient (fallback: GeminiClient with fallbackGeminiModel)

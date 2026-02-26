@@ -2,7 +2,7 @@
 name: Triad Work Item
 about: Create a work item with explicit quality/simplicity/speed hypothesis
 title: "[P2] "
-labels: ["task", "next", "p2", "source/groom", "quality:0", "simplicity:0", "speed:0", "triad:tradeoff"]
+labels: ["task", "next", "p2", "source/groom", "quality:0", "simplicity:0", "speed:0", "triad:no-brainer"]
 ---
 
 ## Problem
@@ -45,4 +45,3 @@ Required when class is `triad:tradeoff`. Explain why this trade is acceptable.
 ## Open Questions
 
 - 
-

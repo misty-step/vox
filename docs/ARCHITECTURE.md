@@ -217,7 +217,7 @@ targets: [
 BYOK. `PreferencesStore` reads env first, then Keychain:
 - `ELEVENLABS_API_KEY` — primary STT (ElevenLabs Scribe v2)
 - `GEMINI_API_KEY` — primary rewriting
-- `OPENROUTER_API_KEY` — rewrite fallback
+- `OPENROUTER_API_KEY` — model-routed rewriting for non-Gemini models + fallback path
 - `DEEPGRAM_API_KEY` — STT fallback + optional streaming STT
 - `VOX_MAX_CONCURRENT_STT` — optional global in-flight STT limit (default: `8`)
 - `VOX_DISABLE_STREAMING_STT` — kill switch to force batch-only STT (`1`/`true`)
@@ -229,6 +229,7 @@ Endpoints:
 - Deepgram STT: `https://api.deepgram.com/v1/listen?model=nova-3`
 - Deepgram streaming STT: `wss://api.deepgram.com/v1/listen`
 - OpenRouter chat: `https://openrouter.ai/api/v1/chat/completions`
+- Gemini generateContent: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
 
 Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 
@@ -242,7 +243,8 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `HotkeyState.swift`, `SettingsView.swift`, `BasicsSection.swift`, `CloudProvidersSection.swift`, `CloudKeysSheet.swift`, `CloudProviderCatalog.swift` |
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
-| Rewrite provider | VoxProviders | `OpenRouterClient.swift`, `RewritePrompts.swift` |
+| Rewrite providers | VoxProviders | `ProviderAssembly.swift`, `OpenRouterClient.swift`, `GeminiClient.swift`, `RewritePrompts.swift` |
+| Rewrite routing | VoxCore | `ModelRoutedRewriteProvider.swift`, `FallbackRewriteProvider.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
 | Core | VoxCore | `Protocols.swift`, `SessionExtension.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
