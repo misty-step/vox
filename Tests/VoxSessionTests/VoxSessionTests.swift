@@ -1389,4 +1389,60 @@ struct VoxSessionDITests {
 
         #expect(recoveryAvailabilityEvents == [false])
     }
+
+    // Regression: last ~30-100ms of audio was dropped when a tap callback arrived in
+    // pendingChunks after the drainTask exited (drainTask=nil) but before finish() was called.
+    // finish() would find drainTask=nil, skip the await, and proceed without draining those chunks.
+    // The grace window drain in StreamingAudioBridge.finish() must catch this residual.
+    @Test("Streaming bridge grace window drains chunks enqueued after drainTask exits")
+    @MainActor func test_streamingBridgeGraceWindow_drainsResidualChunksAfterDrainTaskExits() async {
+        let recorder = MockRecorder()
+        let pipeline = MockPipeline()
+        pipeline.transcriptResult = "grace window transcript"
+
+        // Require 3 chunks at finish. First 2 are emitted before stop; the 3rd arrives in the
+        // gap where drainTask has already exited but finish() hasn't been called yet — simulated
+        // by emitting it immediately before toggleRecording() while the drain loop is settling.
+        let streamingSession = MockStreamingSession()
+        streamingSession.expectedChunkCountAtFinish = 3
+        streamingSession.finishResult = .success("grace window streamed")
+        let streamingProvider = MockStreamingProvider(session: streamingSession)
+
+        let session = VoxSession(
+            recorder: recorder,
+            pipeline: pipeline,
+            hud: MockHUD(),
+            prefs: MockPreferencesStore(),
+            requestMicrophoneAccess: { true },
+            errorPresenter: { _ in },
+            streamingSTTProvider: streamingProvider
+        )
+
+        await session.toggleRecording()
+
+        // Allow streaming setup to complete so the bridge has a pump attached.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        // Emit 2 chunks — these drain normally.
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x01, 0x02])))
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x03, 0x04])))
+
+        // Let the drain loop process those 2 chunks and exit (drainTask → nil).
+        try? await Task.sleep(nanoseconds: 30_000_000)
+
+        // Emit the 3rd chunk right before stop. This lands in pendingChunks when drainTask
+        // is nil (loop just exited), so a new drainTask is started — but finish() may race
+        // to capture drainTask before or after the new task is scheduled.
+        // The grace window drains pendingChunks a second time, catching any such residual.
+        recorder.emitChunk(AudioChunk(pcm16LEData: Data([0x05, 0x06])))
+        await session.toggleRecording()
+
+        // All 3 chunks must reach the session; expectedChunkCountAtFinish=3 throws otherwise,
+        // causing streaming to fall back to batch (processCallCount > 0, processTranscriptCallCount == 0).
+        #expect(streamingProvider.makeSessionCallCount == 1)
+        #expect(streamingSession.sentChunks.count == 3)
+        #expect(pipeline.processTranscriptCallCount == 1)
+        #expect(pipeline.processCallCount == 0, "should not have fallen back to batch")
+        #expect(session.state == .idle)
+    }
 }
