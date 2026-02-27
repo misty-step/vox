@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  pull-requests: write
+
 jobs:
   test:
     name: CI
@@ -46,3 +49,15 @@ jobs:
       - name: Run latency benchmark
         if: github.event_name == 'pull_request'
         run: ./scripts/benchmark.sh
+
+      - name: Coverage report
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          ./scripts/coverage-report.sh --output coverage-report.md
+          ./scripts/post-coverage-comment.sh \
+            "${{ github.event.pull_request.number }}" \
+            coverage-report.md
