@@ -39,7 +39,7 @@ Terms agents must understand to work in this codebase.
 ## Active Focus
 
 - **Milestone:** Streaming-First Latency Path (Q1 2026)
-- **Key Issues:** #259 (rewrite model bakeoff), #256 (Apple Foundation Models), #226 (Opus flakiness), #208 (processing UX)
+- **Key Issues:** #259 (rewrite model bakeoff), #226 (Opus flakiness), #208 (processing UX)
 - **Theme:** Minimize time from stop→paste. Streaming STT is live; now tighten rewrite latency and polish UX.
 
 ## Quality Bar
