@@ -177,6 +177,13 @@ public final class VoxSession: ObservableObject {
             onPipelineLog: { [debugSink] message in
                 debugSink?.log(requestID: dictationID, message: message)
             },
+            onDiagnosticsLog: { name, message in
+                DiagnosticsStore.recordAsync(
+                    name: name,
+                    sessionID: dictationID,
+                    fields: ["message": .string(message)]
+                )
+            },
             audioFrameValidator: { try CapturedAudioInspector.ensureHasAudioFrames(at: $0) }
         )
     }
@@ -1079,6 +1086,18 @@ private final class StreamingAudioBridge: @unchecked Sendable {
         if let activeDrain {
             await activeDrain.value
         }
+        // 100ms grace window for in-flight tap callbacks (one render buffer at any sample rate).
+        // Not user-visible: HUD shows "processing" immediately on Option+Space.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        // Drain any chunks that arrived during the grace window.
+        let lateChunks: [AudioChunk] = queueLock.withLock {
+            let c = pendingChunks
+            pendingChunks.removeAll()
+            return c
+        }
+        for chunk in lateChunks {
+            await capturedPump?.enqueue(chunk)
+        }
         guard let capturedPump else {
             throw StreamingSTTError.connectionFailed("Streaming session was not established")
         }
@@ -1188,6 +1207,9 @@ private actor StreamingSessionPump {
 
         // Session handles its own finalization timeout + transcript recovery.
         // No outer timeout race — single timeout avoids discarding recovered transcripts.
+        // 150ms pre-close delay: gives Deepgram time to finish processing the last audio chunk.
+        // Total added latency (with StreamingAudioBridge grace): 250ms — within p95 2.5s budget.
+        try? await Task.sleep(nanoseconds: 150_000_000)
         let transcript = try await session.finish()
 
         state = .closed

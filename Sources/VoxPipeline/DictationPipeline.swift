@@ -1,6 +1,5 @@
 import Foundation
 import VoxCore
-import VoxDiagnostics
 
 /// Tracks timing for each pipeline stage.
 /// Note: `totalTime` is a live wall-clock reading — use stage sums for captured snapshots.
@@ -86,6 +85,9 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
     private let onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)?
     private let onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)?
     private let onPipelineLog: (@Sendable (_ message: String) -> Void)?
+    // Structured diagnostics events. Caller (VoxSession) wires this to DiagnosticsStore.
+    // Keeps VoxPipeline free of a VoxDiagnostics dependency.
+    private let onDiagnosticsLog: (@Sendable (_ name: String, _ message: String) -> Void)?
 
     @MainActor
     public convenience init(
@@ -95,7 +97,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         prefs: PreferencesReading,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
-        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = { false },
+        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = { true },
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { $0 },
         opusUnavailableReason: @escaping @Sendable () async -> String? = { nil },
         opusBypassThreshold: Int = 200_000,
@@ -105,6 +107,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)? = nil,
         onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)? = nil,
         onPipelineLog: (@Sendable (_ message: String) -> Void)? = nil,
+        onDiagnosticsLog: (@Sendable (_ name: String, _ message: String) -> Void)? = nil,
         audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { _ in }
     ) {
         self.init(
@@ -125,6 +128,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
             onRawTranscript: onRawTranscript,
             onRewriteResult: onRewriteResult,
             onPipelineLog: onPipelineLog,
+            onDiagnosticsLog: onDiagnosticsLog,
             audioFrameValidator: audioFrameValidator
         )
     }
@@ -138,7 +142,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         rewriteCache: RewriteResultCache,
         enableRewriteCache: Bool = false,
         enableOpus: Bool = true,
-        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = { false },
+        isOpusConversionEnabled: @escaping @Sendable () async -> Bool = { true },
         convertCAFToOpus: @escaping @Sendable (URL) async throws -> URL = { $0 },
         opusUnavailableReason: @escaping @Sendable () async -> String? = { nil },
         opusBypassThreshold: Int = 200_000,
@@ -149,6 +153,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         onRawTranscript: (@Sendable (_ rawTranscript: String) -> Void)? = nil,
         onRewriteResult: (@Sendable (_ level: ProcessingLevel, _ outputText: String) -> Void)? = nil,
         onPipelineLog: (@Sendable (_ message: String) -> Void)? = nil,
+        onDiagnosticsLog: (@Sendable (_ name: String, _ message: String) -> Void)? = nil,
         audioFrameValidator: @escaping @Sendable (URL) throws -> Void = { _ in }
     ) {
         self.stt = stt
@@ -169,6 +174,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         self.onRawTranscript = onRawTranscript
         self.onRewriteResult = onRewriteResult
         self.onPipelineLog = onPipelineLog
+        self.onDiagnosticsLog = onDiagnosticsLog
         self.audioFrameValidator = audioFrameValidator
     }
 
@@ -212,13 +218,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                 #if DEBUG
                 print("[Pipeline] Opus conversion failed: \(error.localizedDescription)")
                 #endif
-                DiagnosticsStore.recordAsync(
-                    name: "opus_conversion_fallback",
-                    fields: DiagnosticsStore.errorFields(
-                        for: error,
-                        additional: ["conversion_stage": .string("opus")]
-                    )
-                )
+                onDiagnosticsLog?("opus_conversion_fallback", "conversion_stage=opus error=\(error.localizedDescription)")
                 uploadURL = audioURL
             }
             timing.encodeTime = CFAbsoluteTimeGetCurrent() - encodeStart
@@ -375,7 +375,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                         level: level,
                         model: model,
                         outcome: "cache_hit",
-                        fields: ["cache_hit": .bool(true)]
+                        extra: "cache_hit=true"
                     )
                 } else {
                     let prompt = RewritePrompts.prompt(for: level, transcript: transcript)
@@ -417,7 +417,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                             level: level,
                             model: model,
                             outcome: "success",
-                            fields: ["cache_hit": .bool(false)]
+                            extra: "cache_hit=false"
                         )
                     }
                 }
@@ -432,7 +432,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     level: level,
                     model: model,
                     outcome: "timeout_raw_fallback",
-                    fields: ["elapsed_ms": .int(Int(waited * 1000))]
+                    extra: "elapsed_ms=\(Int(waited * 1000))"
                 )
             } catch {
                 print("[Pipeline] Rewrite failed, using raw transcript: \(rewriteFailureSummary(error))")
@@ -442,7 +442,7 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                     level: level,
                     model: model,
                     outcome: "error_raw_fallback",
-                    fields: DiagnosticsStore.errorFields(for: error)
+                    extra: "error=\(rewriteFailureSummary(error))"
                 )
             }
             rewriteTime = CFAbsoluteTimeGetCurrent() - rewriteStart
@@ -481,21 +481,13 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
         level: ProcessingLevel,
         model: String,
         outcome: String,
-        fields: [String: DiagnosticsValue] = [:]
+        extra: String = ""
     ) {
-        var payload: [String: DiagnosticsValue] = [
-            "processing_level": .string(level.rawValue),
-            "model": .string(model),
-            "outcome": .string(outcome),
-        ]
-        for (key, value) in fields {
-            payload[key] = value
+        var message = "level=\(level.rawValue) model=\(model) outcome=\(outcome)"
+        if !extra.isEmpty {
+            message += " \(extra)"
         }
-
-        DiagnosticsStore.recordAsync(
-            name: DiagnosticsEventNames.rewriteStageOutcome,
-            fields: payload
-        )
+        onDiagnosticsLog?("rewrite_stage_outcome", message)
     }
 
 }

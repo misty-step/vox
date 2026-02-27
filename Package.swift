@@ -23,7 +23,7 @@ let package = Package(
         .target(name: "VoxProviders", dependencies: ["VoxCore"]),
         .target(name: "VoxMac", dependencies: ["VoxCore"]),
         .target(name: "VoxDiagnostics", dependencies: ["VoxCore"]),
-        .target(name: "VoxPipeline", dependencies: ["VoxCore", "VoxDiagnostics"]),
+        .target(name: "VoxPipeline", dependencies: ["VoxCore"]),
         .target(
             name: "VoxUI",
             dependencies: ["VoxCore", "VoxMac", "VoxDiagnostics"]
