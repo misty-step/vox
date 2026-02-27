@@ -38,18 +38,21 @@ fi
 echo "[coverage] Generating coverage report..."
 
 # Export coverage JSON, excluding .build and Tests directories
-COVERAGE_JSON="$(xcrun llvm-cov export \
+COVERAGE_JSON_FILE="$(mktemp)"
+trap 'rm -f "$COVERAGE_JSON_FILE"' EXIT
+xcrun llvm-cov export \
   -summary-only \
   -instr-profile "$PROFDATA" \
   "$TEST_BINARY" \
-  -ignore-filename-regex='\.build|Tests/' 2>/dev/null)"
+  -ignore-filename-regex='\.build|Tests/' 2>/dev/null > "$COVERAGE_JSON_FILE"
 
 # Parse JSON into markdown with python3
-REPORT="$(echo "$COVERAGE_JSON" | python3 - << 'PYEOF'
+REPORT="$(python3 - "$COVERAGE_JSON_FILE" << 'PYEOF'
 import json
 import sys
 
-data = json.load(sys.stdin)
+with open(sys.argv[1]) as f:
+    data = json.load(f)
 
 # Module names we care about (source directories under Sources/)
 MODULE_NAMES = [
@@ -143,7 +146,7 @@ fi
 # VoxMac / VoxUI / VoxAppKit excluded: hardware I/O, SwiftUI, composition root.
 THRESHOLD_CHECK_OUTPUT=""
 THRESHOLD_CHECK_EXIT=0
-THRESHOLD_CHECK_OUTPUT="$(echo "$COVERAGE_JSON" | python3 - << 'PYEOF'
+THRESHOLD_CHECK_OUTPUT="$(python3 - "$COVERAGE_JSON_FILE" << 'PYEOF'
 import json, sys
 
 THRESHOLDS = {
@@ -157,7 +160,8 @@ THRESHOLDS = {
 
 MODULE_NAMES = list(THRESHOLDS.keys()) + ["VoxMac", "VoxUI", "VoxAppKit"]
 
-data = json.load(sys.stdin)
+with open(sys.argv[1]) as f:
+    data = json.load(f)
 modules = {}
 for fn in data.get("data", [{}])[0].get("files", []):
     filename = fn["filename"]
