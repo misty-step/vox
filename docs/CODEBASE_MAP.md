@@ -18,11 +18,18 @@ Pure SwiftPM, zero external dependencies. macOS 14+, Swift 5.9, Xcode 16.2.
 
 ```
 VoxApp (executable)
-  └── VoxAppKit (library: session, pipeline, settings, DI assembly)
-        ├── VoxMac (platform: audio, keychain, HUD, hotkeys, paste)
+  └── VoxAppKit (composition root: AppDelegate only)
+        ├── VoxSession (state machine, streaming bridge, provider assembly)
+        │     ├── VoxUI (status bar, settings, onboarding, debug workbench)
+        │     │     ├── VoxMac (audio, keychain, HUD, hotkeys, paste)
+        │     │     ├── VoxDiagnostics (diagnostics store, perf ingest, product info)
+        │     │     └── VoxCore
+        │     ├── VoxPipeline (dictation pipeline, rewrite cache, recovery store)
+        │     │     └── VoxCore
+        │     ├── VoxProviders (STT clients, rewrite clients, streaming)
+        │     │     └── VoxCore
         │     └── VoxCore (protocols, errors, decorators, shared types)
-        └── VoxProviders (STT clients, rewrite clients, streaming)
-              └── VoxCore
+        └── (all above)
 ```
 
 Auxiliary targets: `VoxBenchmarks` (rewrite model bakeoff CLI), `VoxPerfAudit` + `VoxPerfAuditKit` (pipeline latency auditor CLI).
@@ -34,17 +41,25 @@ Sources/
   VoxCore/            Protocols, error types, STT decorators, quality gate
   VoxProviders/       ElevenLabs, Deepgram, Apple Speech, OpenRouter, Gemini clients
   VoxMac/             AudioRecorder, HUD, hotkeys, keychain, clipboard, encryption
-  VoxAppKit/          VoxSession, DictationPipeline, PreferencesStore, StatusBar, Settings, Onboarding
+  VoxDiagnostics/     DiagnosticsStore, PerformanceIngestClient, ProductInfo
+  VoxPipeline/        DictationPipeline, RewriteResultCache, LastDictationRecoveryStore, RewritePrompts
+  VoxUI/              StatusBar, Settings, Onboarding, DebugWorkbench, PreferencesStore
+  VoxSession/         VoxSession state machine, streaming bridge, provider assembly
+  VoxAppKit/          AppDelegate (composition root only)
   VoxApp/             main.swift (bootstrap only)
   VoxBenchmarks/      Rewrite model bakeoff CLI
   VoxPerfAudit/       Pipeline latency audit CLI
   VoxPerfAuditKit/    Perf audit config, provider plan, stats
 Tests/
   VoxCoreTests/       Decorator tests, error classification, quality gate, multipart
-  VoxProvidersTests/  Client request format, streaming protocol, file size limits
-  VoxAppTests/        Session state machine, pipeline integration, benchmark SLO
+  VoxProvidersTests/  Client request format, streaming protocol, file size limits, error branches
+  VoxDiagnosticsTests/ Error code mapping, diagnostics value codable, event names
+  VoxPipelineTests/   Pipeline integration, opus conversion, rewrite cache, diagnostics callbacks
+  VoxUITests/         Debug workbench, preferences cache, onboarding, settings, status bar
+  VoxSessionTests/    Session state machine, streaming bridge, grace window
+  VoxAppTests/        Audio recorder, HUD state, format validation, benchmark SLO
   VoxPerfAuditKitTests/  Config parsing, provider plan, distribution math
-scripts/              CI, dev launcher, benchmarks, eval runners, perf tooling
+scripts/              CI, dev launcher, benchmarks, eval runners, perf tooling, coverage report
 evals/                promptfoo eval framework: smoke, injection, polish datasets
 docs/                 Architecture, ADRs, design exploration, performance bakeoffs
 .github/workflows/    CI, eval-smoke, eval-nightly, perf-audit, cerberus, release
@@ -114,25 +129,57 @@ macOS platform integrations. Depends only on VoxCore.
 | `PermissionManager.swift` | Microphone and accessibility TCC permission handling |
 | `SystemSettingsLink.swift` | Deep-links to System Settings privacy panes |
 
+### VoxDiagnostics
+
+Structured diagnostics and performance telemetry. Depends only on VoxCore.
+
+| File | Purpose |
+|------|---------|
+| `DiagnosticsStore.swift` | Append-only JSONL event log; 512KB rotation; zip export; forwards `pipeline_timing` to perf ingest; error code/field mapping |
+| `PerformanceIngestClient.swift` | Best-effort HTTP upload of timing events; 2s/64KB flush; `pipeline_timing` allowlist only |
+| `ProductInfo.swift` | Version/build resolution from Bundle → env vars → fallbacks |
+
+### VoxPipeline
+
+Audio processing pipeline. Depends only on VoxCore. All I/O (diagnostics, opus conversion, audio validation) injected via closures.
+
+| File | Purpose |
+|------|---------|
+| `DictationPipeline.swift` | audio → encode → STT → rewrite → paste; 120s pipeline timeout; timing instrumentation; closure-based DI for diagnostics |
+| `RewriteResultCache.swift` | LRU+TTL rewrite cache (128 entries, 600s, 1024-char max); keyed by transcript+level+model |
+| `LastDictationRecoveryStore.swift` | In-memory TTL (10min) store for raw transcript + final text; powers retry/copy actions |
+| `RewritePrompts.swift` | System prompts per processing level; includes prompt-injection defenses |
+
+### VoxUI
+
+User-facing UI layer. Depends on VoxCore, VoxMac, VoxDiagnostics.
+
+| File | Purpose |
+|------|---------|
+| `PreferencesStore.swift` | UserDefaults (level, device) + Keychain (API keys); `PreferencesReading` protocol |
+| `StatusBarController.swift` | Menu bar item, menu construction, icon rendering, all menu actions |
+| `SettingsWindowController.swift` | NSHostingController wrapper for SwiftUI settings |
+| `Settings/*.swift` | SwiftUI views: basics, cloud keys sheet, provider catalog, product footer; `HotkeyState` shared observable |
+| `Onboarding/*.swift` | Setup checklist with live permission/key status |
+| `Debug/*.swift` | DebugWorkbenchStore, DebugWorkbenchSink, DebugWorkbenchView for dev-time request inspection |
+| `ShareVox.swift` | Copy-to-clipboard sharing |
+| `StatusBarIconRenderer.swift` | Core Graphics icon rendering for status bar states |
+
+### VoxSession
+
+Session state machine and streaming orchestration. Depends on VoxCore, VoxProviders, VoxMac, VoxDiagnostics, VoxPipeline, VoxUI.
+
+| File | Purpose |
+|------|---------|
+| `VoxSession.swift` | State machine (idle→recording→processing→idle); streaming vs batch routing; DI boundary; contains StreamingAudioBridge + StreamingSessionPump |
+
 ### VoxAppKit
 
-App orchestration. Depends on VoxCore, VoxProviders, VoxMac.
+Composition root. Depends on all modules above.
 
 | File | Purpose |
 |------|---------|
 | `AppDelegate.swift` | Root coordinator: wires session, status bar, settings, onboarding, hotkey, diagnostics |
-| `VoxSession.swift` | State machine (idle→recording→processing→idle); streaming vs batch routing; DI boundary |
-| `DictationPipeline.swift` | audio → encode → STT → rewrite → paste; 120s pipeline timeout; timing instrumentation |
-| `PreferencesStore.swift` | UserDefaults (level, device) + Keychain (API keys); `PreferencesReading` protocol |
-| `DiagnosticsStore.swift` | Append-only JSONL event log; 512KB rotation; zip export; forwards `pipeline_timing` to perf ingest |
-| `PerformanceIngestClient.swift` | Best-effort HTTP upload of timing events; 2s/64KB flush; `pipeline_timing` allowlist only |
-| `LastDictationRecoveryStore.swift` | In-memory TTL (10min) store for raw transcript + final text; powers retry/copy actions |
-| `RewriteResultCache.swift` | LRU+TTL rewrite cache (128 entries, 600s, 1024-char max); keyed by transcript+level+model |
-| `StatusBarController.swift` | Menu bar item, menu construction, icon rendering, all menu actions |
-| `SettingsWindowController.swift` | NSHostingController wrapper for SwiftUI settings |
-| `Settings/*.swift` | SwiftUI views: basics, cloud keys sheet, provider catalog, product footer; `HotkeyState` shared observable for hotkey availability |
-| `Onboarding/*.swift` | Setup checklist with live permission/key status |
-| `ProductInfo.swift` | Version/build resolution from Bundle → env vars → fallbacks |
 
 ## Data Flow
 
@@ -264,10 +311,12 @@ Cloud routing (all macOS versions):
 
 **To change processing levels**: Edit `Sources/VoxCore/ProcessingLevel.swift` (model IDs), `Sources/VoxProviders/RewritePrompts.swift` (system prompts), run eval suite.
 
-**To add a settings control**: Edit `Sources/VoxAppKit/Settings/`, back with `PreferencesStore`. Check [ADR-0001](docs/adr/0001-simplicity-first-design.md) simplicity gate.
+**To add a settings control**: Edit `Sources/VoxUI/Settings/`, back with `PreferencesStore`. Check [ADR-0001](docs/adr/0001-simplicity-first-design.md) simplicity gate.
 
-**To add a menu bar action**: Edit `Sources/VoxAppKit/StatusBarController.swift` (`rebuildMenu()`).
+**To add a menu bar action**: Edit `Sources/VoxUI/StatusBarController.swift` (`rebuildMenu()`).
+
+**To modify the pipeline**: Edit `Sources/VoxPipeline/DictationPipeline.swift`. New I/O dependencies should be injected via closures (not imports) to keep VoxPipeline's only dependency as VoxCore.
+
+**To add diagnostics events**: Call `DiagnosticsStore.recordAsync(name:sessionID:fields:)` — fire-and-forget. Only `pipeline_timing` events forward to perf ingest. From VoxPipeline, use the `onDiagnosticsLog` closure instead.
 
 **To modify the eval framework**: Edit `evals/datasets/`, `evals/promptfooconfig.yaml`, run `evals/scripts/eval-smoke.sh` locally.
-
-**To add diagnostics events**: Call `DiagnosticsStore.recordAsync(name:sessionID:fields:)` — fire-and-forget. Only `pipeline_timing` events forward to perf ingest.

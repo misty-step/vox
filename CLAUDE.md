@@ -24,17 +24,21 @@ Git hooks (`.githooks/`): pre-commit runs SwiftLint on staged files (<1s), pre-p
 
 ## Architecture
 
-Pure SwiftPM, zero external dependencies. Five main targets forming a strict dependency hierarchy (plus auxiliary: `VoxBenchmarks`, `VoxPerfAudit`, `VoxPerfAuditKit`):
+Pure SwiftPM, zero external dependencies. Nine targets forming a strict dependency DAG (plus auxiliary: `VoxBenchmarks`, `VoxPerfAudit`, `VoxPerfAuditKit`):
 
 ```
 VoxCore          — protocols, errors, decorators, shared types (no deps)
 VoxProviders     — STT clients, rewrite clients, streaming (depends: VoxCore)
 VoxMac           — macOS integrations: audio, keychain, HUD, hotkeys (depends: VoxCore)
-VoxAppKit        — session, pipeline, settings, UI controllers (depends: all above)
-VoxApp           — executable entry point, just main.swift + AppDelegate (depends: VoxAppKit)
+VoxDiagnostics   — diagnostics store, perf ingest, product info (depends: VoxCore)
+VoxPipeline      — dictation pipeline, rewrite cache, recovery store (depends: VoxCore)
+VoxUI            — status bar, settings, onboarding, debug workbench (depends: VoxCore, VoxMac, VoxDiagnostics)
+VoxSession       — session state machine, streaming bridge, provider assembly (depends: VoxCore, VoxProviders, VoxMac, VoxDiagnostics, VoxPipeline, VoxUI)
+VoxAppKit        — composition root: AppDelegate only (depends: all above)
+VoxApp           — executable entry point, just main.swift (depends: VoxAppKit)
 ```
 
-VoxAppKit was extracted from VoxApp so tests can import it — SwiftPM executable targets can't be test dependencies.
+VoxPipeline depends only on VoxCore — all I/O (diagnostics, opus conversion, audio validation) is injected via closures.
 
 ### STT Resilience Chain
 
@@ -107,10 +111,14 @@ Option+Space → VoxSession sets selected input as system default (compat path) 
 
 ## Testing
 
-XCTest and Swift Testing with async tests. ~171 tests across four targets:
+XCTest and Swift Testing with async tests. ~200 tests across eight targets:
 - `VoxCoreTests` — decorators, error classification, quality gate, multipart encoding
-- `VoxProvidersTests` — client request format, streaming protocol, file size limits
-- `VoxAppTests` — session state machine, pipeline integration, streaming, benchmark SLO
+- `VoxProvidersTests` — client request format, streaming protocol, file size limits, error branches
+- `VoxDiagnosticsTests` — error code mapping, diagnostics value codable, event names
+- `VoxPipelineTests` — pipeline integration, opus conversion, rewrite cache, diagnostics callbacks
+- `VoxUITests` — debug workbench, preferences cache, onboarding, settings, status bar
+- `VoxSessionTests` — session state machine, streaming bridge, grace window
+- `VoxAppTests` — audio recorder, HUD state, format validation, benchmark SLO
 - `VoxPerfAuditKitTests` — config parsing, provider plan, distribution math
 
 Test method naming: `test_methodName_behaviorWhenCondition` (e.g., `test_transcribe_retriesOnThrottledError`).
