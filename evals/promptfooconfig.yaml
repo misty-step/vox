@@ -14,7 +14,7 @@ providers:
 defaultTest:
   options:
     provider:
-      id: openrouter:deepseek/deepseek-v3-0324
+      id: openrouter:deepseek/deepseek-chat-v3-0324
       config:
         temperature: 0
         response_format:
