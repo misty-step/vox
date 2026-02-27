@@ -10,7 +10,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "[coverage] Running tests with coverage enabled..."
-swift test --enable-code-coverage -Xswiftc -warnings-as-errors 2>&1 | tail -n 5
+swift test --enable-code-coverage -Xswiftc -warnings-as-errors 2>&1 | tee /tmp/vox-coverage-test.log | tail -n 5
 
 # Locate profdata and test binary
 CODECOV_PATH="$(swift test --show-codecov-path 2>/dev/null)"
@@ -45,11 +45,11 @@ COVERAGE_JSON="$(xcrun llvm-cov export \
   -ignore-filename-regex='\.build|Tests/' 2>/dev/null)"
 
 # Parse JSON into markdown with python3
-REPORT="$(python3 - "$COVERAGE_JSON" << 'PYEOF'
+REPORT="$(echo "$COVERAGE_JSON" | python3 - << 'PYEOF'
 import json
 import sys
 
-data = json.loads(sys.argv[1])
+data = json.load(sys.stdin)
 
 # Module names we care about (source directories under Sources/)
 MODULE_NAMES = [
@@ -137,4 +137,62 @@ if [ -n "$OUTPUT" ]; then
   echo "[coverage] Report written to $OUTPUT"
 else
   echo "$REPORT"
+fi
+
+# Enforce per-module coverage thresholds.
+# VoxMac / VoxUI / VoxAppKit excluded: hardware I/O, SwiftUI, composition root.
+THRESHOLD_CHECK_OUTPUT=""
+THRESHOLD_CHECK_EXIT=0
+THRESHOLD_CHECK_OUTPUT="$(echo "$COVERAGE_JSON" | python3 - << 'PYEOF'
+import json, sys
+
+THRESHOLDS = {
+    "VoxCore": 90,
+    "VoxPipeline": 90,
+    "VoxPerfAuditKit": 90,
+    "VoxProviders": 75,
+    "VoxDiagnostics": 60,
+    "VoxSession": 60,
+}
+
+MODULE_NAMES = list(THRESHOLDS.keys()) + ["VoxMac", "VoxUI", "VoxAppKit"]
+
+data = json.load(sys.stdin)
+modules = {}
+for fn in data.get("data", [{}])[0].get("files", []):
+    filename = fn["filename"]
+    lines = fn["summary"]["lines"]
+    if "/Sources/" not in filename:
+        continue
+    parts = filename.split("/Sources/")[1].split("/")
+    if not parts:
+        continue
+    module = parts[0]
+    if module not in MODULE_NAMES:
+        continue
+    if module not in modules:
+        modules[module] = {"covered": 0, "total": 0}
+    modules[module]["covered"] += lines["covered"]
+    modules[module]["total"] += lines["count"]
+
+violations = []
+for name, threshold in THRESHOLDS.items():
+    stats = modules.get(name)
+    if not stats or stats["total"] == 0:
+        continue
+    pct = stats["covered"] / stats["total"] * 100
+    if pct < threshold:
+        violations.append(f"  {name}: {pct:.1f}% < {threshold}% required")
+
+if violations:
+    print("Coverage threshold violations:")
+    for v in violations:
+        print(v)
+    sys.exit(1)
+PYEOF
+)" || THRESHOLD_CHECK_EXIT=$?
+if [ "$THRESHOLD_CHECK_EXIT" -ne 0 ]; then
+  echo "[coverage] Coverage gate failed:" >&2
+  echo "$THRESHOLD_CHECK_OUTPUT" >&2
+  exit "$THRESHOLD_CHECK_EXIT"
 fi
