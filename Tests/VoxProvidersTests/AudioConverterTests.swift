@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import VoxCore
 import XCTest
 @testable import VoxProviders
 

@@ -1,0 +1,476 @@
+import AppKit
+import Combine
+import UniformTypeIdentifiers
+import VoxCore
+import VoxDiagnostics
+
+public enum StatusBarState: Equatable {
+    case idle(processingLevel: ProcessingLevel)
+    case recording(processingLevel: ProcessingLevel)
+    case processing(processingLevel: ProcessingLevel)
+
+    var processingLevel: ProcessingLevel {
+        switch self {
+        case .idle(let level), .recording(let level), .processing(let level):
+            return level
+        }
+    }
+
+    func updatingProcessingLevel(_ level: ProcessingLevel) -> StatusBarState {
+        switch self {
+        case .idle:
+            return .idle(processingLevel: level)
+        case .recording:
+            return .recording(processingLevel: level)
+        case .processing:
+            return .processing(processingLevel: level)
+        }
+    }
+}
+
+struct StatusBarMenuSnapshot: Equatable {
+    let statusTitle: String
+    let modeTitle: String
+    let cloudTitle: String
+    let cloudNeedsAction: Bool
+    let toggleTitle: String
+    let toggleEnabled: Bool
+    let hotkeyTitle: String
+    let hotkeyNeedsAction: Bool
+    let copyRawEnabled: Bool
+    let retryEnabled: Bool
+
+    static func make(
+        state: StatusBarState,
+        hasCloudSTT: Bool,
+        hasRewrite: Bool,
+        hotkeyAvailable: Bool,
+        hasRecoverySnapshot: Bool = false
+    ) -> StatusBarMenuSnapshot {
+        let statusTitle: String
+        let toggleTitle: String
+        let toggleEnabled: Bool
+
+        switch state {
+        case .idle:
+            statusTitle = "Status: Ready"
+            toggleTitle = "Start Dictation"
+            toggleEnabled = true
+        case .recording:
+            statusTitle = "Status: Recording"
+            toggleTitle = "Stop Dictation"
+            toggleEnabled = true
+        case .processing:
+            statusTitle = "Status: Processing"
+            toggleTitle = "Start Dictation"
+            toggleEnabled = false
+        }
+
+        let cloudStatus = CloudStatus.forLevel(
+            state.processingLevel,
+            hasCloudSTT: hasCloudSTT,
+            hasRewrite: hasRewrite
+        )
+
+        let hotkeyStatus = HotkeyStatus.forAvailability(hotkeyAvailable)
+        // Copy raw is safe during any state — read-only clipboard operation, no pipeline contention.
+        let copyRawEnabled = hasRecoverySnapshot
+        let retryEnabled: Bool
+        if case .idle = state {
+            retryEnabled = hasRecoverySnapshot
+        } else {
+            retryEnabled = false
+        }
+
+        return StatusBarMenuSnapshot(
+            statusTitle: statusTitle,
+            modeTitle: "Mode: \(state.processingLevel.menuDisplayName)",
+            cloudTitle: cloudStatus.title,
+            cloudNeedsAction: cloudStatus.needsAction,
+            toggleTitle: toggleTitle,
+            toggleEnabled: toggleEnabled,
+            hotkeyTitle: hotkeyStatus.title,
+            hotkeyNeedsAction: hotkeyStatus.needsAction,
+            copyRawEnabled: copyRawEnabled,
+            retryEnabled: retryEnabled
+        )
+    }
+}
+
+/// Models hotkey availability status for user feedback.
+enum HotkeyStatus {
+    static func forAvailability(_ available: Bool) -> (title: String, needsAction: Bool) {
+        if available {
+            return ("Hotkey: ⌥Space ready", false)
+        } else {
+            return ("Hotkey: unavailable (use menu)", true)
+        }
+    }
+}
+
+/// Models cloud service readiness based on processing level and provider configuration.
+/// Aligns status messaging with actual functional requirements.
+enum CloudStatus {
+    /// Returns the appropriate cloud status for the given configuration.
+    /// - Parameters:
+    ///   - level: Current processing level (determines rewrite requirements)
+    ///   - hasCloudSTT: Whether any cloud STT provider is configured
+    ///   - hasRewrite: Whether any rewrite provider is configured
+    /// - Returns: Tuple of (title: status message, needsAction: whether user action is suggested)
+    static func forLevel(
+        _ level: ProcessingLevel,
+        hasCloudSTT: Bool,
+        hasRewrite: Bool
+    ) -> (title: String, needsAction: Bool) {
+        switch level {
+        case .raw:
+            // Raw mode: only transcription matters, rewrite not used
+            if hasCloudSTT {
+                return ("Cloud transcription ready", false)
+            } else {
+                return ("On-device transcription", false)
+            }
+        case .clean, .polish:
+            // These modes require rewrite; show nuanced status
+            switch (hasCloudSTT, hasRewrite) {
+            case (true, true):
+                return ("Cloud services: Ready", false)
+            case (true, false):
+                return ("Cloud STT ready; rewrite not configured", true)
+            case (false, true):
+                return ("Rewrite ready; transcription on-device", false)
+            case (false, false):
+                return ("Cloud services not configured; limited to Raw mode", true)
+            }
+        }
+    }
+}
+
+private extension ProcessingLevel {
+    var menuDisplayName: String {
+        switch self {
+        case .raw:
+            return "Raw"
+        case .clean:
+            return "Clean"
+        case .polish:
+            return "Polish"
+        }
+    }
+}
+
+@MainActor
+public final class StatusBarController: NSObject {
+    private static let exportFormatter = ISO8601DateFormatter()
+
+    private let statusItem: NSStatusItem
+    private let onToggle: () -> Void
+    private let onCopyLastRawTranscript: () -> Void
+    private let onRetryLastRewrite: () -> Void
+    private let onSetupChecklist: () -> Void
+    private let onSettings: () -> Void
+    private let onQuit: () -> Void
+    private let prefs = PreferencesStore.shared
+
+    private var prefsObserver: AnyCancellable?
+    private var hotkeyAvailable: Bool = true
+    private var recoveryAvailable: Bool = false
+
+    private var currentState: StatusBarState = .idle(processingLevel: .raw)
+
+    public init(
+        onToggle: @escaping () -> Void,
+        onCopyLastRawTranscript: @escaping () -> Void,
+        onRetryLastRewrite: @escaping () -> Void,
+        onSetupChecklist: @escaping () -> Void,
+        onSettings: @escaping () -> Void,
+        onQuit: @escaping () -> Void
+    ) {
+        self.onToggle = onToggle
+        self.onCopyLastRawTranscript = onCopyLastRawTranscript
+        self.onRetryLastRewrite = onRetryLastRewrite
+        self.onSetupChecklist = onSetupChecklist
+        self.onSettings = onSettings
+        self.onQuit = onQuit
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
+        configure()
+        updateIcon(for: currentState)
+    }
+
+    public func updateState(_ state: StatusBarState, processingLevel: ProcessingLevel? = nil) {
+        let resolvedState = processingLevel.map { state.updatingProcessingLevel($0) } ?? state
+        applyState(resolvedState)
+    }
+
+    public func updateProcessingLevel(_ level: ProcessingLevel) {
+        applyState(currentState.updatingProcessingLevel(level))
+    }
+
+    public func setHotkeyAvailable(_ available: Bool) {
+        guard hotkeyAvailable != available else { return }
+        hotkeyAvailable = available
+        rebuildMenu()
+        updateIcon(for: currentState)
+    }
+
+    public func setRecoveryAvailable(_ available: Bool) {
+        guard recoveryAvailable != available else { return }
+        recoveryAvailable = available
+        rebuildMenu()
+    }
+
+    private func applyState(_ state: StatusBarState) {
+        let stateChanged = state != currentState
+        currentState = state
+        if stateChanged {
+            updateIcon(for: state)
+        }
+        rebuildMenu()
+    }
+
+    private func configure() {
+        rebuildMenu()
+        observePreferences()
+    }
+
+    private func observePreferences() {
+        prefsObserver = prefs.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.handlePreferencesChange()
+            }
+    }
+
+    private func handlePreferencesChange() {
+        applyState(currentState.updatingProcessingLevel(prefs.processingLevel))
+    }
+
+    private func rebuildMenu() {
+        let cloudReadiness = resolveCloudReadiness()
+        let snapshot = StatusBarMenuSnapshot.make(
+            state: currentState,
+            hasCloudSTT: cloudReadiness.hasCloudSTT,
+            hasRewrite: cloudReadiness.hasRewrite,
+            hotkeyAvailable: hotkeyAvailable,
+            hasRecoverySnapshot: recoveryAvailable
+        )
+
+        let menu = NSMenu()
+
+        menu.addItem(statusMenuItem(snapshot.statusTitle))
+        menu.addItem(statusMenuItem(snapshot.modeTitle))
+
+        let cloudItem = NSMenuItem(
+            title: snapshot.cloudTitle,
+            action: snapshot.cloudNeedsAction ? #selector(openSettings) : nil,
+            keyEquivalent: ""
+        )
+        cloudItem.target = snapshot.cloudNeedsAction ? self : nil
+        cloudItem.isEnabled = snapshot.cloudNeedsAction
+        menu.addItem(cloudItem)
+
+        let hotkeyItem = NSMenuItem(
+            title: snapshot.hotkeyTitle,
+            action: snapshot.hotkeyNeedsAction ? #selector(openSettings) : nil,
+            keyEquivalent: ""
+        )
+        hotkeyItem.target = snapshot.hotkeyNeedsAction ? self : nil
+        hotkeyItem.isEnabled = snapshot.hotkeyNeedsAction
+        menu.addItem(hotkeyItem)
+        menu.addItem(.separator())
+
+        let toggleItem = NSMenuItem(title: snapshot.toggleTitle, action: #selector(toggleRecording), keyEquivalent: " ")
+        toggleItem.keyEquivalentModifierMask = [.option]
+        toggleItem.target = self
+        toggleItem.isEnabled = snapshot.toggleEnabled
+        menu.addItem(toggleItem)
+        menu.addItem(.separator())
+
+        let processingItem = NSMenuItem(title: "Processing Level", action: nil, keyEquivalent: "")
+        let processingMenu = NSMenu()
+        let levels: [(String, ProcessingLevel)] = [
+            ("Raw", .raw),
+            ("Clean", .clean),
+            ("Polish", .polish)
+        ]
+        for (title, level) in levels {
+            let item = NSMenuItem(title: title, action: #selector(selectProcessingLevel(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = level
+            item.state = level == prefs.processingLevel ? .on : .off
+            processingMenu.addItem(item)
+        }
+        processingItem.submenu = processingMenu
+        menu.addItem(processingItem)
+        menu.addItem(.separator())
+
+        let copyRawItem = NSMenuItem(
+            title: "Copy Last Raw Transcript",
+            action: #selector(copyLastRawTranscript),
+            keyEquivalent: ""
+        )
+        copyRawItem.target = self
+        copyRawItem.isEnabled = snapshot.copyRawEnabled
+        menu.addItem(copyRawItem)
+
+        let retryRewriteItem = NSMenuItem(
+            title: "Retry Last Rewrite",
+            action: #selector(retryLastRewrite),
+            keyEquivalent: ""
+        )
+        retryRewriteItem.target = self
+        retryRewriteItem.isEnabled = snapshot.retryEnabled
+        menu.addItem(retryRewriteItem)
+        menu.addItem(.separator())
+
+        let shareItem = NSMenuItem(title: "Share Vox…", action: #selector(shareVox), keyEquivalent: "")
+        shareItem.target = self
+        menu.addItem(shareItem)
+        menu.addItem(.separator())
+
+        let setupItem = NSMenuItem(title: "Setup Checklist...", action: #selector(openSetupChecklist), keyEquivalent: "")
+        setupItem.target = self
+        menu.addItem(setupItem)
+
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        let exportItem = NSMenuItem(title: "Export Diagnostics…", action: #selector(exportDiagnostics), keyEquivalent: "")
+        exportItem.target = self
+        menu.addItem(exportItem)
+
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "Quit Vox", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
+        statusItem.menu = menu
+    }
+
+    private func statusMenuItem(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    private struct CloudReadiness {
+        let hasCloudSTT: Bool
+        let hasRewrite: Bool
+    }
+
+    private func resolveCloudReadiness() -> CloudReadiness {
+        CloudReadiness(
+            hasCloudSTT: isConfigured(prefs.elevenLabsAPIKey) || isConfigured(prefs.deepgramAPIKey),
+            hasRewrite: isConfigured(prefs.geminiAPIKey) || isConfigured(prefs.openRouterAPIKey)
+        )
+    }
+
+    private func isConfigured(_ value: String) -> Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func updateIcon(for state: StatusBarState) {
+        guard let button = statusItem.button else { return }
+
+        let scale = button.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let icon = StatusBarIconRenderer.makeIcon(for: state, scale: scale)
+        button.image = icon
+        button.imagePosition = .imageOnly
+
+        switch state {
+        case .idle(let level):
+            if hotkeyAvailable {
+                button.toolTip = "Vox – Ready (\(level.menuDisplayName), ⌥Space to record)"
+            } else {
+                button.toolTip = "Vox – Ready (\(level.menuDisplayName), click menu to record)"
+            }
+        case .recording:
+            button.toolTip = "Vox – Recording..."
+        case .processing:
+            button.toolTip = "Vox – Processing..."
+        }
+    }
+
+    @objc private func selectProcessingLevel(_ sender: NSMenuItem) {
+        guard let level = sender.representedObject as? ProcessingLevel else { return }
+        guard prefs.processingLevel != level else { return }
+        #if DEBUG
+        print("[Vox] Processing level menu selection: \(prefs.processingLevel.rawValue) -> \(level.rawValue)")
+        #endif
+        prefs.processingLevel = level
+        applyState(currentState.updatingProcessingLevel(level))
+    }
+
+    @objc private func toggleRecording() { onToggle() }
+    @objc private func copyLastRawTranscript() { onCopyLastRawTranscript() }
+    @objc private func retryLastRewrite() { onRetryLastRewrite() }
+    @objc private func shareVox() {
+        NSPasteboard.general.clearContents()
+        let copied = NSPasteboard.general.setString(ShareVox.clipboardString, forType: .string)
+        if copied {
+            DiagnosticsStore.recordAsync(name: DiagnosticsEventNames.shareTrigger)
+        } else {
+            print("[Vox] shareVox: pasteboard write failed")
+        }
+    }
+    @objc private func openSetupChecklist() { onSetupChecklist() }
+    @objc private func openSettings() { onSettings() }
+    @objc private func exportDiagnostics() {
+        let product = ProductInfo.current()
+        let ts = Self.exportFormatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType.zip]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Vox-Diagnostics-\(product.version)-\(product.build)-\(ts).zip"
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            return
+        }
+
+        let destinationURL: URL
+        if selectedURL.pathExtension.lowercased() == "zip" {
+            destinationURL = selectedURL
+        } else {
+            destinationURL = selectedURL.appendingPathExtension("zip")
+        }
+
+        let context = DiagnosticsContext.current(prefs: prefs)
+        Task {
+            await DiagnosticsStore.shared.record(
+                name: "diagnostics_export_started",
+                fields: ["zip_name": .string(destinationURL.lastPathComponent)]
+            )
+            do {
+                try await DiagnosticsStore.shared.exportZip(to: destinationURL, context: context)
+                await DiagnosticsStore.shared.record(
+                    name: "diagnostics_export_succeeded",
+                    fields: ["zip_name": .string(destinationURL.lastPathComponent)]
+                )
+                await MainActor.run {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(destinationURL.path, forType: .string)
+                    NSWorkspace.shared.activateFileViewerSelecting([destinationURL])
+                }
+            } catch {
+                await DiagnosticsStore.shared.record(
+                    name: "diagnostics_export_failed",
+                    fields: DiagnosticsStore.errorFields(
+                        for: error,
+                        additional: ["zip_name": .string(destinationURL.lastPathComponent)]
+                    )
+                )
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Export Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
+    }
+    @objc private func quitApp() { onQuit() }
+}

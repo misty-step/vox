@@ -1,7 +1,10 @@
 import AppKit
 import Carbon
 import VoxCore
+import VoxDiagnostics
 import VoxMac
+import VoxSession
+import VoxUI
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -92,7 +95,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.statusBarController = statusBarController
         statusBarController.updateState(.idle(processingLevel: prefs.processingLevel))
-        session.onStateChange = { [weak statusBarController] state in
+        session.onStateChange = { [weak statusBarController] (state: VoxSession.State) in
             let level = PreferencesStore.shared.processingLevel
             let statusState: StatusBarState
             switch state {
@@ -105,7 +108,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             statusBarController?.updateState(statusState)
         }
-        session.onRecoveryAvailabilityChange = { [weak statusBarController] available in
+        session.onRecoveryAvailabilityChange = { [weak statusBarController] (available: Bool) in
             statusBarController?.setRecoveryAvailable(available)
         }
 
