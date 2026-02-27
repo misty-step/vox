@@ -3,30 +3,19 @@ import Testing
 @testable import VoxAppKit
 import VoxCore
 
-@Suite("PreferencesStore capability-aware default level")
+@Suite("PreferencesStore default level")
 @MainActor
 struct PreferencesStoreDefaultLevelTests {
 
     @Test("returns .clean when hasRewrite is true")
-    func test_capabilityAwareDefaultLevel_returnsClean_whenHasRewriteTrue() {
-        let level = PreferencesStore.capabilityAwareDefaultLevel(hasRewrite: true)
+    func test_defaultLevel_returnsClean_whenHasRewrite() {
+        let level = PreferencesStore.defaultLevel(hasRewrite: true)
         #expect(level == .clean)
     }
 
-    @Test("returns .raw on macOS < 26 without rewrite keys, .clean on macOS 26+")
-    func test_capabilityAwareDefaultLevel_returnsRawOnOldOS_whenNoRewrite() {
-        let level = PreferencesStore.capabilityAwareDefaultLevel(hasRewrite: false)
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) {
-            // Foundation Models runtime available → always .clean
-            #expect(level == .clean)
-        } else {
-            // SDK has FoundationModels but runtime is macOS < 26 → .raw
-            #expect(level == .raw)
-        }
-        #else
-        // No FoundationModels SDK, no rewrite keys → .raw to avoid silent fallback
+    @Test("returns .raw without rewrite keys")
+    func test_defaultLevel_returnsRaw_whenNoRewrite() {
+        let level = PreferencesStore.defaultLevel(hasRewrite: false)
         #expect(level == .raw)
-        #endif
     }
 }

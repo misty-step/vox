@@ -10,7 +10,7 @@ total_tokens: 307766
 
 ## System Overview
 
-Vox is a macOS menu-bar dictation app. Press Option+Space to record audio, which is transcribed via cloud STT providers (ElevenLabs, Deepgram) with on-device Apple Speech as fallback, optionally rewritten by an LLM (Gemini, OpenRouter), then pasted into the active application. On macOS 26+ with Apple Intelligence, SpeechTranscriber and Foundation Models are tried first for fully on-device STT and rewriting. The app runs as a background accessory process (no Dock icon) with a floating HUD for recording/processing feedback.
+Vox is a macOS menu-bar dictation app. Press Option+Space to record audio, which is transcribed via cloud STT providers (ElevenLabs, Deepgram) with on-device Apple Speech as fallback, optionally rewritten by an LLM (Gemini, OpenRouter), then pasted into the active application. On macOS 26+ with Apple Intelligence, SpeechTranscriber is used for on-device STT. Rewriting always routes through the cloud provider chain (Gemini/OpenRouter). The app runs as a background accessory process (no Dock icon) with a floating HUD for recording/processing feedback.
 
 Pure SwiftPM, zero external dependencies. macOS 14+, Swift 5.9, Xcode 16.2.
 
@@ -85,7 +85,6 @@ STT and rewrite API clients. Depends only on VoxCore.
 | `DeepgramClient.swift` | Batch STT via `/v1/listen` (raw body upload); CAF→WAV conversion injected |
 | `AppleSpeechClient.swift` | On-device fallback via SFSpeechRecognizer; `ContinuationGuard` for single-resume safety |
 | `SpeechTranscriberClient.swift` | macOS 26+ on-device STT via `SpeechTranscriber` + `SpeechAnalyzer`; availability-gated |
-| `AppleFoundationModelsClient.swift` | macOS 26+ on-device rewrite via Apple Foundation Models (system language model); availability-gated |
 | `DeepgramStreamingClient.swift` | WebSocket streaming STT; accumulates `is_final` segments |
 | `ElevenLabsStreamingClient.swift` | WebSocket streaming STT; base64 JSON chunks; `commitSent` flag for auto-commit distinction |
 | `OpenRouterClient.swift` | LLM rewrite via `/v1/chat/completions`; fallback model chain; reasoning disabled |
@@ -261,7 +260,7 @@ Cloud routing (all macOS versions):
 
 **To add a new rewrite provider**: Create client in `Sources/VoxProviders/`, conform to `RewriteProvider`, update `ModelRoutedRewriteProvider` or `FallbackRewriteProvider`, update `VoxSession.makeRewriteProvider()`.
 
-**To add availability-gated providers (macOS 26+)**: Use `#if canImport(FoundationModels)` as SDK proxy + `@available(macOS 26.0, *)`. See `SpeechTranscriberClient.swift` and `AppleFoundationModelsClient.swift` for the pattern. Wire in `VoxSession` with `#if canImport` + `#available` double-gate.
+**To add availability-gated providers (macOS 26+)**: Use `#if canImport(FoundationModels)` as SDK proxy + `@available(macOS 26.0, *)`. See `SpeechTranscriberClient.swift` for the pattern. Wire in `VoxSession` with `#if canImport` + `#available` double-gate.
 
 **To change processing levels**: Edit `Sources/VoxCore/ProcessingLevel.swift` (model IDs), `Sources/VoxProviders/RewritePrompts.swift` (system prompts), run eval suite.
 

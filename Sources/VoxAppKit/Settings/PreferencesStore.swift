@@ -55,7 +55,7 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
             // are excluded here even though they appear in `statuses`.
             let hasRewrite = statuses[.geminiAPIKey, default: false]
                 || statuses[.openRouterAPIKey, default: false]
-            let level = Self.capabilityAwareDefaultLevel(hasRewrite: hasRewrite)
+            let level = Self.defaultLevel(hasRewrite: hasRewrite)
             processingLevel = level
             defaults.set(level.rawValue, forKey: "processingLevel")
         }
@@ -114,13 +114,9 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         }
     }
 
-    /// Capability-aware first-launch default. Returns `.clean` when any AI rewrite key is
-    /// present, or on macOS 26+ where Foundation Models provides on-device rewrite.
-    /// Returns `.raw` otherwise so first-run Clean dictations never silently fall back.
-    static func capabilityAwareDefaultLevel(hasRewrite: Bool) -> ProcessingLevel {
-        #if canImport(FoundationModels)
-        if #available(macOS 26.0, *) { return .clean }
-        #endif
+    /// First-launch default level. Returns `.clean` when any AI rewrite key is
+    /// present; `.raw` otherwise so first-run Clean dictations never silently fall back.
+    static func defaultLevel(hasRewrite: Bool) -> ProcessingLevel {
         return hasRewrite ? .clean : .raw
     }
 }
