@@ -28,21 +28,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasOpenRouter = !prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasInception = !prefs.inceptionAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Apple Speech ✓")
-        print("[Vox] Rewrite routing: \(CloudProviderCatalog.rewriteSummary(prefs: prefs))")
         if prefs.processingLevel != .raw {
             let requestedModel = prefs.processingLevel.defaultModel
-            let requestedModelIsGemini = requestedModel.hasPrefix("gemini-") || requestedModel.hasPrefix("google/gemini-")
             let requestedModelIsInception = requestedModel.hasPrefix("mercury-")
-            let providerMissing = requestedModelIsInception ? !hasInception : (!requestedModelIsGemini && !hasOpenRouter)
-            let effectiveModel = (providerMissing && hasGemini)
-                ? ProcessingLevel.defaultGeminiFallbackModel
-                : requestedModel
-            let effectiveSuffix = effectiveModel == requestedModel
-                ? ""
-                : " (effective fallback)"
-
-            print("[Vox] Rewrite requested model (\(prefs.processingLevel.rawValue)): \(requestedModel)")
-            print("[Vox] Rewrite effective model hint (\(prefs.processingLevel.rawValue)): \(effectiveModel)\(effectiveSuffix)")
+            let requestedModelIsGemini = requestedModel.hasPrefix("gemini-") || requestedModel.hasPrefix("google/gemini-")
+            let missingKey: String? = {
+                if requestedModelIsInception && !hasInception { return "INCEPTION_API_KEY" }
+                if !requestedModelIsGemini && !requestedModelIsInception && !hasOpenRouter { return "OPENROUTER_API_KEY" }
+                return nil
+            }()
+            if let missingKey, hasGemini {
+                let fallback = ProcessingLevel.defaultGeminiFallbackModel
+                print("[Vox] Rewrite (\(prefs.processingLevel.rawValue)): \(requestedModel) → \(fallback) (\(missingKey) not set)")
+            } else {
+                print("[Vox] Rewrite (\(prefs.processingLevel.rawValue)): \(requestedModel)")
+            }
         }
         print("[Vox] Initial processing level: \(prefs.processingLevel.rawValue)")
 
