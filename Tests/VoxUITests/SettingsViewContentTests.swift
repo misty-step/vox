@@ -53,10 +53,10 @@ struct SettingsViewContentTests {
     @MainActor
     func cloudSummaryRewriteWithAllProviders() {
         let summary = CloudProviderCatalog.rewriteSummary(
-            configuredProviderTitles: ["Gemini", "OpenRouter"]
+            configuredProviderTitles: ["Gemini", "Inception"]
         )
         #expect(summary.contains("Model-routed"))
-        #expect(summary.contains("OpenRouter"))
+        #expect(summary.contains("Inception"))
         #expect(summary.contains("Gemini"))
     }
 

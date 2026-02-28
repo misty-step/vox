@@ -39,6 +39,7 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
             .deepgramAPIKey: !Self.apiKey(env: "DEEPGRAM_API_KEY", keychain: .deepgramAPIKey).isEmpty,
             .openRouterAPIKey: !Self.apiKey(env: "OPENROUTER_API_KEY", keychain: .openRouterAPIKey).isEmpty,
             .geminiAPIKey: !Self.apiKey(env: "GEMINI_API_KEY", keychain: .geminiAPIKey).isEmpty,
+            .inceptionAPIKey: !Self.apiKey(env: "INCEPTION_API_KEY", keychain: .inceptionAPIKey).isEmpty,
         ]
 
         let stored = defaults.string(forKey: "processingLevel")
@@ -55,6 +56,7 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
             // are excluded here even though they appear in `statuses`.
             let hasRewrite = statuses[.geminiAPIKey, default: false]
                 || statuses[.openRouterAPIKey, default: false]
+                || statuses[.inceptionAPIKey, default: false]
             let level = Self.defaultLevel(hasRewrite: hasRewrite)
             processingLevel = level
             defaults.set(level.rawValue, forKey: "processingLevel")
@@ -84,6 +86,11 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         set { setAPIKey(newValue, for: .geminiAPIKey) }
     }
 
+    public var inceptionAPIKey: String {
+        get { Self.apiKey(env: "INCEPTION_API_KEY", keychain: .inceptionAPIKey) }
+        set { setAPIKey(newValue, for: .inceptionAPIKey) }
+    }
+
     private static func apiKey(env: String, keychain: KeychainHelper.Key) -> String {
         if let rawEnvKey = ProcessInfo.processInfo.environment[env] {
             let envKey = rawEnvKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +118,7 @@ public final class PreferencesStore: ObservableObject, PreferencesReading {
         case .deepgramAPIKey:   return !deepgramAPIKey.isEmpty
         case .openRouterAPIKey: return !openRouterAPIKey.isEmpty
         case .geminiAPIKey:     return !geminiAPIKey.isEmpty
+        case .inceptionAPIKey:  return !inceptionAPIKey.isEmpty
         }
     }
 

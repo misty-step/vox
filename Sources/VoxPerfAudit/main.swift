@@ -127,6 +127,7 @@ private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
     let openRouterAPIKey: String
     let deepgramAPIKey: String
     let geminiAPIKey: String
+    let inceptionAPIKey: String
 
     init(level: ProcessingLevel, environment: [String: String]) {
         self.processingLevel = level
@@ -138,6 +139,7 @@ private final class PerfPreferences: PreferencesReading, @unchecked Sendable {
         self.openRouterAPIKey = key("OPENROUTER_API_KEY")
         self.deepgramAPIKey = key("DEEPGRAM_API_KEY")
         self.geminiAPIKey = key("GEMINI_API_KEY")
+        self.inceptionAPIKey = key("INCEPTION_API_KEY")
     }
 }
 
@@ -206,6 +208,7 @@ private func resolvedProviderLane(
         deepgramAPIKey: key("DEEPGRAM_API_KEY"),
         geminiAPIKey: key("GEMINI_API_KEY"),
         openRouterAPIKey: key("OPENROUTER_API_KEY"),
+        inceptionAPIKey: key("INCEPTION_API_KEY"),
         sttInstrument: { name, model, provider in
             InstrumentedSTTProvider(provider: provider, providerName: name, model: model, recorder: usageRecorder)
         },
@@ -240,9 +243,16 @@ private func resolvedProviderLane(
     let sttProvider = ConcurrencyLimitedSTTProvider(provider: chainProvider, maxConcurrent: maxConcurrent)
 
     let rewriteProvider = ProviderAssembly.makeRewriteProvider(config: assemblyConfig)
-    let rewriteRouting = plan.rewrite.hasGeminiDirect
-        ? "model-routed (gemini_direct + openrouter)"
-        : "openrouter"
+    let rewriteRouting: String
+    if plan.rewrite.hasGeminiDirect && plan.rewrite.hasInceptionDirect {
+        rewriteRouting = "model-routed (gemini_direct + inception_direct + openrouter)"
+    } else if plan.rewrite.hasGeminiDirect {
+        rewriteRouting = "model-routed (gemini_direct + openrouter)"
+    } else if plan.rewrite.hasInceptionDirect {
+        rewriteRouting = "model-routed (inception_direct + openrouter)"
+    } else {
+        rewriteRouting = "openrouter"
+    }
 
     return ResolvedProviders(
         sttProvider: sttProvider,

@@ -193,9 +193,10 @@ public final class VoxSession: ObservableObject {
 
         if !Self.hasAnyRewriteKeysConfigured(
             geminiAPIKey: config.geminiAPIKey,
-            openRouterAPIKey: config.openRouterAPIKey
+            openRouterAPIKey: config.openRouterAPIKey,
+            inceptionAPIKey: config.inceptionAPIKey
         ) {
-            print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY or OPENROUTER_API_KEY). Rewriting will fail.")
+            print("[Vox] Warning: No rewrite API keys configured (GEMINI_API_KEY, OPENROUTER_API_KEY, or INCEPTION_API_KEY). Rewriting will fail.")
         }
         return cloudRewrite
     }
@@ -256,6 +257,7 @@ public final class VoxSession: ObservableObject {
             deepgramAPIKey: prefs.deepgramAPIKey,
             geminiAPIKey: prefs.geminiAPIKey,
             openRouterAPIKey: prefs.openRouterAPIKey,
+            inceptionAPIKey: prefs.inceptionAPIKey,
             openRouterOnModelUsed: { model, isFallback in
                 DiagnosticsStore.recordAsync(
                     name: DiagnosticsEventNames.rewriteModelUsed,
@@ -381,11 +383,13 @@ public final class VoxSession: ObservableObject {
 
     nonisolated static func hasAnyRewriteKeysConfigured(
         geminiAPIKey: String,
-        openRouterAPIKey: String
+        openRouterAPIKey: String,
+        inceptionAPIKey: String = ""
     ) -> Bool {
         let gemini = geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let openRouter = openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !gemini.isEmpty || !openRouter.isEmpty
+        let inception = inceptionAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !gemini.isEmpty || !openRouter.isEmpty || !inception.isEmpty
     }
 
     private func recorderSupportsStreaming() -> Bool {

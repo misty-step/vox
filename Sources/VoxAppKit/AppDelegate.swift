@@ -26,12 +26,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasDeepgram = !prefs.deepgramAPIKey.isEmpty
         let hasGemini = !prefs.geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasOpenRouter = !prefs.openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasInception = !prefs.inceptionAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         print("[Vox] STT providers: ElevenLabs \(hasElevenLabs ? "✓" : "–") | Deepgram \(hasDeepgram ? "✓" : "–") | Apple Speech ✓")
         print("[Vox] Rewrite routing: \(CloudProviderCatalog.rewriteSummary(prefs: prefs))")
         if prefs.processingLevel != .raw {
             let requestedModel = prefs.processingLevel.defaultModel
             let requestedModelIsGemini = requestedModel.hasPrefix("gemini-") || requestedModel.hasPrefix("google/gemini-")
-            let effectiveModel = (!hasOpenRouter && hasGemini && !requestedModelIsGemini)
+            let requestedModelIsInception = requestedModel.hasPrefix("mercury-")
+            let providerMissing = requestedModelIsInception ? !hasInception : (!requestedModelIsGemini && !hasOpenRouter)
+            let effectiveModel = (providerMissing && hasGemini)
                 ? ProcessingLevel.defaultGeminiFallbackModel
                 : requestedModel
             let effectiveSuffix = effectiveModel == requestedModel
@@ -59,6 +62,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 "keys_deepgram": .bool(diagnosticsContext.keysPresent.deepgram),
                 "keys_gemini": .bool(diagnosticsContext.keysPresent.gemini),
                 "keys_openrouter": .bool(diagnosticsContext.keysPresent.openRouter),
+                "keys_inception": .bool(diagnosticsContext.keysPresent.inception),
             ]
         )
 

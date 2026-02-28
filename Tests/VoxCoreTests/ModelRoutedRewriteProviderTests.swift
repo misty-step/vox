@@ -103,6 +103,77 @@ struct ModelRoutedRewriteProviderTests {
         #expect(gemini.callCount == 1)
         #expect(gemini.lastModel == "gemini-2.5-flash-lite")
     }
+
+    @Test("Routes mercury- model to inception provider")
+    func test_rewrite_routesMercuryToInception() async throws {
+        let gemini = StubRewriteProvider(result: .success("gemini ok"))
+        let openRouter = StubRewriteProvider(result: .success("openrouter ok"))
+        let inception = StubRewriteProvider(result: .success("inception ok"))
+        let sut = ModelRoutedRewriteProvider(
+            gemini: gemini,
+            openRouter: openRouter,
+            inception: inception,
+            fallbackGeminiModel: "gemini-2.5-flash-lite"
+        )
+
+        let result = try await sut.rewrite(transcript: "t", systemPrompt: "s", model: "mercury-2")
+        #expect(result == "inception ok")
+        #expect(inception.callCount == 1)
+        #expect(inception.lastModel == "mercury-2")
+        #expect(gemini.callCount == 0)
+        #expect(openRouter.callCount == 0)
+    }
+
+    @Test("Falls back to Gemini when inception fails for mercury model")
+    func test_rewrite_fallsBackFromInceptionToGemini() async throws {
+        let gemini = StubRewriteProvider(result: .success("gemini ok"))
+        let inception = StubRewriteProvider(result: .failure(RewriteError.network("503")))
+        let sut = ModelRoutedRewriteProvider(
+            gemini: gemini,
+            openRouter: nil,
+            inception: inception,
+            fallbackGeminiModel: "gemini-2.5-flash-lite"
+        )
+
+        let result = try await sut.rewrite(transcript: "t", systemPrompt: "s", model: "mercury-2")
+        #expect(result == "gemini ok")
+        #expect(inception.callCount == 1)
+        #expect(gemini.callCount == 1)
+        #expect(gemini.lastModel == "gemini-2.5-flash-lite")
+    }
+
+    @Test("Falls back to Gemini when no inception client for mercury model")
+    func test_rewrite_noInceptionFallsBackToGemini() async throws {
+        let gemini = StubRewriteProvider(result: .success("gemini ok"))
+        let sut = ModelRoutedRewriteProvider(
+            gemini: gemini,
+            openRouter: nil,
+            inception: nil,
+            fallbackGeminiModel: "gemini-2.5-flash-lite"
+        )
+
+        let result = try await sut.rewrite(transcript: "t", systemPrompt: "s", model: "mercury-2")
+        #expect(result == "gemini ok")
+        #expect(gemini.callCount == 1)
+        #expect(gemini.lastModel == "gemini-2.5-flash-lite")
+    }
+
+    @Test("Throws auth when no providers available for mercury model")
+    func test_rewrite_noProvidersThrowsAuthForMercury() async throws {
+        let sut = ModelRoutedRewriteProvider(
+            gemini: nil,
+            openRouter: nil,
+            inception: nil,
+            fallbackGeminiModel: "gemini-2.5-flash-lite"
+        )
+
+        do {
+            _ = try await sut.rewrite(transcript: "t", systemPrompt: "s", model: "mercury-2")
+            Issue.record("Expected error")
+        } catch {
+            #expect(error as? RewriteError == .auth)
+        }
+    }
 }
 // MARK: - Test Double
 

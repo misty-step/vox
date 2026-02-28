@@ -13,6 +13,7 @@ public struct ProviderAssemblyConfig: Sendable {
     public let deepgramAPIKey: String
     public let geminiAPIKey: String
     public let openRouterAPIKey: String
+    public let inceptionAPIKey: String
 
     /// Optional hook called for each cloud STT provider before chain assembly.
     /// Parameters: (providerName, modelName, provider) → wrappedProvider.
@@ -38,6 +39,7 @@ public struct ProviderAssemblyConfig: Sendable {
         deepgramAPIKey: String,
         geminiAPIKey: String,
         openRouterAPIKey: String,
+        inceptionAPIKey: String = "",
         sttInstrument: @escaping @Sendable (String, String, any STTProvider) -> any STTProvider = { _, _, p in p },
         rewriteInstrument: @escaping @Sendable (String, any RewriteProvider) -> any RewriteProvider = { _, p in p },
         openRouterOnModelUsed: (@Sendable (String, Bool) -> Void)? = nil,
@@ -48,6 +50,7 @@ public struct ProviderAssemblyConfig: Sendable {
         self.deepgramAPIKey = trimmed(deepgramAPIKey)
         self.geminiAPIKey = trimmed(geminiAPIKey)
         self.openRouterAPIKey = trimmed(openRouterAPIKey)
+        self.inceptionAPIKey = trimmed(inceptionAPIKey)
         self.sttInstrument = sttInstrument
         self.rewriteInstrument = rewriteInstrument
         self.openRouterOnModelUsed = openRouterOnModelUsed
@@ -162,10 +165,10 @@ public enum ProviderAssembly {
 
     /// Builds the rewrite provider from configured keys.
     ///
-    /// - Gemini + OpenRouter → `ModelRoutedRewriteProvider`
-    /// - Gemini only → `ModelRoutedRewriteProvider` (no openRouter fallback)
+    /// - Gemini + any → `ModelRoutedRewriteProvider` (gemini as primary for Gemini models)
+    /// - Inception + any (no gemini) → `ModelRoutedRewriteProvider` (inception for Mercury models)
     /// - OpenRouter only → `OpenRouterClient`
-    /// - Neither → bare `OpenRouterClient("")` (will fail at runtime; caller should warn)
+    /// - None → bare `OpenRouterClient("")` (will fail at runtime; caller should warn)
     public static func makeRewriteProvider(config: ProviderAssemblyConfig) -> any RewriteProvider {
         let gemini: GeminiClient? = config.geminiAPIKey.isEmpty
             ? nil
@@ -180,18 +183,33 @@ public enum ProviderAssembly {
                 onDiagnostic: config.openRouterOnDiagnostic
             )
 
-        switch (gemini, openRouter) {
-        case (nil, nil):
-            return OpenRouterClient(apiKey: "")
-        case let (gem?, _):
-            let instrumented = config.rewriteInstrument("gemini_direct", gem)
+        let inception: InceptionLabsClient? = config.inceptionAPIKey.isEmpty
+            ? nil
+            : InceptionLabsClient(apiKey: config.inceptionAPIKey)
+
+        if let gemini {
+            let instrumented = config.rewriteInstrument("gemini_direct", gemini)
             return ModelRoutedRewriteProvider(
                 gemini: instrumented,
                 openRouter: openRouter,
+                inception: inception,
                 fallbackGeminiModel: ProcessingLevel.defaultGeminiFallbackModel
             )
-        case let (nil, or?):
-            return or
         }
+
+        if let inception {
+            return ModelRoutedRewriteProvider(
+                gemini: nil,
+                openRouter: openRouter,
+                inception: inception,
+                fallbackGeminiModel: ProcessingLevel.defaultGeminiFallbackModel
+            )
+        }
+
+        if let openRouter {
+            return openRouter
+        }
+
+        return OpenRouterClient(apiKey: "")
     }
 }

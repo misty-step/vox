@@ -363,7 +363,7 @@ public final class StatusBarController: NSObject {
     private func resolveCloudReadiness() -> CloudReadiness {
         CloudReadiness(
             hasCloudSTT: isConfigured(prefs.elevenLabsAPIKey) || isConfigured(prefs.deepgramAPIKey),
-            hasRewrite: isConfigured(prefs.geminiAPIKey) || isConfigured(prefs.openRouterAPIKey)
+            hasRewrite: isConfigured(prefs.geminiAPIKey) || isConfigured(prefs.openRouterAPIKey) || isConfigured(prefs.inceptionAPIKey)
         )
     }
 

@@ -40,11 +40,11 @@ public enum CloudProviderCatalog {
             keychainKey: .geminiAPIKey
         ),
         CloudProviderKey(
-            id: "openrouter",
-            title: "OpenRouter",
-            detail: "Used for non-Gemini model IDs (e.g. Mercury).",
-            keyPath: \.openRouterAPIKey,
-            keychainKey: .openRouterAPIKey
+            id: "inception",
+            title: "Inception",
+            detail: "Used for Mercury model IDs (mercury-2, etc.).",
+            keyPath: \.inceptionAPIKey,
+            keychainKey: .inceptionAPIKey
         ),
     ]
 
@@ -66,17 +66,17 @@ public enum CloudProviderCatalog {
     static func rewriteSummary(configuredProviderTitles: [String]) -> String {
         let configured = Set(configuredProviderTitles)
         let hasGemini = configured.contains("Gemini")
-        let hasOpenRouter = configured.contains("OpenRouter")
+        let hasInception = configured.contains("Inception")
 
-        switch (hasGemini, hasOpenRouter) {
+        switch (hasGemini, hasInception) {
         case (false, false):
             return "Raw transcript"
         case (true, false):
             return "Gemini"
         case (false, true):
-            return "OpenRouter"
+            return "Inception"
         case (true, true):
-            return "Model-routed (OpenRouter for non-Gemini models; Gemini for Gemini models/fallback)"
+            return "Model-routed (Inception for Mercury models; Gemini for Gemini models/fallback)"
         }
     }
 

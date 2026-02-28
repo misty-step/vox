@@ -130,6 +130,7 @@ struct PerfProviderPlanTests {
         #expect(plan.stt.chain.map { $0.id } == ["elevenlabs", "deepgram"])
         #expect(plan.rewrite.routing == "openrouter")
         #expect(plan.rewrite.hasGeminiDirect == false)
+        #expect(plan.rewrite.hasInceptionDirect == false)
     }
 
     @Test("Forced provider reorders chain")
@@ -206,5 +207,6 @@ struct PerfProviderPlanTests {
 
         #expect(plan.rewrite.routing == "model-routed")
         #expect(plan.rewrite.hasGeminiDirect == true)
+        #expect(plan.rewrite.hasInceptionDirect == false)
     }
 }

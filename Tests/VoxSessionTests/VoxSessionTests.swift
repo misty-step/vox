@@ -293,6 +293,7 @@ final class MockPreferencesStore: PreferencesReading {
     let openRouterAPIKey: String = ""
     let deepgramAPIKey: String = ""
     let geminiAPIKey: String = ""
+    let inceptionAPIKey: String = ""
 }
 
 final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
