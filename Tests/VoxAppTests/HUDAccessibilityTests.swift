@@ -67,18 +67,18 @@ struct HUDAccessibilityTests {
 
     @Test("Idle accessibility value is Ready")
     func idleAccessibilityValue() {
-        #expect(HUDAccessibility.value(for: .idle, recordingDuration: 0, processingMessage: "") == "Ready")
+        #expect(HUDAccessibility.value(for: .idle, recordingDuration: 0) == "Ready")
     }
 
     @Test("Success accessibility value is Done")
     func successAccessibilityValue() {
-        #expect(HUDAccessibility.value(for: .success, recordingDuration: 0, processingMessage: "") == "Done")
+        #expect(HUDAccessibility.value(for: .success, recordingDuration: 0) == "Done")
     }
 
     @Test("Duration formats correctly at boundaries")
     func durationFormatBoundaries() {
-        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 0, processingMessage: "") == "Recording, 00:00")
-        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 59.9, processingMessage: "") == "Recording, 00:59")
-        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 60, processingMessage: "") == "Recording, 01:00")
+        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 0) == "Recording, 00:00")
+        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 59.9) == "Recording, 00:59")
+        #expect(HUDAccessibility.value(for: .recording, recordingDuration: 60) == "Recording, 01:00")
     }
 }

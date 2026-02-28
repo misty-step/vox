@@ -21,7 +21,8 @@ public final class HUDState: ObservableObject {
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
-    @Published public var processingMessage: String = "Processing"
+    @Published public var processingStartDate: Date? = nil
+    @Published public var processingElapsed: TimeInterval = 0
     @Published public var isVisible: Bool = false
 
     private var timer: Timer?
@@ -33,11 +34,7 @@ public final class HUDState: ObservableObject {
     }
 
     public var accessibilityValue: String {
-        HUDAccessibility.value(
-            for: mode,
-            recordingDuration: recordingDuration,
-            processingMessage: processingMessage
-        )
+        HUDAccessibility.value(for: mode, recordingDuration: recordingDuration)
     }
 
     public func show() {
@@ -56,14 +53,19 @@ public final class HUDState: ObservableObject {
         RunLoop.main.add(timer!, forMode: .common)
     }
 
-    public func startProcessing(message: String = "Processing") {
+    public func startProcessing() {
         mode = .processing
-        processingMessage = message
+        processingStartDate = Date()
+        processingElapsed = 0
         timer?.invalidate()
         timer = nil
     }
 
     public func startSuccess() {
+        if let startDate = processingStartDate {
+            processingElapsed = Date().timeIntervalSince(startDate)
+        }
+        processingStartDate = nil
         mode = .success
         timer?.invalidate()
         timer = nil
@@ -92,7 +94,8 @@ public final class HUDState: ObservableObject {
         recordingDuration = 0
         average = 0
         peak = 0
-        processingMessage = "Processing"
+        processingStartDate = nil
+        processingElapsed = 0
     }
 }
 
@@ -260,9 +263,9 @@ private struct TimerDisplay: View {
     let duration: TimeInterval
 
     private var formattedTime: String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        let secs = Int(duration)
+        if secs < 60 { return "\(secs)s" }
+        return String(format: "%d:%02d", secs / 60, secs % 60)
     }
 
     var body: some View {
@@ -271,6 +274,27 @@ private struct TimerDisplay: View {
             .foregroundStyle(Design.textSecondary)
             .monospacedDigit()
     }
+}
+
+private struct ProcessingElapsedView: View {
+    let startDate: Date?
+
+    var body: some View {
+        if let startDate {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                Text(formatMs(ctx.date.timeIntervalSince(startDate)))
+                    .font(Design.timerFont)
+                    .foregroundStyle(Design.textSecondary)
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
+private func formatMs(_ interval: TimeInterval) -> String {
+    interval < 1.0
+        ? "\(Int(interval * 1000))ms"
+        : String(format: "%.1fs", interval)
 }
 
 // MARK: - Main HUD View
@@ -356,19 +380,16 @@ public struct HUDView: View {
     private var textZone: some View {
         switch state.mode {
         case .idle:
-            Text("Ready")
-                .font(Design.labelFont)
-                .foregroundStyle(Color.white.opacity(0.3))
+            EmptyView()
         case .recording:
             TimerDisplay(duration: state.recordingDuration)
         case .processing:
-            Text(state.processingMessage)
-                .font(Design.labelFont)
-                .foregroundStyle(Design.textSecondary)
+            ProcessingElapsedView(startDate: state.processingStartDate)
         case .success:
-            Text("Done")
-                .font(Design.labelFont)
+            Text(formatMs(state.processingElapsed))
+                .font(Design.timerFont)
                 .foregroundStyle(Design.green)
+                .monospacedDigit()
         }
     }
 

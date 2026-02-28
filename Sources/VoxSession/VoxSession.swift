@@ -961,7 +961,7 @@ public final class VoxSession: ObservableObject {
         }
 
         state = .processing
-        hud.showProcessing(message: "Retrying rewrite")
+        hud.showProcessing()
         let active = pipeline ?? makePipeline(dictationID: UUID().uuidString)
         guard let recoveryPipeline = active as? TranscriptRecoveryProcessing else {
             throw VoxError.internalError("Retry rewrite is unavailable with the current pipeline.")

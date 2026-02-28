@@ -89,13 +89,12 @@ public protocol AudioChunkStreaming: AudioRecording {
 public protocol HUDDisplaying: AnyObject {
     func showRecording(average: Float, peak: Float)
     func updateLevels(average: Float, peak: Float)
-    func showProcessing(message: String)
+    func showProcessing()
     func showSuccess()
     func hide()
 }
 
 extension HUDDisplaying {
-    public func showProcessing() { showProcessing(message: "Transcribing") }
     public func showSuccess() { hide() }
 }
 
