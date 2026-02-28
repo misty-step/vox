@@ -67,6 +67,14 @@ struct SettingsViewContentTests {
         #expect(summary == "Raw transcript")
     }
 
+    @Test("Rewrite summary shows single provider name")
+    @MainActor
+    func cloudSummaryRewriteSingleProvider() {
+        #expect(CloudProviderCatalog.rewriteSummary(configuredProviderTitles: ["OpenRouter"]) == "OpenRouter")
+        #expect(CloudProviderCatalog.rewriteSummary(configuredProviderTitles: ["Gemini"]) == "Gemini")
+        #expect(CloudProviderCatalog.rewriteSummary(configuredProviderTitles: ["Inception"]) == "Inception")
+    }
+
     @Test("Transcription summary preserves full chain order with multiple providers")
     @MainActor
     func cloudSummaryTranscriptionChainOrder() {

@@ -46,7 +46,8 @@ struct HUDStateTests {
         state.startSuccess()
         #expect(state.mode == .success)
         #expect(state.processingStartDate == nil)
-        #expect(state.processingElapsed >= 0)
+        // Elapsed should be captured (small positive value since calls are near-instant)
+        #expect(state.processingElapsed >= 0 && state.processingElapsed < 1.0)
     }
 
     @Test("stop resets all state")

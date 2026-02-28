@@ -14,19 +14,20 @@ public final class InceptionLabsClient: RewriteProvider {
         let start = CFAbsoluteTimeGetCurrent()
         let url = URL(string: "https://api.inceptionlabs.ai/v1/chat/completions")!
 
-        let body: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": transcript],
-            ],
-        ]
+        let payload = ChatRequest(
+            model: model,
+            messages: [
+                .init(role: "system", content: systemPrompt),
+                .init(role: "user", content: transcript),
+            ]
+        )
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 60
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try JSONEncoder().encode(payload)
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -73,6 +74,15 @@ public final class InceptionLabsClient: RewriteProvider {
         }
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+private struct ChatRequest: Encodable {
+    struct Message: Encodable {
+        let role: String
+        let content: String
+    }
+    let model: String
+    let messages: [Message]
 }
 
 private struct InceptionResponse: Decodable {

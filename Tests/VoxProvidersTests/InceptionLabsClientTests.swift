@@ -255,10 +255,11 @@ struct InceptionLabsClientTests {
 
         do {
             _ = try await task.value
+            Issue.record("Expected cancellation error")
         } catch is CancellationError {
-            // Expected
-        } catch {
-            // URLSession cancellation also comes through as URLError — acceptable
+            // Expected: cooperative cancellation
+        } catch is URLError {
+            // Also expected: URLSession surfaces .cancelled as URLError
         }
     }
 }

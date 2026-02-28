@@ -440,6 +440,7 @@ public struct HUDView: View {
 #Preview("Processing") {
     let state = HUDState()
     state.mode = .processing
+    state.processingStartDate = Date()
     state.isVisible = true
     return HUDView(state: state)
         .padding(40)
