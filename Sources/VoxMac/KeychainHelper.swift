@@ -9,6 +9,7 @@ public enum KeychainHelper {
         case openRouterAPIKey = "com.vox.openrouter.apikey"
         case deepgramAPIKey = "com.vox.deepgram.apikey"
         case geminiAPIKey = "com.vox.gemini.apikey"
+        case inceptionAPIKey = "com.vox.inception.apikey"
     }
 
     @discardableResult

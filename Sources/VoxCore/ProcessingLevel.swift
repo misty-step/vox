@@ -20,11 +20,11 @@ public enum ProcessingLevel: String, Codable, CaseIterable, Sendable {
 
     /// Default rewrite model for Clean.
     /// Keep centralized so rollback is a one-file change.
-    public static let defaultCleanRewriteModel = "inception/mercury"
+    public static let defaultCleanRewriteModel = "mercury-2"
 
     /// Default rewrite model for Polish.
     /// Same model as Clean.
-    public static let defaultPolishRewriteModel = "inception/mercury"
+    public static let defaultPolishRewriteModel = "mercury-2"
 
     /// Gemini model used for best-effort fallback when an OpenRouter-only model is requested
     /// but OpenRouter is unavailable and Gemini is configured.

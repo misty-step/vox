@@ -21,7 +21,9 @@ public final class HUDState: ObservableObject {
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
-    @Published public var processingMessage: String = "Processing"
+    @Published public var recordingStartDate: Date? = nil
+    @Published public var processingStartDate: Date? = nil
+    @Published public var processingElapsed: TimeInterval = 0
     @Published public var isVisible: Bool = false
 
     private var timer: Timer?
@@ -33,11 +35,7 @@ public final class HUDState: ObservableObject {
     }
 
     public var accessibilityValue: String {
-        HUDAccessibility.value(
-            for: mode,
-            recordingDuration: recordingDuration,
-            processingMessage: processingMessage
-        )
+        HUDAccessibility.value(for: mode, recordingDuration: recordingDuration)
     }
 
     public func show() {
@@ -47,6 +45,7 @@ public final class HUDState: ObservableObject {
     public func startRecording() {
         mode = .recording
         recordingDuration = 0
+        recordingStartDate = Date()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -56,14 +55,19 @@ public final class HUDState: ObservableObject {
         RunLoop.main.add(timer!, forMode: .common)
     }
 
-    public func startProcessing(message: String = "Processing") {
+    public func startProcessing() {
         mode = .processing
-        processingMessage = message
+        processingStartDate = Date()
+        processingElapsed = 0
         timer?.invalidate()
         timer = nil
     }
 
     public func startSuccess() {
+        if let startDate = processingStartDate {
+            processingElapsed = Date().timeIntervalSince(startDate)
+        }
+        processingStartDate = nil
         mode = .success
         timer?.invalidate()
         timer = nil
@@ -90,9 +94,11 @@ public final class HUDState: ObservableObject {
         timer?.invalidate()
         timer = nil
         recordingDuration = 0
+        recordingStartDate = nil
         average = 0
         peak = 0
-        processingMessage = "Processing"
+        processingStartDate = nil
+        processingElapsed = 0
     }
 }
 
@@ -256,21 +262,29 @@ private struct CheckShape: Shape {
 
 // MARK: - Timer Display
 
-private struct TimerDisplay: View {
-    let duration: TimeInterval
-
-    private var formattedTime: String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
+/// Live stopwatch driven by a TimelineView. Shows MM:SS.mmm with no unit labels.
+private struct StopwatchView: View {
+    let startDate: Date?
+    let color: Color
 
     var body: some View {
-        Text(formattedTime)
-            .font(Design.timerFont)
-            .foregroundStyle(Design.textSecondary)
-            .monospacedDigit()
+        if let startDate {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                Text(formatStopwatch(ctx.date.timeIntervalSince(startDate)))
+                    .font(Design.timerFont)
+                    .foregroundStyle(color)
+                    .monospacedDigit()
+            }
+        }
     }
+}
+
+private func formatStopwatch(_ interval: TimeInterval) -> String {
+    let t = max(0, interval)
+    let ms = Int(t * 1000) % 1000
+    let secs = Int(t) % 60
+    let mins = Int(t) / 60
+    return String(format: "%02d:%02d.%03d", mins, secs, ms)
 }
 
 // MARK: - Main HUD View
@@ -356,19 +370,16 @@ public struct HUDView: View {
     private var textZone: some View {
         switch state.mode {
         case .idle:
-            Text("Ready")
-                .font(Design.labelFont)
-                .foregroundStyle(Color.white.opacity(0.3))
+            EmptyView()
         case .recording:
-            TimerDisplay(duration: state.recordingDuration)
+            StopwatchView(startDate: state.recordingStartDate, color: Design.textSecondary)
         case .processing:
-            Text(state.processingMessage)
-                .font(Design.labelFont)
-                .foregroundStyle(Design.textSecondary)
+            StopwatchView(startDate: state.processingStartDate, color: Design.textSecondary)
         case .success:
-            Text("Done")
-                .font(Design.labelFont)
+            Text(formatStopwatch(state.processingElapsed))
+                .font(Design.timerFont)
                 .foregroundStyle(Design.green)
+                .monospacedDigit()
         }
     }
 
@@ -418,8 +429,8 @@ public struct HUDView: View {
 
 #Preview("Recording") {
     let state = HUDState()
+    state.recordingStartDate = Date().addingTimeInterval(-83)
     state.mode = .recording
-    state.recordingDuration = 83
     state.isVisible = true
     return HUDView(state: state)
         .padding(40)
@@ -429,6 +440,7 @@ public struct HUDView: View {
 #Preview("Processing") {
     let state = HUDState()
     state.mode = .processing
+    state.processingStartDate = Date()
     state.isVisible = true
     return HUDView(state: state)
         .padding(40)

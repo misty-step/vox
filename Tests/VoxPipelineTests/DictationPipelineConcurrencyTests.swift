@@ -75,6 +75,7 @@ private final class AccessTrackingPreferences: PreferencesReading {
     var openRouterAPIKey: String { "" }
     var deepgramAPIKey: String { "" }
     var geminiAPIKey: String { "" }
+    var inceptionAPIKey: String { "" }
 
     var offMainAccessCount: Int { offMainAccesses }
 

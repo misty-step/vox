@@ -2,22 +2,25 @@ import Foundation
 
 /// Routes rewrite requests to the right provider based on the requested model id.
 ///
-/// Motivation:
-/// - Gemini direct API expects bare Gemini model ids (e.g. "gemini-2.5-flash-lite")
-/// - OpenRouter expects provider-prefixed ids for non-Google models (e.g. "x-ai/grok-4.1-fast")
-/// - Some processing levels may default to OpenRouter-only models; we must not call Gemini with those ids.
+/// Routing lanes (checked in order):
+/// - `gemini-*` / `google/gemini-*` → GeminiClient (fallback: openRouter, then error)
+/// - `mercury-*` → InceptionLabsClient (fallback: gemini fallback model, then error)
+/// - everything else → OpenRouterClient (fallback: gemini fallback model, then error)
 public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Sendable {
     private let gemini: (any RewriteProvider)?
     private let openRouter: (any RewriteProvider)?
+    private let inception: (any RewriteProvider)?
     private let fallbackGeminiModel: String
 
     public init(
         gemini: (any RewriteProvider)?,
         openRouter: (any RewriteProvider)?,
+        inception: (any RewriteProvider)? = nil,
         fallbackGeminiModel: String
     ) {
         self.gemini = gemini
         self.openRouter = openRouter
+        self.inception = inception
         self.fallbackGeminiModel = fallbackGeminiModel
     }
 
@@ -67,7 +70,51 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
             throw RewriteError.auth
         }
 
-        // Non-Gemini model ids (e.g. "x-ai/grok-4.1-fast") require OpenRouter.
+        if let inceptionModel = inceptionModelName(from: model) {
+            // Mercury models route to InceptionLabs direct; fallback to Gemini on failure.
+            if let inception {
+                #if DEBUG
+                logRoute(path: "inception_direct", requestedModel: model, targetModel: inceptionModel)
+                #endif
+                do {
+                    return try await inception.rewrite(
+                        transcript: transcript,
+                        systemPrompt: systemPrompt,
+                        model: inceptionModel
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    if let gemini {
+                        #if DEBUG
+                        print("[RewriteRoute] path=inception_to_gemini requested=\(model) fallback_model=\(fallbackGeminiModel) error=\(errorSummary(error))")
+                        #endif
+                        return try await gemini.rewrite(
+                            transcript: transcript,
+                            systemPrompt: systemPrompt,
+                            model: fallbackGeminiModel
+                        )
+                    }
+                    throw error
+                }
+            }
+
+            // No inception client; fall back to gemini.
+            if let gemini {
+                #if DEBUG
+                print("[RewriteRoute] path=no_inception_fallback_to_gemini requested=\(model) fallback_model=\(fallbackGeminiModel)")
+                #endif
+                return try await gemini.rewrite(
+                    transcript: transcript,
+                    systemPrompt: systemPrompt,
+                    model: fallbackGeminiModel
+                )
+            }
+
+            throw RewriteError.auth
+        }
+
+        // Non-Gemini, non-Mercury model ids (e.g. "x-ai/grok-4.1-fast") require OpenRouter.
         if let openRouter {
             #if DEBUG
             logRoute(path: "openrouter_primary", requestedModel: model, targetModel: model)
@@ -117,6 +164,10 @@ public final class ModelRoutedRewriteProvider: RewriteProvider, @unchecked Senda
             return model.split(separator: "/", maxSplits: 1).last.map(String.init)
         }
         return nil
+    }
+
+    private func inceptionModelName(from model: String) -> String? {
+        model.hasPrefix("mercury-") ? model : nil
     }
 
     #if DEBUG

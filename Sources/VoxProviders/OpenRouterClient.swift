@@ -373,15 +373,7 @@ public final class OpenRouterClient: RewriteProvider {
 
     private func modelChain(primary: String) -> [String] {
         var chain = [primary]
-
-        // OpenRouter model alias bridge: some accounts expose Mercury as `inception/mercury-coder`.
-        // Keep requested model as primary, then try coder alias before generic fallbacks.
-        if primary == "inception/mercury" {
-            chain.append("inception/mercury-coder")
-        }
-
         chain.append(contentsOf: fallbackModels)
-
         var seen = Set<String>()
         return chain.filter { seen.insert($0).inserted }
     }

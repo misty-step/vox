@@ -132,6 +132,7 @@ struct OnboardingChecklistView: View {
     private var hasRewrite: Bool {
         isConfigured(prefs.geminiAPIKey)
             || isConfigured(prefs.openRouterAPIKey)
+            || isConfigured(prefs.inceptionAPIKey)
     }
 
     private var cloudStatusText: String {

@@ -131,6 +131,7 @@ final class MockPreferences: PreferencesReading, @unchecked Sendable {
     var openRouterAPIKey: String = ""
     var deepgramAPIKey: String = ""
     var geminiAPIKey: String = ""
+    var inceptionAPIKey: String = ""
 }
 
 final class MockAudioConverter: @unchecked Sendable {

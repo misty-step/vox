@@ -59,12 +59,14 @@ public struct DiagnosticsContext: Codable, Sendable, Equatable {
         public let deepgram: Bool
         public let gemini: Bool
         public let openRouter: Bool
+        public let inception: Bool
 
-        public init(elevenLabs: Bool, deepgram: Bool, gemini: Bool, openRouter: Bool) {
+        public init(elevenLabs: Bool, deepgram: Bool, gemini: Bool, openRouter: Bool, inception: Bool = false) {
             self.elevenLabs = elevenLabs
             self.deepgram = deepgram
             self.gemini = gemini
             self.openRouter = openRouter
+            self.inception = inception
         }
     }
 
@@ -138,7 +140,8 @@ public struct DiagnosticsContext: Codable, Sendable, Equatable {
                 elevenLabs: configured(prefs.elevenLabsAPIKey),
                 deepgram: configured(prefs.deepgramAPIKey),
                 gemini: configured(prefs.geminiAPIKey),
-                openRouter: configured(prefs.openRouterAPIKey)
+                openRouter: configured(prefs.openRouterAPIKey),
+                inception: configured(prefs.inceptionAPIKey)
             )
         )
     }

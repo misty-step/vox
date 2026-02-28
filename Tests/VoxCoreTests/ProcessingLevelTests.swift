@@ -27,9 +27,9 @@ final class ProcessingLevelTests: XCTestCase {
         XCTAssertEqual(decoded, levels)
     }
 
-    func test_defaultRewriteModels_areMercury() {
-        XCTAssertEqual(ProcessingLevel.defaultCleanRewriteModel, "inception/mercury")
-        XCTAssertEqual(ProcessingLevel.defaultPolishRewriteModel, "inception/mercury")
+    func test_defaultRewriteModels_areMercury2() {
+        XCTAssertEqual(ProcessingLevel.defaultCleanRewriteModel, "mercury-2")
+        XCTAssertEqual(ProcessingLevel.defaultPolishRewriteModel, "mercury-2")
     }
 
     func test_defaultGeminiFallbackModel_isGeminiFlashLite() {

@@ -17,6 +17,7 @@ package struct PerfSTTPlan: Sendable, Codable, Equatable {
 package struct PerfRewritePlan: Sendable, Codable, Equatable {
     package let routing: String
     package let hasGeminiDirect: Bool
+    package let hasInceptionDirect: Bool
 }
 
 package struct PerfProviderPlan: Sendable, Codable, Equatable {
@@ -75,7 +76,9 @@ package struct PerfProviderPlan: Sendable, Codable, Equatable {
 
         let geminiKey = key("GEMINI_API_KEY")
         let hasGeminiDirect = configured(geminiKey)
-        let rewriteRouting = hasGeminiDirect ? "model-routed" : "openrouter"
+        let inceptionKey = key("INCEPTION_API_KEY")
+        let hasInceptionDirect = configured(inceptionKey)
+        let rewriteRouting = (hasGeminiDirect || hasInceptionDirect) ? "model-routed" : "openrouter"
 
         return PerfProviderPlan(
             stt: PerfSTTPlan(
@@ -86,7 +89,8 @@ package struct PerfProviderPlan: Sendable, Codable, Equatable {
             ),
             rewrite: PerfRewritePlan(
                 routing: rewriteRouting,
-                hasGeminiDirect: hasGeminiDirect
+                hasGeminiDirect: hasGeminiDirect,
+                hasInceptionDirect: hasInceptionDirect
             )
         )
     }

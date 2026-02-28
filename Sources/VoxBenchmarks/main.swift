@@ -15,7 +15,7 @@ private enum BenchmarkError: Error, CustomStringConvertible {
         case .helpRequested:
             return BenchmarkConfig.usage()
         case .missingAPIKey:
-            return "Missing OPENROUTER_API_KEY (export it or add it to your shell env)."
+            return "Missing OPENROUTER_API_KEY. Export it or add it to your shell env."
         case let .invalidArgument(message):
             return "Invalid argument: \(message)"
         case let .invalidCorpus(message):
@@ -38,7 +38,6 @@ private struct BenchmarkConfig {
         "meta-llama/llama-3.1-8b-instruct",
         "xiaomi/mimo-v2-flash",
         "nvidia/nemotron-nano-9b-v2",
-        "inception/mercury",
     ]
 
     let apiKey: String

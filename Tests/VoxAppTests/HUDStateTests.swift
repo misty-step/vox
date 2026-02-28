@@ -9,7 +9,8 @@ struct HUDStateTests {
         #expect(state.mode == .idle)
         #expect(!state.isVisible)
         #expect(state.recordingDuration == 0)
-        #expect(state.processingMessage == "Processing")
+        #expect(state.processingElapsed == 0)
+        #expect(state.processingStartDate == nil)
     }
 
     @Test("show makes state visible")
@@ -19,35 +20,34 @@ struct HUDStateTests {
         #expect(state.isVisible)
     }
 
-    @Test("startRecording sets mode and resets duration")
+    @Test("startRecording sets mode, resets duration, and marks start time")
     @MainActor func startRecordingSetsMode() {
         let state = HUDState()
         state.recordingDuration = 42
         state.startRecording()
         #expect(state.mode == .recording)
         #expect(state.recordingDuration == 0)
+        #expect(state.recordingStartDate != nil)
     }
 
-    @Test("startProcessing sets mode and custom message")
+    @Test("startProcessing sets mode and starts elapsed clock")
     @MainActor func startProcessingSetsMode() {
         let state = HUDState()
-        state.startProcessing(message: "Transcribing")
-        #expect(state.mode == .processing)
-        #expect(state.processingMessage == "Transcribing")
-    }
-
-    @Test("startProcessing uses default message when none provided")
-    @MainActor func startProcessingDefaultMessage() {
-        let state = HUDState()
         state.startProcessing()
-        #expect(state.processingMessage == "Processing")
+        #expect(state.mode == .processing)
+        #expect(state.processingStartDate != nil)
+        #expect(state.processingElapsed == 0)
     }
 
-    @Test("startSuccess sets mode")
+    @Test("startSuccess sets mode and captures elapsed")
     @MainActor func startSuccessSetsMode() {
         let state = HUDState()
+        state.startProcessing()
         state.startSuccess()
         #expect(state.mode == .success)
+        #expect(state.processingStartDate == nil)
+        // Elapsed should be captured (small positive value since calls are near-instant)
+        #expect(state.processingElapsed >= 0 && state.processingElapsed < 1.0)
     }
 
     @Test("stop resets all state")
@@ -66,7 +66,9 @@ struct HUDStateTests {
         #expect(state.recordingDuration == 0)
         #expect(state.average == 0)
         #expect(state.peak == 0)
-        #expect(state.processingMessage == "Processing")
+        #expect(state.processingElapsed == 0)
+        #expect(state.processingStartDate == nil)
+        #expect(state.recordingStartDate == nil)
     }
 
     @Test("dismiss with reduced motion resets immediately")
@@ -93,7 +95,8 @@ struct HUDStateTests {
     @Test("Accessibility value for success state")
     @MainActor func accessibilitySuccess() {
         let state = HUDState()
-        state.mode = .success
+        state.startProcessing()
+        state.startSuccess()
         #expect(state.accessibilityValue == "Done")
     }
 }

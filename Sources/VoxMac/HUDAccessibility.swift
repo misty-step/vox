@@ -4,11 +4,7 @@ import Foundation
 enum HUDAccessibility {
     static let label = "Vox Dictation"
 
-    static func value(
-        for mode: HUDMode,
-        recordingDuration: TimeInterval,
-        processingMessage: String
-    ) -> String {
+    static func value(for mode: HUDMode, recordingDuration: TimeInterval) -> String {
         switch mode {
         case .idle:
             return "Ready"

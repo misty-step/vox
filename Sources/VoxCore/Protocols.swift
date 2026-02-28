@@ -89,13 +89,12 @@ public protocol AudioChunkStreaming: AudioRecording {
 public protocol HUDDisplaying: AnyObject {
     func showRecording(average: Float, peak: Float)
     func updateLevels(average: Float, peak: Float)
-    func showProcessing(message: String)
+    func showProcessing()
     func showSuccess()
     func hide()
 }
 
 extension HUDDisplaying {
-    public func showProcessing() { showProcessing(message: "Transcribing") }
     public func showSuccess() { hide() }
 }
 
@@ -129,4 +128,5 @@ public protocol PreferencesReading: AnyObject, Sendable {
     var openRouterAPIKey: String { get }
     var deepgramAPIKey: String { get }
     var geminiAPIKey: String { get }
+    var inceptionAPIKey: String { get }
 }

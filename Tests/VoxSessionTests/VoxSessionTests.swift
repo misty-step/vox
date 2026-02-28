@@ -171,7 +171,6 @@ final class MockHUD: HUDDisplaying {
     var updateLevelsCallCount = 0
     var showSuccessCallCount = 0
     var hideCallCount = 0
-    var lastProcessingMessage: String?
 
     func showRecording(average: Float, peak: Float) {
         showRecordingCallCount += 1
@@ -181,9 +180,8 @@ final class MockHUD: HUDDisplaying {
         updateLevelsCallCount += 1
     }
 
-    func showProcessing(message: String) {
+    func showProcessing() {
         showProcessingCallCount += 1
-        lastProcessingMessage = message
     }
 
     func showSuccess() {
@@ -201,7 +199,7 @@ final class DefaultShowSuccessHUD: HUDDisplaying {
     var hideCallCount = 0
     func showRecording(average: Float, peak: Float) {}
     func updateLevels(average: Float, peak: Float) {}
-    func showProcessing(message: String) {}
+    func showProcessing() {}
     func hide() { hideCallCount += 1 }
 }
 
@@ -293,6 +291,7 @@ final class MockPreferencesStore: PreferencesReading {
     let openRouterAPIKey: String = ""
     let deepgramAPIKey: String = ""
     let geminiAPIKey: String = ""
+    let inceptionAPIKey: String = ""
 }
 
 final class MockStreamingSession: StreamingSTTSession, @unchecked Sendable {
@@ -492,13 +491,6 @@ struct VoxSessionDITests {
         let prefs = MockPreferencesStore()
         let session = VoxSession(prefs: prefs)
         #expect(session.state == .idle)
-    }
-
-    @Test("HUDDisplaying default showProcessing message")
-    @MainActor func hudDefaultMessage() {
-        let hud = MockHUD()
-        hud.showProcessing()
-        #expect(hud.lastProcessingMessage == "Transcribing")
     }
 
     @Test("HUDDisplaying default showSuccess calls hide")
