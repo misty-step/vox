@@ -1,27 +1,5 @@
 import Foundation
-
-public enum AudioConversionError: Error, LocalizedError {
-    case launchFailed(underlying: Error)
-    case conversionFailed(exitCode: Int32, stderr: String? = nil)
-    case converterUnavailable(reason: String)
-    case emptyOutput
-
-    public var errorDescription: String? {
-        switch self {
-        case .launchFailed(let underlying):
-            return "Audio conversion failed to launch: \(underlying.localizedDescription)"
-        case .conversionFailed(let exitCode, let stderr):
-            if let stderr {
-                return "Audio conversion failed (exit \(exitCode)): \(stderr)"
-            }
-            return "Audio conversion failed (exit \(exitCode))"
-        case .converterUnavailable(let reason):
-            return "Audio converter unavailable: \(reason)"
-        case .emptyOutput:
-            return "Audio conversion produced empty output"
-        }
-    }
-}
+import VoxCore
 
 public struct OpusAvailability: Sendable {
     public let isAvailable: Bool

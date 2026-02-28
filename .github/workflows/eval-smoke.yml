@@ -3,7 +3,7 @@ name: 'Eval: Smoke Tests'
 on:
   pull_request:
     paths:
-      - 'Sources/VoxProviders/RewritePrompts.swift'
+      - 'Sources/VoxPipeline/RewritePrompts.swift'
       - 'Sources/VoxCore/RewriteQualityGate.swift'
       - 'evals/**'
   workflow_dispatch:

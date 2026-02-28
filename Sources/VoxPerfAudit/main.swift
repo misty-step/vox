@@ -2,6 +2,7 @@ import Foundation
 import VoxPerfAuditKit
 import VoxAppKit
 import VoxCore
+import VoxPipeline
 import VoxProviders
 
 private struct PerfLevelDistributions: Codable {

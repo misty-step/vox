@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import VoxCore
+import VoxPipeline
 import VoxProviders
 
 private enum BenchmarkError: Error, CustomStringConvertible {

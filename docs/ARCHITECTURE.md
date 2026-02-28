@@ -5,34 +5,40 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
 ## Module Overview
 
 ```
-                          VoxApp (executable)
-                    ┌──────────────────────┐
-                    │ main.swift            │
-                    └──────────┬───────────┘
-                               │
-                     VoxAppKit (library)
- ┌─────────────────────────────────────────────────────────────────────┐
- │ AppDelegate • VoxSession • DictationPipeline • StatusBarController   │
- │ SettingsWindowController • PreferencesStore • SettingsView           │
- └─────────────────────────────────────────────────────────────────────┘
-                ▲                         ▲
-                │                         │
-      VoxMac (OS integration)      VoxProviders (network + on-device)
- ┌──────────────────────────┐     ┌───────────────────────────────┐
-│ AudioRecorder            │     │ ElevenLabsClient (STT)         │
-│ AudioDeviceManager       │     │ DeepgramClient (STT)           │
-│                          │     │ DeepgramStreamingClient (STT)  │
-│ HotkeyMonitor            │     │ AppleSpeechClient (STT)        │
- │ HUDController / HUDView  │     │ AudioConverter (CAF→WAV)       │
- │ ClipboardPaster          │     │ GeminiClient (rewrite)         │
- │ KeychainHelper           │     │ OpenRouterClient (rewrite)     │
- │ PermissionManager        │     │ RewritePrompts                 │
- │                          │     │                               │
- └──────────────────────────┘     └───────────────────────────────┘
-                ▲                         ▲
-                └──────────────┬──────────┘
-                               │
-                        VoxCore (foundation)
+                              VoxApp (executable)
+                        ┌──────────────────────┐
+                        │ main.swift            │
+                        └──────────┬───────────┘
+                                   │
+                         VoxAppKit (composition root)
+                        ┌──────────────────────┐
+                        │ AppDelegate           │
+                        └──────────┬───────────┘
+                                   │
+                         VoxSession (state machine)
+               ┌───────────────────────────────────────────┐
+               │ VoxSession • StreamingAudioBridge          │
+               │ StreamingSessionPump • provider assembly   │
+               └──────┬────────┬──────────┬────────┬───────┘
+                      │        │          │        │
+          ┌───────────┘   ┌────┘     ┌────┘   ┌────┘
+          ▼               ▼          ▼        ▼
+  VoxUI (presentation)  VoxPipeline  VoxDiagnostics  VoxProviders
+ ┌────────────────────┐ ┌──────────┐ ┌─────────────┐ ┌──────────────────┐
+ │ PreferencesStore   │ │ Dictation│ │ Diagnostics  │ │ ElevenLabsClient │
+ │ StatusBarController│ │ Pipeline │ │ Store        │ │ DeepgramClient   │
+ │ Settings views     │ │ Rewrite  │ │ PerfIngest   │ │ AppleSpeechClient│
+ │ OnboardingStore    │ │ Cache    │ │ ProductInfo  │ │ GeminiClient     │
+ │ DebugWorkbench     │ │ Recovery │ │              │ │ OpenRouterClient │
+ │                    │ │ Store    │ │              │ │ AudioConverter   │
+ └──────┬─────┬───────┘ └────┬─────┘ └──────┬──────┘ └────────┬─────────┘
+        │     │              │              │                  │
+        ▼     ▼              │              │                  │
+  VoxMac (OS)  VoxDiagnostics │              │                  │
+        │                    │              │                  │
+        └────────────────────┴──────────────┴──────────────────┘
+                                   │
+                            VoxCore (foundation)
  ┌─────────────────────────────────────────────────────────────────────┐
  │ Protocols: STTProvider • StreamingSTTProvider • RewriteProvider        │
  │            TextPaster • AudioRecording • AudioChunkStreaming           │
@@ -44,6 +50,8 @@ Vox = macOS voice-to-text app, layered Swift packages. Goal: keep core small, sw
  │ ProcessingLevel • RewriteQualityGate • Errors • MultipartFormData    │
  └─────────────────────────────────────────────────────────────────────┘
 ```
+
+Key design decision: **VoxPipeline depends only on VoxCore**. All external I/O (diagnostics, opus conversion, audio validation) is injected via closures, keeping the pipeline testable without importing VoxDiagnostics or VoxProviders.
 
 ## STT Resilience Chain
 
@@ -238,18 +246,23 @@ Keychain storage in `KeychainHelper` (`com.vox.*` account keys).
 | Area | Module | Files |
 | --- | --- | --- |
 | Entry point | VoxApp | `main.swift` |
-| App lifecycle | VoxAppKit | `AppDelegate.swift`, `StatusBarController.swift`, `StatusBarIconRenderer.swift` |
-| Session + pipeline | VoxAppKit | `VoxSession.swift`, `DictationPipeline.swift` |
-| Settings | VoxAppKit | `PreferencesStore.swift`, `SettingsWindowController.swift`, `HotkeyState.swift`, `SettingsView.swift`, `BasicsSection.swift`, `CloudProvidersSection.swift`, `CloudKeysSheet.swift`, `CloudProviderCatalog.swift` |
+| Composition root | VoxAppKit | `AppDelegate.swift` |
+| Session | VoxSession | `VoxSession.swift` (state machine, StreamingAudioBridge, StreamingSessionPump) |
+| Pipeline | VoxPipeline | `DictationPipeline.swift`, `RewriteResultCache.swift`, `LastDictationRecoveryStore.swift`, `RewritePrompts.swift` |
+| Diagnostics | VoxDiagnostics | `DiagnosticsStore.swift`, `PerformanceIngestClient.swift`, `ProductInfo.swift` |
+| Settings | VoxUI | `PreferencesStore.swift`, `SettingsWindowController.swift`, `HotkeyState.swift`, `SettingsView.swift`, `BasicsSection.swift`, `CloudProvidersSection.swift`, `CloudKeysSheet.swift`, `CloudProviderCatalog.swift` |
+| Status bar | VoxUI | `StatusBarController.swift`, `StatusBarIconRenderer.swift`, `StatusBarMenuContent.swift` |
+| Onboarding | VoxUI | `OnboardingStore.swift`, `OnboardingChecklistView.swift`, `OnboardingSessionExtension.swift` |
+| Debug | VoxUI | `DebugWorkbenchStore.swift`, `DebugWorkbenchSink.swift`, `DebugWorkbenchView.swift` |
 | STT providers | VoxProviders | `ElevenLabsClient.swift`, `DeepgramClient.swift`, `DeepgramStreamingClient.swift`, `AppleSpeechClient.swift` |
 | STT decorators | VoxCore | `TimeoutSTTProvider.swift`, `RetryingSTTProvider.swift`, `HedgedSTTProvider.swift`, `ConcurrencyLimitedSTTProvider.swift`, `HealthAwareSTTProvider.swift`, `FallbackSTTProvider.swift` |
-| Rewrite providers | VoxProviders | `ProviderAssembly.swift`, `OpenRouterClient.swift`, `GeminiClient.swift`, `RewritePrompts.swift` |
+| Rewrite providers | VoxProviders | `OpenRouterClient.swift`, `GeminiClient.swift` |
 | Rewrite routing | VoxCore | `ModelRoutedRewriteProvider.swift`, `FallbackRewriteProvider.swift` |
 | Audio | VoxMac + VoxProviders | `AudioRecorder.swift`, `CapturedAudioInspector.swift`, `AudioDeviceManager.swift` (VoxMac), `AudioConverter.swift` (VoxProviders) |
 | macOS integration | VoxMac | `HotkeyMonitor.swift`, `HUDController.swift`, `HUDView.swift`, `ClipboardPaster.swift`, `PermissionManager.swift`, `KeychainHelper.swift` |
 | Core | VoxCore | `Protocols.swift`, `SessionExtension.swift`, `ProcessingLevel.swift`, `RewriteQualityGate.swift`, `Errors.swift`, `MultipartFormData.swift`, `BrandIdentity.swift` |
 
-All paths under `Sources/{VoxApp,VoxAppKit,VoxCore,VoxMac,VoxProviders}/`.
+All paths under `Sources/{VoxApp,VoxAppKit,VoxCore,VoxDiagnostics,VoxMac,VoxPipeline,VoxProviders,VoxSession,VoxUI}/`.
 
 ## Quality Gate
 
