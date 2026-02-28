@@ -21,6 +21,7 @@ public final class HUDState: ObservableObject {
     @Published public var average: Float = 0
     @Published public var peak: Float = 0
     @Published public var recordingDuration: TimeInterval = 0
+    @Published public var recordingStartDate: Date? = nil
     @Published public var processingStartDate: Date? = nil
     @Published public var processingElapsed: TimeInterval = 0
     @Published public var isVisible: Bool = false
@@ -44,6 +45,7 @@ public final class HUDState: ObservableObject {
     public func startRecording() {
         mode = .recording
         recordingDuration = 0
+        recordingStartDate = Date()
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -92,6 +94,7 @@ public final class HUDState: ObservableObject {
         timer?.invalidate()
         timer = nil
         recordingDuration = 0
+        recordingStartDate = nil
         average = 0
         peak = 0
         processingStartDate = nil
@@ -259,42 +262,29 @@ private struct CheckShape: Shape {
 
 // MARK: - Timer Display
 
-private struct TimerDisplay: View {
-    let duration: TimeInterval
-
-    private var formattedTime: String {
-        let secs = Int(duration)
-        if secs < 60 { return "\(secs)s" }
-        return String(format: "%d:%02d", secs / 60, secs % 60)
-    }
-
-    var body: some View {
-        Text(formattedTime)
-            .font(Design.timerFont)
-            .foregroundStyle(Design.textSecondary)
-            .monospacedDigit()
-    }
-}
-
-private struct ProcessingElapsedView: View {
+/// Live stopwatch driven by a TimelineView. Shows MM:SS.mmm with no unit labels.
+private struct StopwatchView: View {
     let startDate: Date?
+    let color: Color
 
     var body: some View {
         if let startDate {
             TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
-                Text(formatMs(ctx.date.timeIntervalSince(startDate)))
+                Text(formatStopwatch(ctx.date.timeIntervalSince(startDate)))
                     .font(Design.timerFont)
-                    .foregroundStyle(Design.textSecondary)
+                    .foregroundStyle(color)
                     .monospacedDigit()
             }
         }
     }
 }
 
-private func formatMs(_ interval: TimeInterval) -> String {
-    interval < 1.0
-        ? "\(Int(interval * 1000))ms"
-        : String(format: "%.1fs", interval)
+private func formatStopwatch(_ interval: TimeInterval) -> String {
+    let t = max(0, interval)
+    let ms = Int(t * 1000) % 1000
+    let secs = Int(t) % 60
+    let mins = Int(t) / 60
+    return String(format: "%02d:%02d.%03d", mins, secs, ms)
 }
 
 // MARK: - Main HUD View
@@ -382,11 +372,11 @@ public struct HUDView: View {
         case .idle:
             EmptyView()
         case .recording:
-            TimerDisplay(duration: state.recordingDuration)
+            StopwatchView(startDate: state.recordingStartDate, color: Design.textSecondary)
         case .processing:
-            ProcessingElapsedView(startDate: state.processingStartDate)
+            StopwatchView(startDate: state.processingStartDate, color: Design.textSecondary)
         case .success:
-            Text(formatMs(state.processingElapsed))
+            Text(formatStopwatch(state.processingElapsed))
                 .font(Design.timerFont)
                 .foregroundStyle(Design.green)
                 .monospacedDigit()
@@ -439,8 +429,8 @@ public struct HUDView: View {
 
 #Preview("Recording") {
     let state = HUDState()
+    state.recordingStartDate = Date().addingTimeInterval(-83)
     state.mode = .recording
-    state.recordingDuration = 83
     state.isVisible = true
     return HUDView(state: state)
         .padding(40)

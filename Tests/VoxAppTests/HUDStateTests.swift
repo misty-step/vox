@@ -20,13 +20,14 @@ struct HUDStateTests {
         #expect(state.isVisible)
     }
 
-    @Test("startRecording sets mode and resets duration")
+    @Test("startRecording sets mode, resets duration, and marks start time")
     @MainActor func startRecordingSetsMode() {
         let state = HUDState()
         state.recordingDuration = 42
         state.startRecording()
         #expect(state.mode == .recording)
         #expect(state.recordingDuration == 0)
+        #expect(state.recordingStartDate != nil)
     }
 
     @Test("startProcessing sets mode and starts elapsed clock")
@@ -66,6 +67,7 @@ struct HUDStateTests {
         #expect(state.peak == 0)
         #expect(state.processingElapsed == 0)
         #expect(state.processingStartDate == nil)
+        #expect(state.recordingStartDate == nil)
     }
 
     @Test("dismiss with reduced motion resets immediately")
