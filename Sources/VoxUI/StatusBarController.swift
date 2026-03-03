@@ -178,6 +178,14 @@ public final class StatusBarController: NSObject {
 
     private var currentState: StatusBarState = .idle(processingLevel: .raw)
 
+    public var additionalMenuItemsProvider: (() -> [NSMenuItem])? {
+        didSet { rebuildMenu() }
+    }
+
+    public func refreshMenu() {
+        rebuildMenu()
+    }
+
     public init(
         onToggle: @escaping () -> Void,
         onCopyLastRawTranscript: @escaping () -> Void,
@@ -327,6 +335,14 @@ public final class StatusBarController: NSObject {
         let shareItem = NSMenuItem(title: "Share Vox…", action: #selector(shareVox), keyEquivalent: "")
         shareItem.target = self
         menu.addItem(shareItem)
+
+        if let extraItems = additionalMenuItemsProvider?(), !extraItems.isEmpty {
+            menu.addItem(.separator())
+            for item in extraItems {
+                menu.addItem(item)
+            }
+        }
+
         menu.addItem(.separator())
 
         let setupItem = NSMenuItem(title: "Setup Checklist...", action: #selector(openSetupChecklist), keyEquivalent: "")
