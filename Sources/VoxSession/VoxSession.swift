@@ -692,10 +692,7 @@ public final class VoxSession: ObservableObject {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
 
-            let isPermissionError = (error as? VoxError).map {
-                if case .permissionDenied = $0 { return true }
-                return false
-            } ?? false
+            let isPermissionError = (error as? VoxError)?.isPermissionDenied ?? false
 
             let preserved: Bool
             if isPermissionError {
