@@ -691,17 +691,29 @@ public final class VoxSession: ObservableObject {
         } catch {
             print("[Vox] Processing failed: \(error.localizedDescription)")
             await sessionExtension.didFailDictation(reason: "processing_failed")
-            let preservedURL = await preserveRecoverableAudio(
-                recordedURL: url,
-                decryptionKey: &decryptionKey,
-                temporaryBatchAudioURL: temporaryBatchAudioURL
-            )
-            let preserved = preservedURL != nil
-            if let saved = preservedURL {
-                presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
-            } else {
+
+            let isPermissionError = (error as? VoxError)?.isPermissionDenied ?? false
+
+            let preserved: Bool
+            if isPermissionError {
+                // Transcript is already on clipboard — no need to preserve audio
+                preserved = false
+                SecureFileDeleter.delete(at: url)
                 presentError(error.localizedDescription)
+            } else {
+                let preservedURL = await preserveRecoverableAudio(
+                    recordedURL: url,
+                    decryptionKey: &decryptionKey,
+                    temporaryBatchAudioURL: temporaryBatchAudioURL
+                )
+                preserved = preservedURL != nil
+                if let saved = preservedURL {
+                    presentError("\(error.localizedDescription)\n\nYour audio was saved to:\n\(saved.path)")
+                } else {
+                    presentError(error.localizedDescription)
+                }
             }
+
             let processingLevelOnError = prefs.processingLevel.rawValue
             DiagnosticsStore.recordAsync(
                 name: "processing_failed",

@@ -165,6 +165,11 @@ public enum VoxError: Error, Sendable, Equatable, LocalizedError {
     case internalError(String)
     case pipelineTimeout
 
+    public var isPermissionDenied: Bool {
+        if case .permissionDenied = self { return true }
+        return false
+    }
+
     public var errorDescription: String? {
         switch self {
         case .permissionDenied(let msg):

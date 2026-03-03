@@ -13,34 +13,63 @@ public final class ClipboardPaster: TextPaster {
     }
 
     @MainActor public func paste(text: String) async throws {
-        guard PermissionManager.isAccessibilityTrusted() else {
-            throw VoxError.permissionDenied("Accessibility permission required.")
-        }
         try await paste(text: text, restoreAfter: shouldRestore ? restoreDelay : nil)
     }
 
     @MainActor public func paste(text: String, restoreAfter delay: TimeInterval?) async throws {
+        // Copy first so text is on clipboard even if accessibility check fails.
+        // Only snapshot when we plan to restore (delay != nil).
+        let (pasteboard, snapshot, written) = copyToClipboard(text: text, captureSnapshot: delay != nil)
+
         guard PermissionManager.isAccessibilityTrusted() else {
-            throw VoxError.permissionDenied("Accessibility permission required.")
+            if written {
+                throw VoxError.permissionDenied(
+                    "Accessibility permission required for auto-paste.\n\n"
+                    + "Your text has been copied to the clipboard — press ⌘V to paste it manually.\n\n"
+                    + "To enable auto-paste: System Settings → Privacy & Security → Accessibility"
+                )
+            } else {
+                throw VoxError.permissionDenied(
+                    "Accessibility permission required."
+                )
+            }
         }
-        copy(text: text, restoreAfter: delay)
+
         // Yield main thread while clipboard update propagates
         try await Task.sleep(for: .milliseconds(50))
         sendPasteKeystroke()
+
+        // Schedule clipboard restore only after successful paste
+        scheduleRestore(on: pasteboard, snapshot: snapshot, after: delay)
     }
 
     public func copy(text: String, restoreAfter delay: TimeInterval?) {
-        let pasteboard = NSPasteboard.general
-        let snapshot = snapshotPasteboard(pasteboard)
-        pasteboard.clearContents()
-        #if DEBUG
-        let success = pasteboard.setString(text, forType: .string)
-        print("[Paster] Clipboard set: \(success)")
-        #else
-        pasteboard.setString(text, forType: .string)
-        #endif
+        let (pasteboard, snapshot, _) = copyToClipboard(text: text, captureSnapshot: delay != nil)
+        scheduleRestore(on: pasteboard, snapshot: snapshot, after: delay)
+    }
 
-        guard let delay else { return }
+    // MARK: - Clipboard helpers
+
+    private func copyToClipboard(
+        text: String,
+        captureSnapshot: Bool
+    ) -> (NSPasteboard, [[NSPasteboard.PasteboardType: Data]]?, Bool) {
+        let pasteboard = NSPasteboard.general
+        let snapshot = captureSnapshot ? snapshotPasteboard(pasteboard) : nil
+        pasteboard.clearContents()
+        let success = pasteboard.setString(text, forType: .string)
+        #if DEBUG
+        print("[Paster] Clipboard set: \(success)")
+        #endif
+        return (pasteboard, snapshot, success)
+    }
+
+    private func scheduleRestore(
+        on pasteboard: NSPasteboard,
+        snapshot: [[NSPasteboard.PasteboardType: Data]]?,
+        after delay: TimeInterval?
+    ) {
+        guard let delay, let snapshot else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             #if DEBUG
             print("[Paster] Restoring clipboard after \(delay)s")
