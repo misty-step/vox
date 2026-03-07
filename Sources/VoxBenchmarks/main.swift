@@ -150,11 +150,24 @@ private struct CorpusFile: Decodable {
     let entries: [CorpusEntry]
 }
 
+private struct OutputContract: Decodable, Sendable {
+    let mustNotStartWith: [String]?
+    let mustPreserveTerms: [String]?
+    let mustNotEndWith: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case mustNotStartWith = "must_not_start_with"
+        case mustPreserveTerms = "must_preserve_terms"
+        case mustNotEndWith = "must_not_end_with"
+    }
+}
+
 private struct CorpusEntry: Decodable, Sendable {
     let id: String
     let level: ProcessingLevel
     let transcript: String
     let notes: String?
+    let contract: OutputContract?
 }
 
 private struct OpenRouterRequest: Encodable {
@@ -279,6 +292,8 @@ private struct BenchmarkInvocation: Codable {
     let completionTokens: Int?
     let qualityPass: Bool
     let qualityRatio: Double
+    let contractPass: Bool
+    let contractViolations: [String]
     let responseText: String
     let error: String?
 }
@@ -328,6 +343,7 @@ private struct ModelLevelSummary: Codable {
     let samples: Int
     let errorRate: Double
     let qualityPassRate: Double
+    let contractPassRate: Double
     let nonEmptyRate: Double
     let latency: Distribution
     let cost: Distribution?
@@ -366,6 +382,44 @@ private struct BenchmarkArtifact: Codable {
     let summaries: [ModelLevelSummary]
     let recommendations: [LevelRecommendation]
     let spotChecks: [ManualSpotCheck]
+}
+
+private func evaluateContract(output: String, contract: OutputContract?) -> (pass: Bool, violations: [String]) {
+    guard let contract else { return (true, []) }
+    var violations: [String] = []
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if let prefixes = contract.mustNotStartWith {
+        for prefix in prefixes {
+            if trimmed.lowercased().hasPrefix(prefix.lowercased()) {
+                violations.append("starts_with:\(prefix)")
+            }
+        }
+    }
+
+    if let suffixes = contract.mustNotEndWith {
+        for suffix in suffixes {
+            if trimmed.lowercased().hasSuffix(suffix.lowercased()) || trimmed.lowercased().contains(suffix.lowercased()) {
+                // Check last line specifically
+                let lastLine = trimmed.components(separatedBy: .newlines).last?
+                    .trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+                if lastLine.hasPrefix(suffix.lowercased()) {
+                    violations.append("ends_with:\(suffix)")
+                }
+            }
+        }
+    }
+
+    if let terms = contract.mustPreserveTerms {
+        let lowerOutput = trimmed.lowercased()
+        for term in terms {
+            if !lowerOutput.contains(term.lowercased()) {
+                violations.append("missing_term:\(term)")
+            }
+        }
+    }
+
+    return (violations.isEmpty, violations)
 }
 
 private struct BenchmarkRunner {
@@ -410,6 +464,8 @@ private struct BenchmarkRunner {
                             level: entry.level
                         )
 
+                        let contractResult = evaluateContract(output: success.text, contract: entry.contract)
+
                         record = BenchmarkInvocation(
                             model: model,
                             level: entry.level,
@@ -421,6 +477,8 @@ private struct BenchmarkRunner {
                             completionTokens: success.usage?.completionTokens,
                             qualityPass: decision.isAcceptable,
                             qualityRatio: decision.ratio,
+                            contractPass: contractResult.pass,
+                            contractViolations: contractResult.violations,
                             responseText: success.text,
                             error: nil
                         )
@@ -445,6 +503,8 @@ private struct BenchmarkRunner {
                             completionTokens: nil,
                             qualityPass: decision.isAcceptable,
                             qualityRatio: decision.ratio,
+                            contractPass: false,
+                            contractViolations: ["error"],
                             responseText: "",
                             error: error.localizedDescription
                         )
@@ -454,15 +514,17 @@ private struct BenchmarkRunner {
 
                     let costText = record.costUSD.map { String(format: "$%.6f", $0) } ?? "n/a"
                     let errorText = record.error.map { " error=\($0)" } ?? ""
+                    let contractText = record.contractPass ? "pass" : "FAIL(\(record.contractViolations.joined(separator: ",")))"
                     print(
                         String(
-                            format: "[Benchmark] level=%@ model=%@ sample=%@ iter=%d latency=%.3fs quality=%@ ratio=%.2f cost=%@%@",
+                            format: "[Benchmark] level=%@ model=%@ sample=%@ iter=%d latency=%.3fs quality=%@ contract=%@ ratio=%.2f cost=%@%@",
                             entry.level.rawValue,
                             model,
                             entry.id,
                             iteration,
                             record.latencySeconds,
                             record.qualityPass ? "pass" : "fail",
+                            contractText,
                             record.qualityRatio,
                             costText,
                             errorText
@@ -509,6 +571,7 @@ private struct BenchmarkRunner {
             guard let rows = grouped[key], !rows.isEmpty else { return nil }
             let errorCount = rows.filter { $0.error != nil }.count
             let passCount = rows.filter(\.qualityPass).count
+            let contractPassCount = rows.filter(\.contractPass).count
             let nonEmptyCount = rows.filter { !$0.responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
             let latencyValues = rows.map(\.latencySeconds)
             let costValues = rows.compactMap(\.costUSD)
@@ -518,6 +581,7 @@ private struct BenchmarkRunner {
                 samples: rows.count,
                 errorRate: Double(errorCount) / Double(rows.count),
                 qualityPassRate: Double(passCount) / Double(rows.count),
+                contractPassRate: Double(contractPassCount) / Double(rows.count),
                 nonEmptyRate: Double(nonEmptyCount) / Double(rows.count),
                 latency: Distribution(values: latencyValues),
                 cost: costValues.isEmpty ? nil : Distribution(values: costValues)
@@ -693,8 +757,8 @@ private func costMean(_ summary: ModelLevelSummary) -> Double {
 private func loadCorpus(from path: URL) throws -> [CorpusEntry] {
     let data = try Data(contentsOf: path)
     let decoded = try JSONDecoder().decode(CorpusFile.self, from: data)
-    guard decoded.version == 1 else {
-        throw BenchmarkError.invalidCorpus("unsupported version \(decoded.version); expected 1")
+    guard (1...3).contains(decoded.version) else {
+        throw BenchmarkError.invalidCorpus("unsupported version \(decoded.version); expected 1-3")
     }
 
     let filtered = decoded.entries.filter { [.clean, .polish].contains($0.level) }
@@ -746,6 +810,7 @@ private enum BenchmarkReportMarkdown {
         lines.append("## Methodology")
         lines.append("- Uses production rewrite prompts from `RewritePrompts` per processing level.")
         lines.append("- Evaluates quality with `RewriteQualityGate` pass/fail and ratio checks.")
+        lines.append("- Evaluates output contract compliance: no preamble, no attribution, technical term preservation.")
         lines.append("- Measures wall-clock request latency and OpenRouter-reported request cost.")
         lines.append("- Decision rule: filter by quality target, pick lowest p95 latency, tie-break by mean cost.")
         lines.append("")
@@ -753,8 +818,8 @@ private enum BenchmarkReportMarkdown {
         for level in [ProcessingLevel.clean, .polish] {
             lines.append("## \(level.rawValue.capitalized) Results")
             lines.append("")
-            lines.append("| Model | Quality pass | Errors | Non-empty | Latency p50 | Latency p95 | Mean cost | Cost p95 |")
-            lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+            lines.append("| Model | Quality pass | Contract pass | Errors | Non-empty | Latency p50 | Latency p95 | Mean cost | Cost p95 |")
+            lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
 
             let sorted = (summariesByLevel[level] ?? []).sorted {
                 if $0.qualityPassRate == $1.qualityPassRate {
@@ -768,9 +833,10 @@ private enum BenchmarkReportMarkdown {
                 let p95CostText = row.cost.map { String(format: "$%.6f", $0.p95) } ?? "n/a"
                 lines.append(
                     String(
-                        format: "| `%@` | %.1f%% | %.1f%% | %.1f%% | %.3fs | %.3fs | %@ | %@ |",
+                        format: "| `%@` | %.1f%% | %.1f%% | %.1f%% | %.1f%% | %.3fs | %.3fs | %@ | %@ |",
                         row.model,
                         row.qualityPassRate * 100.0,
+                        row.contractPassRate * 100.0,
                         row.errorRate * 100.0,
                         row.nonEmptyRate * 100.0,
                         row.latency.p50,
