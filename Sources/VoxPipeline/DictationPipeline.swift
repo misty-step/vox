@@ -404,21 +404,34 @@ public final class DictationPipeline: DictationProcessing, TranscriptRecoveryPro
                             outcome: "empty_raw_fallback"
                         )
                     } else {
-                        output = candidate
-                        if enableRewriteCache {
-                            await rewriteCache.store(
-                                candidate,
-                                for: transcript,
-                                level: level,
-                                model: model
-                            )
+                        // Contract validation: strip preambles, attribution, meta commentary
+                        switch RewriteOutputContract.validate(trimmedCandidate, level: level) {
+                        case .accepted(let text):
+                            output = text
+                            if enableRewriteCache {
+                                await rewriteCache.store(text, for: transcript, level: level, model: model)
+                            }
+                            recordRewriteStageOutcome(level: level, model: model, outcome: "success", extra: "cache_hit=false")
+
+                        case .repaired(let text, let violations):
+                            let tags = violations.map(\.description).joined(separator: ", ")
+                            print("[Pipeline] Rewrite contract repaired: \(tags)")
+                            onPipelineLog?("rewrite contract repaired: \(tags)")
+                            onDiagnosticsLog?("rewrite_contract_violation", "level=\(level.rawValue) model=\(model) action=repaired violations=\(tags)")
+                            output = text
+                            if enableRewriteCache {
+                                await rewriteCache.store(text, for: transcript, level: level, model: model)
+                            }
+                            recordRewriteStageOutcome(level: level, model: model, outcome: "contract_repaired", extra: "violations=\(tags)")
+
+                        case .rejected(let violations):
+                            let tags = violations.map(\.description).joined(separator: ", ")
+                            print("[Pipeline] Rewrite contract rejected, using raw transcript: \(tags)")
+                            onPipelineLog?("rewrite contract rejected; using raw transcript: \(tags)")
+                            onDiagnosticsLog?("rewrite_contract_violation", "level=\(level.rawValue) model=\(model) action=rejected violations=\(tags)")
+                            output = transcript
+                            recordRewriteStageOutcome(level: level, model: model, outcome: "contract_rejected", extra: "violations=\(tags)")
                         }
-                        recordRewriteStageOutcome(
-                            level: level,
-                            model: model,
-                            outcome: "success",
-                            extra: "cache_hit=false"
-                        )
                     }
                 }
             } catch is CancellationError {
