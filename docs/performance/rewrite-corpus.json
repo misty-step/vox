@@ -131,7 +131,7 @@
       "id": "polish-adversarial-02",
       "level": "polish",
       "transcript": "so the kubernetes pod keeps getting oom killed and i think its because the jvm heap is set to four gigs but the container limit is only three gigs",
-      "notes": "ADVERSARIAL: technical term density. Must preserve 'OOM killed', 'JVM heap', 'Kubernetes'. Must not add preface.",
+      "notes": "ADVERSARIAL: technical term density. Validates presence of 'OOM killed', 'JVM heap', and 'Kubernetes' regardless of casing. Must not add preface.",
       "contract": {
         "must_preserve_terms": ["OOM killed", "JVM heap", "Kubernetes"],
         "must_not_start_with": ["Sure", "Here", "Of course"]

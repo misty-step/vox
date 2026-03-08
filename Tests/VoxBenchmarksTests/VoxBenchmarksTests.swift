@@ -1,6 +1,6 @@
 import Testing
 import VoxCore
-@testable import VoxBenchmarks
+import VoxBenchmarksKit
 
 @Suite("BenchmarkContracts")
 struct BenchmarkContractsTests {
@@ -101,7 +101,7 @@ struct BenchmarkRecommendationsTests {
             samples: 10,
             errorRate: 0,
             qualityPassRate: 0.10,
-            contractPassRate: 0.95,
+            contractPassRate: 1.0,
             nonEmptyRate: 1,
             latency: Distribution(values: [0.4, 0.5]),
             cost: nil

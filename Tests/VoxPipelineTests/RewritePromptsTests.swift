@@ -33,7 +33,9 @@ struct RewritePromptsTests {
         "No preface, no commentary, no attribution. Do not wrap the entire output in quotes, code blocks, or container markup.",
         "Start with the first word",
         "STT ARTIFACT REMOVAL",
-        "Transcribed by Otter.ai",
+        "standalone watermark or attribution text injected by the speech-to-text provider",
+        "provider-injected leading/trailing watermark text",
+        "If the speaker explicitly says or quotes that text, preserve it.",
     ]
 
     @Test("Clean prompt forbids preface, attribution, meta commentary, and STT artifacts")

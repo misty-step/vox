@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import VoxBenchmarksKit
 import VoxCore
 import VoxPipeline
 import VoxProviders
@@ -150,18 +151,6 @@ private struct CorpusFile: Decodable {
     let entries: [CorpusEntry]
 }
 
-struct OutputContract: Decodable, Sendable {
-    let mustNotStartWith: [String]?
-    let mustPreserveTerms: [String]?
-    let mustNotEndWith: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case mustNotStartWith = "must_not_start_with"
-        case mustPreserveTerms = "must_preserve_terms"
-        case mustNotEndWith = "must_not_end_with"
-    }
-}
-
 private struct CorpusEntry: Decodable, Sendable {
     let id: String
     let level: ProcessingLevel
@@ -298,57 +287,6 @@ struct BenchmarkInvocation: Codable {
     let error: String?
 }
 
-struct Distribution: Codable {
-    let count: Int
-    let p50: Double
-    let p95: Double
-    let min: Double
-    let max: Double
-    let mean: Double
-
-    init(values: [Double]) {
-        guard !values.isEmpty else {
-            self.count = 0
-            self.p50 = 0
-            self.p95 = 0
-            self.min = 0
-            self.max = 0
-            self.mean = 0
-            return
-        }
-
-        self.count = values.count
-        let sorted = values.sorted()
-        self.p50 = Self.percentile(sorted, quantile: 0.5)
-        self.p95 = Self.percentile(sorted, quantile: 0.95)
-        self.min = sorted.first ?? 0
-        self.max = sorted.last ?? 0
-        self.mean = values.reduce(0, +) / Double(values.count)
-    }
-
-    private static func percentile(_ sorted: [Double], quantile: Double) -> Double {
-        guard sorted.count > 1 else { return sorted[0] }
-        let rank = quantile * Double(sorted.count - 1)
-        let lower = Int(rank.rounded(.down))
-        let upper = Int(rank.rounded(.up))
-        if lower == upper { return sorted[lower] }
-        let fraction = rank - Double(lower)
-        return sorted[lower] + ((sorted[upper] - sorted[lower]) * fraction)
-    }
-}
-
-struct ModelLevelSummary: Codable {
-    let model: String
-    let level: ProcessingLevel
-    let samples: Int
-    let errorRate: Double
-    let qualityPassRate: Double
-    let contractPassRate: Double?
-    let nonEmptyRate: Double
-    let latency: Distribution
-    let cost: Distribution?
-}
-
 private struct CandidateScore: Codable {
     let model: String
     let qualityPassRate: Double
@@ -382,66 +320,6 @@ private struct BenchmarkArtifact: Codable {
     let summaries: [ModelLevelSummary]
     let recommendations: [LevelRecommendation]
     let spotChecks: [ManualSpotCheck]
-}
-
-func evaluateContract(output: String, contract: OutputContract?) -> (pass: Bool?, violations: [String]) {
-    guard let contract else { return (nil, []) }
-    var violations: [String] = []
-    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-    let normalizedOutput = normalizeContractBoundary(trimmed)
-
-    if let prefixes = contract.mustNotStartWith {
-        for prefix in prefixes {
-            let normalizedPrefix = normalizeContractBoundary(prefix)
-            if !normalizedPrefix.isEmpty, normalizedOutput.hasPrefix(normalizedPrefix) {
-                violations.append("starts_with:\(prefix)")
-            }
-        }
-    }
-
-    if let suffixes = contract.mustNotEndWith {
-        let lastLine = trimmed
-            .components(separatedBy: .newlines)
-            .last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? ""
-        let normalizedLastLine = normalizeContractBoundary(lastLine)
-
-        for suffix in suffixes {
-            let normalizedSuffix = normalizeContractBoundary(suffix)
-            guard !normalizedSuffix.isEmpty else { continue }
-
-            if normalizedOutput.hasSuffix(normalizedSuffix) {
-                violations.append("ends_with:\(suffix)")
-                continue
-            }
-
-            if !normalizedLastLine.isEmpty, normalizedLastLine.contains(normalizedSuffix) {
-                violations.append("ends_with:\(suffix)")
-            }
-        }
-    }
-
-    if let terms = contract.mustPreserveTerms {
-        let normalizedContent = normalizeContractContent(trimmed)
-        for term in terms {
-            let normalizedTerm = normalizeContractContent(term)
-            if !normalizedTerm.isEmpty, !normalizedContent.contains(normalizedTerm) {
-                violations.append("missing_term:\(term)")
-            }
-        }
-    }
-
-    return (violations.isEmpty, violations)
-}
-
-private func normalizeContractBoundary(_ text: String) -> String {
-    text
-        .trimmingCharacters(in: CharacterSet.contractWrapperCharacters)
-        .lowercased()
-}
-
-private func normalizeContractContent(_ text: String) -> String {
-    normalizeContractBoundary(text)
-        .replacingOccurrences(of: "\r\n", with: "\n")
 }
 
 private struct BenchmarkRunner {
@@ -536,13 +414,7 @@ private struct BenchmarkRunner {
 
                     let costText = record.costUSD.map { String(format: "$%.6f", $0) } ?? "n/a"
                     let errorText = record.error.map { " error=\($0)" } ?? ""
-                    let contractText: String = {
-                        switch record.contractPass {
-                        case .none: return "n/a"
-                        case .some(true): return "pass"
-                        case .some(false): return "FAIL(\(record.contractViolations.joined(separator: ",")))"
-                        }
-                    }()
+                    let contractText = sanitizedContractStatus(for: record)
                     print(
                         String(
                             format: "[Benchmark] level=%@ model=%@ sample=%@ iter=%d latency=%.3fs quality=%@ contract=%@ ratio=%.2f cost=%@%@",
@@ -633,10 +505,8 @@ private struct BenchmarkRunner {
                 }
 
             let qualityTarget = Self.qualityTargets[level] ?? 0.0
-            let eligible = perLevel.filter {
-                $0.qualityPassRate >= qualityTarget && ($0.contractPassRate ?? 1.0) >= 1.0
-            }
-            let winner = selectRecommendationWinner(from: perLevel, qualityTarget: qualityTarget)
+            let selection = selectRecommendation(from: perLevel, qualityTarget: qualityTarget)
+            let winner = selection.winner
 
             let candidateScores = perLevel.map {
                 CandidateScore(
@@ -652,7 +522,7 @@ private struct BenchmarkRunner {
                 guard let winner else { return "no candidates" }
 
                 let costText = winner.cost.map { String(format: "$%.6f", $0.mean) } ?? "n/a"
-                if eligible.isEmpty {
+                if selection.usedFallback {
                     return String(
                         format: "no model met quality target %.0f%%; picked best available (pass %.1f%%, p95 %.3fs, mean cost %@)",
                         qualityTarget * 100.0,
@@ -704,6 +574,19 @@ private struct BenchmarkRunner {
                 rewritten: row.responseText
             )
         }
+    }
+}
+
+private func sanitizedContractStatus(for record: BenchmarkInvocation) -> String {
+    switch record.contractPass {
+    case .none:
+        return "n/a"
+    case .some(true):
+        return "pass"
+    case .some(false):
+        let violationCount = max(record.contractViolations.count, 1)
+        let label = violationCount == 1 ? "violation" : "violations"
+        return "FAIL(\(violationCount) \(label))"
     }
 }
 
@@ -769,35 +652,6 @@ private func isRetryable(_ error: Error) -> Bool {
 
     if error is URLError { return true }
     return false
-}
-
-func selectRecommendationWinner(
-    from summaries: [ModelLevelSummary],
-    qualityTarget: Double
-) -> ModelLevelSummary? {
-    let eligible = summaries.filter {
-        $0.qualityPassRate >= qualityTarget && ($0.contractPassRate ?? 1.0) >= 1.0
-    }
-    let pool = eligible.isEmpty ? summaries : eligible
-
-    return pool.min(by: { lhs, rhs in
-        let lhsContractScore = lhs.contractPassRate ?? -1.0
-        let rhsContractScore = rhs.contractPassRate ?? -1.0
-        if lhsContractScore != rhsContractScore {
-            return lhsContractScore > rhsContractScore
-        }
-        if lhs.qualityPassRate != rhs.qualityPassRate {
-            return lhs.qualityPassRate > rhs.qualityPassRate
-        }
-        if lhs.latency.p95 != rhs.latency.p95 {
-            return lhs.latency.p95 < rhs.latency.p95
-        }
-        return costMean(lhs) < costMean(rhs)
-    })
-}
-
-private func costMean(_ summary: ModelLevelSummary) -> Double {
-    summary.cost?.mean ?? Double.greatestFiniteMagnitude
 }
 
 private func loadCorpus(from path: URL) throws -> [CorpusEntry] {
@@ -980,10 +834,4 @@ enum VoxBenchmarksMain {
             Darwin.exit(1)
         }
     }
-}
-
-private extension CharacterSet {
-    static let contractWrapperCharacters = CharacterSet.whitespacesAndNewlines.union(
-        CharacterSet(charactersIn: "\"'`>*_~()[]{}<>.,!?;:“”‘’")
-    )
 }
