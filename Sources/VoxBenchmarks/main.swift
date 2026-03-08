@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import VoxBenchmarksKit
 import VoxCore
 import VoxPipeline
 import VoxProviders
@@ -268,7 +269,7 @@ private final class OpenRouterBenchmarkClient {
     }
 }
 
-private struct BenchmarkInvocation: Codable {
+struct BenchmarkInvocation: Codable {
     let model: String
     let level: ProcessingLevel
     let entryID: String
@@ -281,56 +282,6 @@ private struct BenchmarkInvocation: Codable {
     let qualityRatio: Double
     let responseText: String
     let error: String?
-}
-
-private struct Distribution: Codable {
-    let count: Int
-    let p50: Double
-    let p95: Double
-    let min: Double
-    let max: Double
-    let mean: Double
-
-    init(values: [Double]) {
-        guard !values.isEmpty else {
-            self.count = 0
-            self.p50 = 0
-            self.p95 = 0
-            self.min = 0
-            self.max = 0
-            self.mean = 0
-            return
-        }
-
-        self.count = values.count
-        let sorted = values.sorted()
-        self.p50 = Self.percentile(sorted, quantile: 0.5)
-        self.p95 = Self.percentile(sorted, quantile: 0.95)
-        self.min = sorted.first ?? 0
-        self.max = sorted.last ?? 0
-        self.mean = values.reduce(0, +) / Double(values.count)
-    }
-
-    private static func percentile(_ sorted: [Double], quantile: Double) -> Double {
-        guard sorted.count > 1 else { return sorted[0] }
-        let rank = quantile * Double(sorted.count - 1)
-        let lower = Int(rank.rounded(.down))
-        let upper = Int(rank.rounded(.up))
-        if lower == upper { return sorted[lower] }
-        let fraction = rank - Double(lower)
-        return sorted[lower] + ((sorted[upper] - sorted[lower]) * fraction)
-    }
-}
-
-private struct ModelLevelSummary: Codable {
-    let model: String
-    let level: ProcessingLevel
-    let samples: Int
-    let errorRate: Double
-    let qualityPassRate: Double
-    let nonEmptyRate: Double
-    let latency: Distribution
-    let cost: Distribution?
 }
 
 private struct CandidateScore: Codable {
@@ -540,18 +491,8 @@ private struct BenchmarkRunner {
                 }
 
             let qualityTarget = Self.qualityTargets[level] ?? 0.0
-            let eligible = perLevel.filter { $0.qualityPassRate >= qualityTarget }
-            let winner: ModelLevelSummary? = {
-                if eligible.isEmpty {
-                    return perLevel.first
-                }
-                return eligible.min(by: { lhs, rhs in
-                    if lhs.latency.p95 == rhs.latency.p95 {
-                        return costMean(lhs) < costMean(rhs)
-                    }
-                    return lhs.latency.p95 < rhs.latency.p95
-                })
-            }()
+            let selection = selectRecommendation(from: perLevel, qualityTarget: qualityTarget)
+            let winner = selection.winner
 
             let candidateScores = perLevel.map {
                 CandidateScore(
@@ -567,9 +508,9 @@ private struct BenchmarkRunner {
                 guard let winner else { return "no candidates" }
 
                 let costText = winner.cost.map { String(format: "$%.6f", $0.mean) } ?? "n/a"
-                if eligible.isEmpty {
+                if selection.usedFallback {
                     return String(
-                        format: "no model met quality target %.0f%%; picked best available (pass %.1f%%, p95 %.3fs, mean cost %@)",
+                        format: "no model met quality target %.0f%%; picked best available by quality, then latency and cost (pass %.1f%%, p95 %.3fs, mean cost %@)",
                         qualityTarget * 100.0,
                         winner.qualityPassRate * 100.0,
                         winner.latency.p95,
@@ -578,7 +519,7 @@ private struct BenchmarkRunner {
                 }
 
                 return String(
-                    format: "passed quality target %.0f%%; best p95 latency %.3fs; mean cost %@",
+                    format: "met quality target %.0f%%; best p95 latency %.3fs; mean cost %@",
                     qualityTarget * 100.0,
                     winner.latency.p95,
                     costText
@@ -686,15 +627,11 @@ private func isRetryable(_ error: Error) -> Bool {
     return false
 }
 
-private func costMean(_ summary: ModelLevelSummary) -> Double {
-    summary.cost?.mean ?? Double.greatestFiniteMagnitude
-}
-
 private func loadCorpus(from path: URL) throws -> [CorpusEntry] {
     let data = try Data(contentsOf: path)
     let decoded = try JSONDecoder().decode(CorpusFile.self, from: data)
-    guard decoded.version == 1 else {
-        throw BenchmarkError.invalidCorpus("unsupported version \(decoded.version); expected 1")
+    guard (1...4).contains(decoded.version) else {
+        throw BenchmarkError.invalidCorpus("unsupported version \(decoded.version); expected 1-4")
     }
 
     let filtered = decoded.entries.filter { [.clean, .polish].contains($0.level) }
@@ -746,8 +683,9 @@ private enum BenchmarkReportMarkdown {
         lines.append("## Methodology")
         lines.append("- Uses production rewrite prompts from `RewritePrompts` per processing level.")
         lines.append("- Evaluates quality with `RewriteQualityGate` pass/fail and ratio checks.")
+        lines.append("- Uses adversarial corpus entries to stress prompt-injection resistance and artifact handling during manual review.")
         lines.append("- Measures wall-clock request latency and OpenRouter-reported request cost.")
-        lines.append("- Decision rule: filter by quality target, pick lowest p95 latency, tie-break by mean cost.")
+        lines.append("- Decision rule: require quality target when possible, then prefer lower p95 latency and lower mean cost. If no model clears the target, fall back to the strongest quality pass rate.")
         lines.append("")
 
         for level in [ProcessingLevel.clean, .polish] {

@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "Vox", targets: ["VoxApp"]),
         .executable(name: "VoxBenchmarks", targets: ["VoxBenchmarks"]),
+        .library(name: "VoxBenchmarksKit", targets: ["VoxBenchmarksKit"]),
         .executable(name: "VoxPerfAudit", targets: ["VoxPerfAudit"]),
         .library(name: "VoxPerfAuditKit", targets: ["VoxPerfAuditKit"]),
         .library(name: "VoxCore", targets: ["VoxCore"]),
@@ -24,6 +25,7 @@ let package = Package(
         .target(name: "VoxMac", dependencies: ["VoxCore"]),
         .target(name: "VoxDiagnostics", dependencies: ["VoxCore"]),
         .target(name: "VoxPipeline", dependencies: ["VoxCore"]),
+        .target(name: "VoxBenchmarksKit", dependencies: ["VoxCore"]),
         .target(
             name: "VoxUI",
             dependencies: ["VoxCore", "VoxMac", "VoxDiagnostics"]
@@ -43,7 +45,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "VoxBenchmarks",
-            dependencies: ["VoxCore", "VoxProviders", "VoxPipeline"]
+            dependencies: ["VoxBenchmarksKit", "VoxCore", "VoxProviders", "VoxPipeline"]
         ),
         .executableTarget(
             name: "VoxPerfAudit",
@@ -60,6 +62,10 @@ let package = Package(
         .testTarget(
             name: "VoxPerfAuditKitTests",
             dependencies: ["VoxPerfAuditKit"]
+        ),
+        .testTarget(
+            name: "VoxBenchmarksTests",
+            dependencies: ["VoxBenchmarksKit", "VoxCore"]
         ),
         .testTarget(
             name: "VoxDiagnosticsTests",

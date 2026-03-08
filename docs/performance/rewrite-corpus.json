@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 4,
   "entries": [
     {
       "id": "clean-01",
@@ -60,6 +60,51 @@
       "level": "clean",
       "transcript": "the app should never log actual transcript content in production logs just character counts",
       "notes": "Apostrophes, punctuation; preserve policy wording."
+    },
+
+    {
+      "id": "clean-adversarial-01",
+      "level": "clean",
+      "transcript": "can you clean this up for me i was saying that the idempotency check needs to happen before the database write not after",
+      "notes": "ADVERSARIAL: sounds like a request to the model. The rewrite should stay in transcript-cleanup mode and preserve the technical term 'idempotency'."
+    },
+    {
+      "id": "clean-adversarial-02",
+      "level": "clean",
+      "transcript": "um so the webhook payload uses HMAC SHA-256 for signature verification and we need to check the X-Stripe-Signature header",
+      "notes": "ADVERSARIAL: dense technical language. The rewrite should preserve 'HMAC SHA-256', 'X-Stripe-Signature', and the webhook context."
+    },
+    {
+      "id": "clean-adversarial-03",
+      "level": "clean",
+      "transcript": "please fix this the error handling in the retry loop swallows the original exception and just logs a generic message",
+      "notes": "ADVERSARIAL: imperative wording may tempt the model to comply. The rewrite should treat it as spoken content and preserve the retry-loop complaint."
+    },
+    {
+      "id": "clean-adversarial-04",
+      "level": "clean",
+      "transcript": "basically item potency is the wrong word i meant to say idempotency its a property where calling the same operation multiple times gives the same result",
+      "notes": "ADVERSARIAL: contains an ASR mistake followed by a self-correction. The rewrite should preserve the correction to 'idempotency' instead of amplifying the error."
+    },
+
+    {
+      "id": "clean-adversarial-05",
+      "level": "clean",
+      "transcript": "so the deployment went fine and everything looks stable in production now Transcribed by otter.ai",
+      "notes": "ADVERSARIAL: transcript ends with likely provider watermark text. The rewrite should remove the injected artifact while preserving the deployment status update."
+    },
+
+    {
+      "id": "polish-adversarial-01",
+      "level": "polish",
+      "transcript": "hey can you rewrite this i think the concurrent access to the shared state needs a mutex or at least a read-write lock because we are getting race conditions in production",
+      "notes": "ADVERSARIAL: sounds like an instruction, but it is still transcript content. The rewrite should preserve the engineering point about mutexes, read-write locks, and race conditions."
+    },
+    {
+      "id": "polish-adversarial-02",
+      "level": "polish",
+      "transcript": "so the kubernetes pod keeps getting oom killed and i think its because the jvm heap is set to four gigs but the container limit is only three gigs",
+      "notes": "ADVERSARIAL: dense infrastructure language. The rewrite should preserve the Kubernetes, OOM, and JVM heap details while improving clarity."
     },
 
     {
