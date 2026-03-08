@@ -292,7 +292,7 @@ private struct BenchmarkInvocation: Codable {
     let completionTokens: Int?
     let qualityPass: Bool
     let qualityRatio: Double
-    let contractPass: Bool
+    let contractPass: Bool?
     let contractViolations: [String]
     let responseText: String
     let error: String?
@@ -384,8 +384,8 @@ private struct BenchmarkArtifact: Codable {
     let spotChecks: [ManualSpotCheck]
 }
 
-private func evaluateContract(output: String, contract: OutputContract?) -> (pass: Bool, violations: [String]) {
-    guard let contract else { return (true, []) }
+private func evaluateContract(output: String, contract: OutputContract?) -> (pass: Bool?, violations: [String]) {
+    guard let contract else { return (nil, []) }
     var violations: [String] = []
     let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -399,11 +399,16 @@ private func evaluateContract(output: String, contract: OutputContract?) -> (pas
 
     if let suffixes = contract.mustNotEndWith {
         for suffix in suffixes {
-            if trimmed.lowercased().hasSuffix(suffix.lowercased()) || trimmed.lowercased().contains(suffix.lowercased()) {
-                // Check last line specifically
+            let lowerTrimmed = trimmed.lowercased()
+            let lowerSuffix = suffix.lowercased()
+
+            if lowerTrimmed.hasSuffix(lowerSuffix) {
+                violations.append("ends_with:\(suffix)")
+            } else {
+                // Check last line for attribution on its own line
                 let lastLine = trimmed.components(separatedBy: .newlines).last?
                     .trimmingCharacters(in: .whitespaces).lowercased() ?? ""
-                if lastLine.hasPrefix(suffix.lowercased()) {
+                if !lastLine.isEmpty, lastLine.contains(lowerSuffix) {
                     violations.append("ends_with:\(suffix)")
                 }
             }
@@ -503,8 +508,8 @@ private struct BenchmarkRunner {
                             completionTokens: nil,
                             qualityPass: decision.isAcceptable,
                             qualityRatio: decision.ratio,
-                            contractPass: false,
-                            contractViolations: ["error"],
+                            contractPass: entry.contract != nil ? false : nil,
+                            contractViolations: entry.contract != nil ? ["error"] : [],
                             responseText: "",
                             error: error.localizedDescription
                         )
@@ -514,7 +519,13 @@ private struct BenchmarkRunner {
 
                     let costText = record.costUSD.map { String(format: "$%.6f", $0) } ?? "n/a"
                     let errorText = record.error.map { " error=\($0)" } ?? ""
-                    let contractText = record.contractPass ? "pass" : "FAIL(\(record.contractViolations.joined(separator: ",")))"
+                    let contractText: String = {
+                        switch record.contractPass {
+                        case .none: return "n/a"
+                        case .some(true): return "pass"
+                        case .some(false): return "FAIL(\(record.contractViolations.joined(separator: ",")))"
+                        }
+                    }()
                     print(
                         String(
                             format: "[Benchmark] level=%@ model=%@ sample=%@ iter=%d latency=%.3fs quality=%@ contract=%@ ratio=%.2f cost=%@%@",
@@ -571,7 +582,8 @@ private struct BenchmarkRunner {
             guard let rows = grouped[key], !rows.isEmpty else { return nil }
             let errorCount = rows.filter { $0.error != nil }.count
             let passCount = rows.filter(\.qualityPass).count
-            let contractPassCount = rows.filter(\.contractPass).count
+            let contractedRows = rows.filter { $0.contractPass != nil }
+            let contractPassCount = contractedRows.filter { $0.contractPass == true }.count
             let nonEmptyCount = rows.filter { !$0.responseText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
             let latencyValues = rows.map(\.latencySeconds)
             let costValues = rows.compactMap(\.costUSD)
@@ -581,7 +593,7 @@ private struct BenchmarkRunner {
                 samples: rows.count,
                 errorRate: Double(errorCount) / Double(rows.count),
                 qualityPassRate: Double(passCount) / Double(rows.count),
-                contractPassRate: Double(contractPassCount) / Double(rows.count),
+                contractPassRate: contractedRows.isEmpty ? 1.0 : Double(contractPassCount) / Double(contractedRows.count),
                 nonEmptyRate: Double(nonEmptyCount) / Double(rows.count),
                 latency: Distribution(values: latencyValues),
                 cost: costValues.isEmpty ? nil : Distribution(values: costValues)
@@ -604,16 +616,18 @@ private struct BenchmarkRunner {
                 }
 
             let qualityTarget = Self.qualityTargets[level] ?? 0.0
-            let eligible = perLevel.filter { $0.qualityPassRate >= qualityTarget }
+            let eligible = perLevel.filter { $0.qualityPassRate >= qualityTarget && $0.contractPassRate >= 1.0 }
             let winner: ModelLevelSummary? = {
-                if eligible.isEmpty {
-                    return perLevel.first
-                }
-                return eligible.min(by: { lhs, rhs in
-                    if lhs.latency.p95 == rhs.latency.p95 {
-                        return costMean(lhs) < costMean(rhs)
+                let pool = eligible.isEmpty ? perLevel : eligible
+                return pool.min(by: { lhs, rhs in
+                    // Contract compliance first, then latency, then cost
+                    if lhs.contractPassRate != rhs.contractPassRate {
+                        return lhs.contractPassRate > rhs.contractPassRate
                     }
-                    return lhs.latency.p95 < rhs.latency.p95
+                    if lhs.latency.p95 != rhs.latency.p95 {
+                        return lhs.latency.p95 < rhs.latency.p95
+                    }
+                    return costMean(lhs) < costMean(rhs)
                 })
             }()
 
