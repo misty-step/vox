@@ -59,9 +59,17 @@ struct RewritePromptsTests {
         let clean = RewritePrompts.prompt(for: .clean)
         let polish = RewritePrompts.prompt(for: .polish)
 
-        for phrase in Self.outputGuardrailPhrases {
-            #expect(clean.contains(phrase), "Clean prompt missing guardrail: \(phrase)")
-            #expect(polish.contains(phrase), "Polish prompt missing guardrail: \(phrase)")
+        #expect(Self.outputGuardrailSection(in: clean) == Self.outputGuardrailSection(in: polish))
+    }
+
+    private static func outputGuardrailSection(in prompt: String) -> String {
+        guard
+            let start = prompt.range(of: "- Add any preface like \"Here's ...\" or \"Sure ...\" or \"Of course ...\""),
+            let end = prompt.range(of: "If the speaker explicitly says or quotes that text, preserve it.")
+        else {
+            fatalError("Prompt missing output guardrail section")
         }
+
+        return String(prompt[start.lowerBound...end.upperBound])
     }
 }

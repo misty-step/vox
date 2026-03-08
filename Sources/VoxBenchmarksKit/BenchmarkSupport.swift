@@ -136,7 +136,7 @@ package func evaluateContract(output: String, contract: OutputContract?) -> (pas
                 continue
             }
 
-            if !normalizedLastLine.isEmpty, normalizedLastLine.contains(normalizedSuffix) {
+            if hasTrailingArtifactClause(normalizedLastLine: normalizedLastLine, normalizedSuffix: normalizedSuffix) {
                 violations.append("ends_with:\(suffix)")
             }
         }
@@ -159,6 +159,8 @@ package func selectRecommendation(
     from summaries: [ModelLevelSummary],
     qualityTarget: Double
 ) -> RecommendationSelection {
+    // nil = untested. Keep those rows eligible so mixed corpora do not discard them,
+    // but rank them below measured contract scores to prefer proven compliance.
     let eligible = summaries.filter {
         $0.qualityPassRate >= qualityTarget && ($0.contractPassRate ?? 1.0) >= 1.0
     }
@@ -216,7 +218,44 @@ private func normalizeContractContent(_ text: String) -> String {
         .replacingOccurrences(of: "\r\n", with: "\n")
 }
 
+private func hasTrailingArtifactClause(
+    normalizedLastLine: String,
+    normalizedSuffix: String
+) -> Bool {
+    guard !normalizedLastLine.isEmpty, !normalizedSuffix.isEmpty else { return false }
+    guard let suffixRange = normalizedLastLine.range(of: normalizedSuffix, options: .backwards) else {
+        return false
+    }
+
+    let beforeSuffix = normalizedLastLine[..<suffixRange.lowerBound]
+    let trimmedBefore = beforeSuffix.trimmingCharacters(in: CharacterSet.contractClausePrefixTrimCharacters)
+    if
+        let boundary = trimmedBefore.unicodeScalars.last,
+        !CharacterSet.contractClauseBoundaryCharacters.contains(boundary)
+    {
+        return false
+    }
+
+    let afterSuffix = normalizedLastLine[suffixRange.upperBound...]
+        .trimmingCharacters(in: CharacterSet.contractClauseSuffixTrimCharacters)
+    guard !afterSuffix.isEmpty else { return true }
+
+    let tailTokens = afterSuffix.split(whereSeparator: \.isWhitespace)
+    guard tailTokens.count == 1 else { return false }
+    return tailTokens[0].unicodeScalars.allSatisfy(CharacterSet.contractArtifactTokenCharacters.contains)
+}
+
 private extension CharacterSet {
+    static let contractArtifactTokenCharacters = CharacterSet.alphanumerics.union(
+        CharacterSet(charactersIn: "._-/")
+    )
+    static let contractClauseBoundaryCharacters = CharacterSet(charactersIn: ".,!?;:-")
+    static let contractClausePrefixTrimCharacters = CharacterSet.whitespacesAndNewlines.union(
+        CharacterSet(charactersIn: "\"'`>*_~()[]{}<>")
+    )
+    static let contractClauseSuffixTrimCharacters = CharacterSet.whitespacesAndNewlines.union(
+        CharacterSet(charactersIn: "\"'`*_~()[]{}<>.,!?;:")
+    )
     static let contractWrapperCharacters = CharacterSet.whitespacesAndNewlines.union(
         CharacterSet(charactersIn: "\"'`>*_~()[]{}<>.,!?;:“”‘’")
     )

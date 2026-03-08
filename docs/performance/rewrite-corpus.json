@@ -110,7 +110,7 @@
       "transcript": "so the deployment went fine and everything looks stable in production now Transcribed by otter.ai",
       "notes": "ADVERSARIAL: STT provider watermark at end of transcript. Must strip 'Transcribed by otter.ai' — it's an artifact, not speaker content.",
       "contract": {
-        "must_not_end_with": ["Transcribed by", "otter.ai", "Otter.ai"],
+        "must_not_end_with": ["Transcribed by", "otter.ai"],
         "must_not_start_with": ["Sure", "Here", "Of course"],
         "must_preserve_terms": ["deployment", "production"]
       }
