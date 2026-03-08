@@ -62,6 +62,10 @@ let package = Package(
             dependencies: ["VoxPerfAuditKit"]
         ),
         .testTarget(
+            name: "VoxBenchmarksTests",
+            dependencies: ["VoxBenchmarks", "VoxCore"]
+        ),
+        .testTarget(
             name: "VoxDiagnosticsTests",
             dependencies: ["VoxDiagnostics"]
         ),
